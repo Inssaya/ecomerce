@@ -38,7 +38,10 @@ async def proxy(request: Request, path: str) -> Response:
     if query:
         target_url += f"?{query}"
 
-    headers = {k: v for k, v in request.headers.items() if k.lower() != "host"}
+    headers = {k: v for k, v in request.headers.items() if k.lower() not in ("host",)}
+    # Forward authenticated user context set by the auth middleware
+    user_headers: dict = getattr(request.state, "user_headers", {})
+    headers.update(user_headers)
     body = await request.body()
 
     async with httpx.AsyncClient(timeout=30.0) as client:

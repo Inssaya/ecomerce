@@ -372,6 +372,7 @@ services:
       dockerfile: Dockerfile
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_API_URL: http://gateway:8000
       NEXT_PUBLIC_APP_NAME: "Ecomerce"
       NODE_ENV: development
     volumes:

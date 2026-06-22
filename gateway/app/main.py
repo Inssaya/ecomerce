@@ -1,15 +1,18 @@
 import logging
 import time
+import uuid
 from contextlib import asynccontextmanager
 
 import redis.asyncio as aioredis
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from app.config import settings
+from app.middleware.auth import extract_user_headers, is_public
 from app.routes.proxy import router as proxy_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -21,22 +24,15 @@ limiter = Limiter(key_func=get_remote_address)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.redis = aioredis.from_url(settings.redis_url, decode_responses=True)
-    logger.info("Gateway started — Redis connected")
+    logger.info("Gateway started")
     yield
     await app.state.redis.aclose()
     logger.info("Gateway shut down")
 
 
-app = FastAPI(
-    title="Ecomerce API Gateway",
-    version="0.1.0",
-    docs_url="/docs",
-    lifespan=lifespan,
-)
-
+app = FastAPI(title="Ecomerce API Gateway", version="0.1.0", docs_url="/docs", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -47,21 +43,36 @@ app.add_middleware(
 
 
 @app.middleware("http")
-async def add_correlation_id(request: Request, call_next) -> Response:
-    import uuid
+async def auth_and_correlation(request: Request, call_next) -> Response:
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
     request.state.correlation_id = correlation_id
+
+    path = request.url.path
+    method = request.method
+
+    # JWT validation — enforce on protected routes
+    if not is_public(path, method):
+        authorization = request.headers.get("Authorization")
+        try:
+            user_headers = extract_user_headers(authorization)
+            if not user_headers:
+                return JSONResponse(status_code=401, content={"detail": "Authentication required"})
+        except ValueError as exc:
+            return JSONResponse(status_code=401, content={"detail": str(exc)})
+        # Attach parsed headers so the proxy can forward them
+        request.state.user_headers = user_headers
+    else:
+        # On public routes, still decode the token if present (for personalized content)
+        try:
+            request.state.user_headers = extract_user_headers(request.headers.get("Authorization"))
+        except ValueError:
+            request.state.user_headers = {}
+
     start = time.perf_counter()
     response = await call_next(request)
     elapsed = (time.perf_counter() - start) * 1000
     response.headers["X-Correlation-ID"] = correlation_id
-    logger.info(
-        "method=%s path=%s status=%d duration_ms=%.1f",
-        request.method,
-        request.url.path,
-        response.status_code,
-        elapsed,
-    )
+    logger.info("method=%s path=%s status=%d duration_ms=%.1f", method, path, response.status_code, elapsed)
     return response
 
 
