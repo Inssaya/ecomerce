@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://ecomerce:ecomerce_secret@rabbitmq:5672/"
     jwt_secret: str = "changeme"
     jwt_algorithm: str = "HS256"
+    smtp_host: str = "mailpit"
+    smtp_port: int = 1025
+    smtp_from: str = "noreply@ecomerce.ma"
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_tls: bool = False
+    app_name: str = "Ecomerce"
 
     class Config:
         env_file = ".env"

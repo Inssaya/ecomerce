@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
+from app.api.agents import router as agents_router
+from app.api.assignments import router as assignments_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +43,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(agents_router)
+app.include_router(assignments_router)
 
 
 @app.get("/health", tags=["ops"])

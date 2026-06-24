@@ -72,6 +72,7 @@ export interface SearchResponse {
 
 export interface CartItem {
   product_id: string;
+  seller_id: string;
   title: string;
   price: number;
   currency: string;
@@ -93,4 +94,5 @@ export interface TokenResponse {
   access_token: string;
   refresh_token: string;
   token_type: string;
+  user?: { id: string; role: UserRole };
 }

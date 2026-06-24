@@ -5,6 +5,7 @@ import { Star, Package, ArrowLeft, Tag } from "lucide-react";
 import { getProduct } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { AddToCartButton } from "@/components/AddToCartButton";
+import { DwellTracker } from "@/components/DwellTracker";
 import { notFound } from "next/navigation";
 
 interface PageProps {
@@ -56,6 +57,12 @@ export default async function ProductDetailPage({ params }: PageProps) {
           </>
         )}
       </div>
+
+      <DwellTracker
+        productId={product.id}
+        categoryId={product.category_id ?? undefined}
+        labelIds={product.labels.map((l) => l.id)}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
         {/* Images */}

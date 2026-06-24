@@ -9,6 +9,10 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://ecomerce:ecomerce_secret@rabbitmq:5672/"
     jwt_secret: str = "changeme"
     jwt_algorithm: str = "HS256"
+    catalog_service_url: str = "http://catalog-service:8002"
+    profile_ttl_seconds: int = 604800  # 7 days
+    trending_window_hours: int = 48
+    max_recommendations: int = 20
 
     class Config:
         env_file = ".env"

@@ -14,6 +14,8 @@ _PUBLIC_POST = {
     "/api/v1/auth/register",
     "/api/v1/auth/login",
     "/api/v1/auth/refresh",
+    "/api/v1/recommendations/events/view",
+    "/api/v1/recommendations/events/interaction",
 }
 
 _PUBLIC_GET_PREFIXES = (

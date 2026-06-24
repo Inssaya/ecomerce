@@ -6,6 +6,8 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.database import engine, Base
+from app.api.events import router as events_router
+from app.api.recommendations import router as recs_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -41,6 +43,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+app.include_router(events_router)
+app.include_router(recs_router)
 
 
 @app.get("/health", tags=["ops"])

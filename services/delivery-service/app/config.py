@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://ecomerce:ecomerce_secret@rabbitmq:5672/"
     jwt_secret: str = "changeme"
     jwt_algorithm: str = "HS256"
+    order_service_url: str = "http://order-service:8004"
 
     class Config:
         env_file = ".env"

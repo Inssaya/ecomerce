@@ -5,7 +5,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.database import engine, Base
+from app.api.kyc import router as kyc_router
+from app.api.users import router as users_router
+from app.api.metrics import router as metrics_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,13 +18,8 @@ logger = logging.getLogger(settings.service_name)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        # Tables are created by Alembic migrations in production;
-        # create_all here is a convenience for dev/testing.
-        await conn.run_sync(Base.metadata.create_all)
     logger.info("%s started", settings.service_name)
     yield
-    await engine.dispose()
     logger.info("%s shut down", settings.service_name)
 
 
@@ -43,6 +40,11 @@ app.add_middleware(
 )
 
 
+app.include_router(kyc_router)
+app.include_router(users_router)
+app.include_router(metrics_router)
+
+
 @app.get("/health", tags=["ops"])
 async def health():
     return {"status": "ok", "service": settings.service_name}
@@ -50,14 +52,4 @@ async def health():
 
 @app.get("/ready", tags=["ops"])
 async def ready():
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(__import__("sqlalchemy").text("SELECT 1"))
-        db_ok = True
-    except Exception:
-        db_ok = False
-    return {
-        "status": "ready" if db_ok else "degraded",
-        "service": settings.service_name,
-        "database": db_ok,
-    }
+    return {"status": "ready", "service": settings.service_name}

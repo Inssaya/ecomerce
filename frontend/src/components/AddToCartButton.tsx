@@ -16,6 +16,7 @@ export function AddToCartButton({ product }: { product: Product }) {
     const primaryImage = product.media.find((m) => m.is_primary) ?? product.media[0];
     addItem({
       product_id: product.id,
+      seller_id: product.seller_id,
       title: product.title,
       price: product.price,
       currency: product.currency,
