@@ -13,45 +13,39 @@ interface User {
   created_at: string;
 }
 
-interface KycDoc {
-  id: string;
-  doc_type: string;
-  full_name: string;
-  review_status: string;
-  rejection_reason: string | null;
-  submitted_at: string;
-}
-
-const KYC_STATUS_LABELS: Record<string, { label: string; color: string }> = {
-  submitted: { label: "En cours de révision", color: "bg-blue-100 text-blue-700" },
-  under_review: { label: "Sous révision", color: "bg-yellow-100 text-yellow-700" },
-  approved: { label: "Approuvé", color: "bg-green-100 text-green-700" },
-  rejected: { label: "Rejeté", color: "bg-red-100 text-red-700" },
+const ORDER_STATUS: Record<string, string> = {
+  pending: "Pending",
+  confirmed: "Confirmed",
+  processing: "Processing",
+  assigned: "Driver assigned",
+  picked_up: "Picked up",
+  in_transit: "On the way",
+  delivered_paid: "Delivered",
+  delivery_failed: "Failed",
+  cancelled: "Cancelled",
+  returned: "Returned",
 };
 
 export default function AccountPage() {
   const [user, setUser] = useState<User | null>(null);
-  const [kyc, setKyc] = useState<KycDoc[]>([]);
   const [form, setForm] = useState({ full_name: "", phone: "" });
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<"profile" | "kyc" | "security">("profile");
-
-  function authHeaders() {
-    const token = localStorage.getItem("access_token");
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  }
+  const [tab, setTab] = useState<"profile" | "orders" | "security">("profile");
+  const [orders, setOrders] = useState<Array<{
+    id: string; tracking_token: string; status: string; total: number; created_at: string;
+  }>>([]);
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { window.location.href = "/auth/login"; return; }
     Promise.all([
       fetch("/api/v1/auth/me", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-      fetch("/api/v1/auth/kyc/status", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.json()),
-    ]).then(([u, k]) => {
+      fetch("/api/v1/orders/orders/mine", { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : []),
+    ]).then(([u, o]) => {
       setUser(u);
       setForm({ full_name: u.full_name ?? "", phone: u.phone ?? "" });
-      setKyc(Array.isArray(k) ? k : []);
+      setOrders(Array.isArray(o) ? o : (o.items ?? []));
     });
   }, []);
 
@@ -84,62 +78,62 @@ export default function AccountPage() {
   }
 
   if (!user) return (
-    <main className="min-h-screen flex items-center justify-center">
-      <p className="text-gray-500">Chargement...</p>
+    <main className="min-h-screen bg-gray-950 flex items-center justify-center">
+      <p className="text-white/40">Loading...</p>
     </main>
   );
 
-  const hasApprovedKyc = kyc.some(k => k.review_status === "approved");
+  const inputCls = "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
 
   return (
-    <main className="min-h-screen bg-gray-50 py-8 px-4">
+    <main className="min-h-screen bg-gray-950 py-8 px-4">
       <div className="mx-auto max-w-3xl">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Mon compte</h1>
-            <p className="text-sm text-gray-500">{user.email}</p>
+            <h1 className="text-2xl font-bold text-white">My Account</h1>
+            <p className="text-sm text-white/40">{user.email}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm text-gray-600 hover:bg-gray-50"
+            className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:bg-white/5 hover:text-white transition-colors"
           >
-            Déconnexion
+            Sign out
           </button>
         </div>
 
-        <nav className="flex gap-1 bg-white rounded-xl shadow-sm p-1 mb-6 w-fit">
-          {(["profile", "kyc", "security"] as const).map((t) => (
+        <nav className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-6 w-fit">
+          {(["profile", "orders", "security"] as const).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
               className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
-                tab === t ? "bg-orange-600 text-white" : "text-gray-600 hover:bg-gray-100"
+                tab === t ? "bg-orange-500 text-white" : "text-white/50 hover:text-white hover:bg-white/5"
               }`}
             >
-              {t === "profile" ? "Profil" : t === "kyc" ? "Vérification" : "Sécurité"}
+              {t === "profile" ? "Profile" : t === "orders" ? "Orders" : "Security"}
             </button>
           ))}
         </nav>
 
         {tab === "profile" && (
           <div className="space-y-4">
-            <div className="bg-white rounded-xl shadow-sm p-6">
-              <h2 className="font-semibold text-gray-900 mb-4">Informations personnelles</h2>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h2 className="font-semibold text-white mb-4">Personal Information</h2>
               <form onSubmit={saveProfile} className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet</label>
+                  <label className="block text-sm font-medium text-white/60 mb-1">Full name</label>
                   <input
                     value={form.full_name}
                     onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className={inputCls}
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone</label>
+                  <label className="block text-sm font-medium text-white/60 mb-1">Phone</label>
                   <input
                     value={form.phone}
                     onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    className={inputCls}
                     placeholder="+212..."
                   />
                 </div>
@@ -147,98 +141,68 @@ export default function AccountPage() {
                   <button
                     type="submit"
                     disabled={saving}
-                    className="rounded-lg bg-orange-600 px-5 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+                    className="rounded-lg bg-orange-500 hover:bg-orange-400 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50 transition-colors"
                   >
-                    {saving ? "Enregistrement..." : "Sauvegarder"}
+                    {saving ? "Saving..." : "Save changes"}
                   </button>
-                  {saved && <p className="text-sm text-green-600">Sauvegardé!</p>}
+                  {saved && <p className="text-sm text-green-400">Saved!</p>}
                 </div>
               </form>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5 flex items-center justify-between">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-5 flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-700">Type de compte</p>
-                <p className="text-sm text-gray-500 capitalize">{user.role.replace(/_/g, " ")}</p>
+                <p className="text-sm font-medium text-white/70">Account type</p>
+                <p className="text-sm text-white/40 capitalize">{user.role.replace(/_/g, " ")}</p>
               </div>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                user.status === "active" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
+                user.status === "active" ? "bg-green-500/20 text-green-400" : "bg-yellow-500/20 text-yellow-400"
               }`}>
                 {user.status}
               </span>
             </div>
-            <div className="bg-white rounded-xl shadow-sm p-5">
-              <h3 className="font-medium text-gray-900 mb-3">Accès rapide</h3>
-              <div className="grid grid-cols-2 gap-2">
-                <Link href="/orders" className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                  Mes commandes
-                </Link>
-                <Link href="/track" className="rounded-lg border border-gray-200 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
-                  Suivi colis
-                </Link>
-              </div>
-            </div>
           </div>
         )}
 
-        {tab === "kyc" && (
-          <div className="space-y-4">
-            {hasApprovedKyc ? (
-              <div className="bg-green-50 border border-green-200 rounded-xl p-5">
-                <p className="font-semibold text-green-800">Identité vérifiée</p>
-                <p className="text-sm text-green-600 mt-1">
-                  Votre compte est pleinement activé.
-                </p>
+        {tab === "orders" && (
+          <div className="space-y-3">
+            {orders.length === 0 ? (
+              <div className="bg-white/5 border border-white/10 rounded-xl p-8 text-center">
+                <p className="text-white/40 mb-3">No orders yet</p>
+                <Link href="/" className="text-orange-400 hover:underline text-sm">Start shopping</Link>
               </div>
-            ) : (
-              <div className="bg-orange-50 border border-orange-200 rounded-xl p-5">
-                <p className="font-semibold text-orange-800">Vérification requise</p>
-                <p className="text-sm text-orange-600 mt-1">
-                  Soumettez vos documents pour activer toutes les fonctionnalités.
-                </p>
-                {kyc.length === 0 && (
-                  <Link
-                    href="/kyc"
-                    className="mt-3 inline-block rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700"
-                  >
-                    Soumettre les documents
-                  </Link>
-                )}
-              </div>
-            )}
-
-            {kyc.map(doc => {
-              const s = KYC_STATUS_LABELS[doc.review_status] ?? { label: doc.review_status, color: "bg-gray-100 text-gray-600" };
-              return (
-                <div key={doc.id} className="bg-white rounded-xl shadow-sm p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <p className="font-medium text-gray-900">{doc.full_name}</p>
-                      <p className="text-sm text-gray-500 capitalize">{doc.doc_type.replace(/_/g, " ")}</p>
-                      <p className="text-xs text-gray-400 mt-1">
-                        Soumis le {new Date(doc.submitted_at).toLocaleDateString("fr-MA")}
-                      </p>
-                    </div>
-                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${s.color}`}>
-                      {s.label}
-                    </span>
-                  </div>
-                  {doc.rejection_reason && (
-                    <p className="mt-3 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">
-                      Raison: {doc.rejection_reason}
-                    </p>
-                  )}
+            ) : orders.map(order => (
+              <div key={order.id} className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-white">#{order.id.slice(0, 8).toUpperCase()}</p>
+                  <p className="text-xs text-white/40 mt-0.5">
+                    {new Date(order.created_at).toLocaleDateString("en-MA")}
+                  </p>
                 </div>
-              );
-            })}
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-semibold text-orange-400">
+                    {(order.total / 100).toFixed(2).replace(".", ",")} MAD
+                  </span>
+                  <span className="text-xs bg-white/10 text-white/60 rounded-full px-2.5 py-1">
+                    {ORDER_STATUS[order.status] ?? order.status}
+                  </span>
+                  <Link href={`/orders/${order.id}`} className="text-xs text-orange-400 hover:underline">
+                    Details →
+                  </Link>
+                </div>
+              </div>
+            ))}
+            <Link href="/track" className="block text-center text-sm text-white/40 hover:text-white/70 py-2">
+              Track an order →
+            </Link>
           </div>
         )}
 
         {tab === "security" && (
-          <div className="bg-white rounded-xl shadow-sm p-6">
-            <h2 className="font-semibold text-gray-900 mb-4">Sécurité</h2>
-            <p className="text-sm text-gray-500 mb-4">Email: <strong>{user.email}</strong></p>
-            <p className="text-sm text-gray-400">
-              Pour changer votre mot de passe, contactez le support ou utilisez la fonctionnalité de réinitialisation.
+          <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+            <h2 className="font-semibold text-white mb-4">Security</h2>
+            <p className="text-sm text-white/50 mb-4">Email: <strong className="text-white">{user.email}</strong></p>
+            <p className="text-sm text-white/40">
+              To change your password, contact support or use the password reset feature.
             </p>
           </div>
         )}

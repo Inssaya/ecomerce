@@ -12,10 +12,13 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 
 @router.get("", response_model=list[CategoryResponse])
 async def list_categories(
+    store_id: str | None = None,
     parent_id: str | None = None,
     db: AsyncSession = Depends(get_db),
 ):
     query = select(Category).where(Category.is_active.is_(True))
+    if store_id:
+        query = query.where(Category.store_id == store_id)
     if parent_id is not None:
         query = query.where(Category.parent_id == parent_id)
     else:

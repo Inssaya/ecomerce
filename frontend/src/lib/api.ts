@@ -1,4 +1,4 @@
-import type { Category, Label, LabelGroup, Product, ProductListResponse, SearchResponse, TokenResponse, User } from "@/types";
+import type { Category, Label, LabelGroup, Product, ProductListResponse, SearchResponse, TokenResponse, User, Store } from "@/types";
 
 // Server-side: use internal Docker network URL
 // Client-side: use relative path (rewritten by next.config.ts → gateway)
@@ -21,6 +21,16 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body?.detail ?? `HTTP ${res.status}`);
   }
   return res.json() as Promise<T>;
+}
+
+// ── Stores ────────────────────────────────────────────────────────────────────
+
+export function getStores(): Promise<Store[]> {
+  return apiFetch("/api/v1/catalog/stores");
+}
+
+export function getStore(slug: string): Promise<Store> {
+  return apiFetch(`/api/v1/catalog/stores/${slug}`);
 }
 
 // ── Categories ────────────────────────────────────────────────────────────────

@@ -5,10 +5,54 @@ from pydantic import BaseModel, Field
 from app.models import LabelGroup, ProductStatus
 
 
+# ── Store ─────────────────────────────────────────────────────────────────────
+
+class StoreCreate(BaseModel):
+    slug: str
+    name: str
+    description: str = ""
+    theme_color: str = "#000000"
+    accent_color: str = "#ffffff"
+    hero_tagline: str = ""
+    whatsapp_number: str = ""
+    icon: str | None = None
+    display_order: int = 0
+
+
+class StoreUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    theme_color: str | None = None
+    accent_color: str | None = None
+    hero_tagline: str | None = None
+    whatsapp_number: str | None = None
+    icon: str | None = None
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class StoreResponse(BaseModel):
+    id: str
+    slug: str
+    name: str
+    description: str
+    theme_color: str
+    accent_color: str
+    hero_tagline: str
+    whatsapp_number: str
+    icon: str | None
+    display_order: int
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
 # ── Category ──────────────────────────────────────────────────────────────────
 
 class CategoryCreate(BaseModel):
     name: str
+    store_id: str | None = None
     parent_id: str | None = None
     icon: str | None = None
     display_order: int = 0
@@ -16,6 +60,7 @@ class CategoryCreate(BaseModel):
 
 class CategoryUpdate(BaseModel):
     name: str | None = None
+    store_id: str | None = None
     icon: str | None = None
     display_order: int | None = None
     is_active: bool | None = None
@@ -26,6 +71,7 @@ class CategoryResponse(BaseModel):
     name: str
     slug: str
     icon: str | None
+    store_id: str | None
     parent_id: str | None
     display_order: int
     is_active: bool
@@ -72,6 +118,7 @@ class ProductCreate(BaseModel):
     price: float = Field(gt=0)
     currency: str = "MAD"
     stock: int = Field(ge=0, default=0)
+    store_id: str | None = None
     category_id: str | None = None
     label_ids: list[str] = []
     status: ProductStatus = ProductStatus.draft
@@ -82,6 +129,7 @@ class ProductUpdate(BaseModel):
     description: str | None = None
     price: float | None = Field(default=None, gt=0)
     stock: int | None = Field(default=None, ge=0)
+    store_id: str | None = None
     category_id: str | None = None
     label_ids: list[str] | None = None
     status: ProductStatus | None = None
@@ -90,6 +138,7 @@ class ProductUpdate(BaseModel):
 class ProductResponse(BaseModel):
     id: str
     seller_id: str
+    store_id: str | None
     title: str
     description: str
     price: float

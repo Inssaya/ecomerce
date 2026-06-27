@@ -50,7 +50,9 @@ from app.api.categories import router as categories_router
 from app.api.labels import router as labels_router
 from app.api.products import router as products_router
 from app.api.media import router as media_router
+from app.api.stores import router as stores_router
 
+app.include_router(stores_router)
 app.include_router(categories_router)
 app.include_router(labels_router)
 app.include_router(products_router)

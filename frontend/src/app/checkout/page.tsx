@@ -9,14 +9,8 @@ export default function CheckoutPage() {
   const router = useRouter();
   const { items, total, clearCart } = useCart();
   const [form, setForm] = useState({
-    full_name: "",
-    email: "",
-    phone: "",
-    street: "",
-    city: "",
-    region: "",
-    zip: "",
-    notes: "",
+    full_name: "", email: "", phone: "",
+    street: "", city: "", region: "", zip: "", notes: "",
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -38,13 +32,7 @@ export default function CheckoutPage() {
         full_name: form.full_name,
         email: form.email,
         phone: form.phone,
-        delivery_address: {
-          street: form.street,
-          city: form.city,
-          region: form.region,
-          zip: form.zip,
-          country: "MA",
-        },
+        delivery_address: { street: form.street, city: form.city, region: form.region, zip: form.zip, country: "MA" },
         cart_items: items.map((item) => ({
           product_id: item.product_id,
           seller_id: item.seller_id ?? "",
@@ -67,14 +55,14 @@ export default function CheckoutPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail ?? "Erreur lors de la commande");
+        throw new Error(data.detail ?? "Order failed");
       }
 
       const order = await res.json();
       clearCart();
       router.push(`/orders/${order.id}?placed=1`);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError((err as Error).message);
     } finally {
       setLoading(false);
     }
@@ -82,155 +70,115 @@ export default function CheckoutPage() {
 
   if (items.length === 0) {
     return (
-      <main className="min-h-screen flex flex-col items-center justify-center gap-4">
-        <p className="text-gray-600 text-lg">Votre panier est vide</p>
-        <a href="/" className="text-orange-600 hover:underline">
-          Continuer les achats
-        </a>
+      <main className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
+        <p className="text-white/60 text-lg">Your cart is empty</p>
+        <a href="/" className="text-orange-400 hover:underline">Continue shopping</a>
       </main>
     );
   }
 
+  const inputCls = "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
+
   return (
-    <main className="min-h-screen bg-gray-50 py-8 px-4">
+    <main className="min-h-screen bg-gray-950 py-8 px-4">
       <div className="mx-auto max-w-5xl">
-        <h1 className="text-2xl font-bold text-gray-900 mb-8">Finaliser la commande</h1>
+        <h1 className="text-2xl font-bold text-white mb-8">Complete your order</h1>
 
         <div className="flex flex-col lg:flex-row gap-8">
           <form onSubmit={handleSubmit} className="flex-1 space-y-6">
             {error && (
-              <div className="rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+              <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
                 {error}
               </div>
             )}
 
-            <section className="bg-white rounded-xl shadow-sm p-6 space-y-4">
-              <h2 className="font-semibold text-gray-900">Informations personnelles</h2>
+            <section className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-4">
+              <h2 className="font-semibold text-white">Personal information</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Nom complet *</label>
-                  <input
-                    required
-                    value={form.full_name}
-                    onChange={set("full_name")}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <label className="block text-sm font-medium text-white/60 mb-1">Full name *</label>
+                  <input required value={form.full_name} onChange={set("full_name")} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Téléphone *</label>
-                  <input
-                    required
-                    type="tel"
-                    value={form.phone}
-                    onChange={set("phone")}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="+212..."
-                  />
+                  <label className="block text-sm font-medium text-white/60 mb-1">Phone *</label>
+                  <input required type="tel" value={form.phone} onChange={set("phone")} className={inputCls} placeholder="+212..." />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                <input
-                  type="email"
-                  value={form.email}
-                  onChange={set("email")}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
+                <label className="block text-sm font-medium text-white/60 mb-1">Email</label>
+                <input type="email" value={form.email} onChange={set("email")} className={inputCls} />
               </div>
             </section>
 
-            <section className="bg-white rounded-xl shadow-sm p-6 space-y-4">
-              <h2 className="font-semibold text-gray-900">Adresse de livraison</h2>
+            <section className="bg-white/5 border border-white/10 rounded-xl p-6 space-y-4">
+              <h2 className="font-semibold text-white">Delivery address</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Rue / Quartier *</label>
-                <input
-                  required
-                  value={form.street}
-                  onChange={set("street")}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                />
+                <label className="block text-sm font-medium text-white/60 mb-1">Street / Neighborhood *</label>
+                <input required value={form.street} onChange={set("street")} className={inputCls} />
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Ville *</label>
-                  <input
-                    required
-                    value={form.city}
-                    onChange={set("city")}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <label className="block text-sm font-medium text-white/60 mb-1">City *</label>
+                  <input required value={form.city} onChange={set("city")} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Région</label>
-                  <input
-                    value={form.region}
-                    onChange={set("region")}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <label className="block text-sm font-medium text-white/60 mb-1">Region</label>
+                  <input value={form.region} onChange={set("region")} className={inputCls} />
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes de livraison</label>
+                <label className="block text-sm font-medium text-white/60 mb-1">Delivery notes</label>
                 <textarea
                   value={form.notes}
                   onChange={set("notes")}
                   rows={2}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-                  placeholder="Instructions pour le livreur..."
+                  className={`${inputCls} resize-none`}
+                  placeholder="Instructions for delivery..."
                 />
               </div>
             </section>
 
-            <section className="bg-orange-50 border border-orange-200 rounded-xl p-4">
-              <p className="text-sm font-medium text-orange-800">Paiement à la livraison (COD)</p>
-              <p className="text-xs text-orange-600 mt-0.5">
-                Préparez le montant exact en espèces lors de la livraison
+            <section className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-4">
+              <p className="text-sm font-medium text-orange-300">Cash on delivery (COD)</p>
+              <p className="text-xs text-orange-400/70 mt-0.5">
+                Have the exact amount ready when your order arrives
               </p>
             </section>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full rounded-xl bg-orange-600 py-3.5 text-base font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+              className="w-full rounded-xl bg-orange-500 hover:bg-orange-400 py-3.5 text-base font-semibold text-white disabled:opacity-50 transition-colors"
             >
-              {loading ? "Traitement..." : `Commander — ${formatPrice(total + DELIVERY_FEE)}`}
+              {loading ? "Placing order..." : `Place Order — ${formatPrice(total + DELIVERY_FEE)}`}
             </button>
           </form>
 
           <aside className="lg:w-80">
-            <div className="bg-white rounded-xl shadow-sm p-6 sticky top-4">
-              <h2 className="font-semibold text-gray-900 mb-4">Récapitulatif</h2>
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6 sticky top-20">
+              <h2 className="font-semibold text-white mb-4">Order Summary</h2>
               <ul className="space-y-3 mb-4">
                 {items.map((item) => (
                   <li key={item.product_id} className="flex gap-3 text-sm">
                     {item.image_url && (
-                      <img
-                        src={item.image_url}
-                        alt={item.title}
-                        className="h-12 w-12 rounded-md object-cover flex-shrink-0"
-                      />
+                      <img src={item.image_url} alt={item.title} className="h-12 w-12 rounded-md object-cover flex-shrink-0" />
                     )}
                     <div className="flex-1 min-w-0">
-                      <p className="font-medium text-gray-900 truncate">{item.title}</p>
-                      <p className="text-gray-500">
-                        {item.quantity} × {formatPrice(item.price)}
-                      </p>
+                      <p className="font-medium text-white truncate">{item.title}</p>
+                      <p className="text-white/50">{item.quantity} × {formatPrice(item.price)}</p>
                     </div>
                   </li>
                 ))}
               </ul>
-              <div className="border-t pt-4 space-y-1.5 text-sm">
-                <div className="flex justify-between text-gray-600">
-                  <span>Sous-total</span>
-                  <span>{formatPrice(total)}</span>
+              <div className="border-t border-white/10 pt-4 space-y-1.5 text-sm">
+                <div className="flex justify-between text-white/50">
+                  <span>Subtotal</span><span>{formatPrice(total)}</span>
                 </div>
-                <div className="flex justify-between text-gray-600">
-                  <span>Livraison</span>
-                  <span>{formatPrice(DELIVERY_FEE)}</span>
+                <div className="flex justify-between text-white/50">
+                  <span>Delivery</span><span>{formatPrice(DELIVERY_FEE)}</span>
                 </div>
-                <div className="flex justify-between font-bold text-gray-900 text-base pt-1">
-                  <span>Total</span>
-                  <span>{formatPrice(total + DELIVERY_FEE)}</span>
+                <div className="flex justify-between font-bold text-white text-base pt-1">
+                  <span>Total</span><span className="text-orange-400">{formatPrice(total + DELIVERY_FEE)}</span>
                 </div>
               </div>
             </div>

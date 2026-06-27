@@ -38,6 +38,29 @@ class LabelGroup(str, PyEnum):
     other = "other"
 
 
+# ── Store (subdomain/vertical) ────────────────────────────────────────────────
+
+class Store(Base):
+    __tablename__ = "stores"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    slug: Mapped[str] = mapped_column(String(100), unique=True, nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    theme_color: Mapped[str] = mapped_column(String(20), default="#000000")
+    accent_color: Mapped[str] = mapped_column(String(20), default="#ffffff")
+    hero_tagline: Mapped[str] = mapped_column(String(500), default="")
+    whatsapp_number: Mapped[str] = mapped_column(String(30), default="")
+    icon: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    categories: Mapped[list["Category"]] = relationship("Category", back_populates="store")
+    products: Mapped[list["Product"]] = relationship("Product", back_populates="store")
+
+
 # ── Product ↔ Label association ─────────────────────────────────────────────
 
 class ProductLabel(Base):
@@ -57,6 +80,9 @@ class Category(Base):
     __tablename__ = "categories"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    store_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("stores.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     parent_id: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
     )
@@ -67,6 +93,7 @@ class Category(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
+    store: Mapped["Store | None"] = relationship("Store", back_populates="categories")
     children: Mapped[list["Category"]] = relationship(
         "Category", backref="parent", foreign_keys=[parent_id], lazy="selectin"
     )
@@ -97,6 +124,9 @@ class Product(Base):
     __tablename__ = "products"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    store_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("stores.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     seller_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False, default="")
@@ -116,6 +146,7 @@ class Product(Base):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
 
+    store: Mapped["Store | None"] = relationship("Store", back_populates="products")
     category: Mapped[Category | None] = relationship("Category", back_populates="products")
     labels: Mapped[list[Label]] = relationship(
         "Label", secondary="product_labels", back_populates="products", lazy="selectin"

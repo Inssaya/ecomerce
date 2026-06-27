@@ -34,12 +34,12 @@ export function AddToCartButton({ product }: { product: Product }) {
       className={cn(
         "p-2 rounded-xl transition-all",
         added
-          ? "bg-green-100 text-green-600"
+          ? "bg-green-500/20 text-green-400"
           : product.stock === 0
-          ? "bg-muted text-muted-foreground cursor-not-allowed"
-          : "bg-primary/10 text-primary hover:bg-primary hover:text-white"
+          ? "bg-white/5 text-white/20 cursor-not-allowed"
+          : "bg-orange-500/20 text-orange-400 hover:bg-orange-500 hover:text-white"
       )}
-      aria-label="Ajouter au panier"
+      aria-label="Add to cart"
     >
       {added ? <Check className="w-4 h-4" /> : <ShoppingCart className="w-4 h-4" />}
     </button>

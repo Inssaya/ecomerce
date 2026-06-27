@@ -7,15 +7,15 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: {
-    default: "Ecomerce — Multi-Vendor Marketplace",
-    template: "%s | Ecomerce",
+    default: "MoStyle — Your Style, Delivered",
+    template: "%s | MoStyle",
   },
   description:
-    "Découvrez des milliers de produits sélectionnés par des vendeurs vérifiés. Paiement à la livraison.",
+    "Clothes, 3D printing, electronics, glasses & more. Delivered to your door. Cash on delivery.",
   openGraph: {
     type: "website",
-    locale: "fr_MA",
-    siteName: "Ecomerce",
+    locale: "en_MA",
+    siteName: "MoStyle",
   },
 };
 
@@ -23,7 +23,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="fr" suppressHydrationWarning>
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
         <Navbar />
         <main>{children}</main>

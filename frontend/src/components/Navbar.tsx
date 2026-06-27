@@ -6,11 +6,19 @@ import { useState, useEffect } from "react";
 import { useCart } from "@/hooks/useCart";
 import { CartSidebar } from "./CartSidebar";
 
+const STORES = [
+  { slug: "clothes", name: "Fashion" },
+  { slug: "3dprint", name: "3D Print" },
+  { slug: "electronics", name: "Electronics" },
+  { slug: "glasses", name: "Eyewear" },
+];
+
 export function Navbar() {
   const { count } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [storesOpen, setStoresOpen] = useState(false);
 
   useEffect(() => {
     setIsLoggedIn(!!localStorage.getItem("access_token"));
@@ -21,80 +29,121 @@ export function Navbar() {
 
   return (
     <>
-      <header className="sticky top-0 z-30 bg-white/90 backdrop-blur-md border-b border-border">
+      <header className="sticky top-0 z-40 bg-black/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-4">
           {/* Logo */}
-          <Link href="/" className="text-xl font-extrabold text-primary shrink-0">
-            Ecomerce
+          <Link
+            href="/"
+            className="text-xl font-black shrink-0"
+            style={{
+              background: "linear-gradient(90deg, #ff6b35, #f7c59f, #7c3aed)",
+              WebkitBackgroundClip: "text",
+              WebkitTextFillColor: "transparent",
+              backgroundClip: "text",
+            }}
+          >
+            MoStyle
           </Link>
 
           {/* Search */}
           <form
             action="/search"
             method="GET"
-            className="hidden sm:flex flex-1 max-w-xl items-center bg-muted rounded-xl px-4 py-2 gap-2"
+            className="hidden sm:flex flex-1 max-w-lg items-center bg-white/10 rounded-xl px-4 py-2 gap-2 focus-within:bg-white/15 transition-colors"
           >
-            <Search className="w-4 h-4 text-muted-foreground shrink-0" />
+            <Search className="w-4 h-4 text-white/40 shrink-0" />
             <input
               name="q"
               type="search"
-              placeholder="Rechercher des produits..."
-              className="bg-transparent flex-1 text-sm outline-none placeholder:text-muted-foreground"
+              placeholder="Search products..."
+              className="bg-transparent flex-1 text-sm outline-none placeholder:text-white/30 text-white"
             />
           </form>
 
-          <div className="ml-auto flex items-center gap-2">
+          <div className="ml-auto flex items-center gap-1">
             {/* Mobile search */}
             <Link
               href="/search"
-              className="sm:hidden p-2 rounded-xl hover:bg-muted transition-colors"
+              className="sm:hidden p-2 rounded-xl hover:bg-white/10 transition-colors text-white/70"
             >
               <Search className="w-5 h-5" />
+            </Link>
+
+            {/* Stores dropdown desktop */}
+            <div className="hidden md:block relative">
+              <button
+                onMouseEnter={() => setStoresOpen(true)}
+                onMouseLeave={() => setStoresOpen(false)}
+                className="px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
+              >
+                Stores ▾
+              </button>
+              {storesOpen && (
+                <div
+                  onMouseEnter={() => setStoresOpen(true)}
+                  onMouseLeave={() => setStoresOpen(false)}
+                  className="absolute top-full left-0 mt-1 bg-gray-900 border border-white/10 rounded-xl shadow-2xl py-2 w-44 z-50"
+                >
+                  {STORES.map((s) => (
+                    <Link
+                      key={s.slug}
+                      href={`/store/${s.slug}`}
+                      className="block px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/5 transition-colors"
+                    >
+                      {s.name}
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Link href="/track" className="hidden md:block px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors">
+              Track
             </Link>
 
             {/* Cart */}
             <button
               onClick={() => setCartOpen(true)}
-              className="relative p-2 rounded-xl hover:bg-muted transition-colors"
-              aria-label="Ouvrir le panier"
+              className="relative p-2 rounded-xl hover:bg-white/10 transition-colors text-white/70 hover:text-white"
+              aria-label="Open cart"
             >
               <ShoppingCart className="w-5 h-5" />
               {count > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-primary text-primary-foreground text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                <span className="absolute -top-0.5 -right-0.5 bg-orange-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                   {count > 9 ? "9+" : count}
                 </span>
               )}
             </button>
 
-            {/* Nav links desktop */}
-            <nav className="hidden md:flex items-center gap-1">
-              <NavLink href="/products">Produits</NavLink>
-              <NavLink href="/categories">Catégories</NavLink>
-              <NavLink href="/track">Suivi</NavLink>
-              {isLoggedIn ? (
+            {/* Account */}
+            {isLoggedIn ? (
+              <Link
+                href="/account"
+                className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
+              >
+                <User className="w-4 h-4" />
+                Account
+              </Link>
+            ) : (
+              <div className="hidden md:flex items-center gap-1">
                 <Link
-                  href="/account"
-                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted transition-colors"
+                  href="/auth/login"
+                  className="px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
                 >
-                  <User className="w-4 h-4" />
-                  Mon compte
+                  Sign in
                 </Link>
-              ) : (
-                <>
-                  <NavLink href="/auth/login">Connexion</NavLink>
-                  <Link
-                    href="/auth/register"
-                    className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:opacity-90 transition-opacity"
-                  >
-                    S&apos;inscrire
-                  </Link>
-                </>
-              )}
-            </nav>
+                <Link
+                  href="/auth/register"
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold rounded-xl transition-colors"
+                >
+                  Sign up
+                </Link>
+              </div>
+            )}
 
             {/* Mobile hamburger */}
             <button
-              className="md:hidden p-2 rounded-xl hover:bg-muted transition-colors"
+              className="md:hidden p-2 rounded-xl hover:bg-white/10 transition-colors text-white/70"
               onClick={() => setMobileOpen((v) => !v)}
             >
               {mobileOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
@@ -104,21 +153,26 @@ export function Navbar() {
 
         {/* Mobile menu */}
         {mobileOpen && (
-          <div className="md:hidden border-t border-border bg-white px-4 py-4 space-y-2">
-            <MobileLink href="/products" onClick={() => setMobileOpen(false)}>Produits</MobileLink>
-            <MobileLink href="/categories" onClick={() => setMobileOpen(false)}>Catégories</MobileLink>
-            <MobileLink href="/track" onClick={() => setMobileOpen(false)}>Suivi colis</MobileLink>
+          <div className="md:hidden border-t border-white/10 bg-black/90 px-4 py-4 space-y-1">
+            <p className="text-xs text-white/30 uppercase tracking-widest px-3 py-2">Stores</p>
+            {STORES.map((s) => (
+              <MobileLink key={s.slug} href={`/store/${s.slug}`} onClick={() => setMobileOpen(false)}>
+                {s.name}
+              </MobileLink>
+            ))}
+            <div className="h-px bg-white/10 my-2" />
+            <MobileLink href="/track" onClick={() => setMobileOpen(false)}>Track Order</MobileLink>
             {isLoggedIn ? (
-              <MobileLink href="/account" onClick={() => setMobileOpen(false)}>Mon compte</MobileLink>
+              <MobileLink href="/account" onClick={() => setMobileOpen(false)}>My Account</MobileLink>
             ) : (
               <>
-                <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>Connexion</MobileLink>
+                <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>Sign In</MobileLink>
                 <Link
                   href="/auth/register"
                   onClick={() => setMobileOpen(false)}
-                  className="block w-full text-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl"
+                  className="block w-full text-center px-4 py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-xl mt-2"
                 >
-                  S&apos;inscrire
+                  Create Account
                 </Link>
               </>
             )}
@@ -128,17 +182,6 @@ export function Navbar() {
 
       <CartSidebar open={cartOpen} onClose={() => setCartOpen(false)} />
     </>
-  );
-}
-
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
-  return (
-    <Link
-      href={href}
-      className="px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted transition-colors"
-    >
-      {children}
-    </Link>
   );
 }
 
@@ -155,7 +198,7 @@ function MobileLink({
     <Link
       href={href}
       onClick={onClick}
-      className="block px-3 py-2 text-sm font-medium rounded-xl hover:bg-muted transition-colors"
+      className="block px-3 py-2 text-sm font-medium text-white/70 hover:text-white rounded-xl hover:bg-white/5 transition-colors"
     >
       {children}
     </Link>

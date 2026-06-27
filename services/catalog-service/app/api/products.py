@@ -13,14 +13,14 @@ from app.search import delete_product, index_product, product_to_doc, search
 router = APIRouter(prefix="/products", tags=["products"])
 
 
-def _require_seller(x_user_id: str | None, x_user_role: str | None) -> str:
-    if not x_user_id or x_user_role not in ("seller", "admin"):
-        raise HTTPException(status_code=403, detail="Seller or admin required")
-    return x_user_id
+def _require_admin(x_user_role: str | None):
+    if x_user_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin access required")
 
 
 @router.get("", response_model=ProductListResponse)
 async def list_products(
+    store_id: str | None = None,
     category_id: str | None = None,
     label_ids: list[str] = Query(default=[]),
     seller_id: str | None = None,
@@ -39,6 +39,8 @@ async def list_products(
         )
         .where(Product.status == status_filter)
     )
+    if store_id:
+        query = query.where(Product.store_id == store_id)
     if category_id:
         query = query.where(Product.category_id == category_id)
     if seller_id:
@@ -67,6 +69,7 @@ async def list_products(
 @router.get("/search", response_model=SearchResponse)
 async def search_products(
     q: str = "",
+    store_id: str | None = None,
     category_id: str | None = None,
     label_ids: list[str] = Query(default=[]),
     min_price: float | None = None,
@@ -76,6 +79,8 @@ async def search_products(
     size: int = Query(default=20, ge=1, le=100),
 ):
     filter_parts = ['status = "active"']
+    if store_id:
+        filter_parts.append(f'store_id = "{store_id}"')
     if category_id:
         filter_parts.append(f'category_id = "{category_id}"')
     if label_ids:
@@ -119,10 +124,11 @@ async def create_product(
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    seller_id = _require_seller(x_user_id, x_user_role)
+    _require_admin(x_user_role)
 
     product = Product(
-        seller_id=seller_id,
+        seller_id=x_user_id or "admin",
+        store_id=body.store_id,
         title=body.title,
         description=body.description,
         price=body.price,
@@ -141,7 +147,6 @@ async def create_product(
     await db.commit()
     await db.refresh(product)
 
-    # Re-query with all relationships loaded
     result = await db.execute(
         select(Product)
         .options(
@@ -164,7 +169,7 @@ async def update_product(
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    seller_id = _require_seller(x_user_id, x_user_role)
+    _require_admin(x_user_role)
 
     result = await db.execute(
         select(Product)
@@ -174,8 +179,6 @@ async def update_product(
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    if product.seller_id != seller_id and x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Not your product")
 
     for field, value in body.model_dump(exclude_none=True, exclude={"label_ids"}).items():
         setattr(product, field, value)
@@ -193,17 +196,14 @@ async def update_product(
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product_route(
     product_id: str,
-    x_user_id: str | None = Header(default=None),
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    seller_id = _require_seller(x_user_id, x_user_role)
+    _require_admin(x_user_role)
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
-    if product.seller_id != seller_id and x_user_role != "admin":
-        raise HTTPException(status_code=403, detail="Not your product")
 
     product.status = ProductStatus.deleted
     await db.commit()

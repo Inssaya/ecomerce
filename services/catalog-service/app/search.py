@@ -37,6 +37,7 @@ async def ensure_index() -> None:
                     "label_groups",
                     "status",
                     "seller_id",
+                    "store_id",
                     "price",
                 ],
                 "sortableAttributes": ["price", "rating", "view_count", "created_at"],
@@ -108,10 +109,10 @@ async def search(
 
 
 def product_to_doc(product) -> dict:
-    """Convert a Product ORM object to a Meilisearch document."""
     return {
         "id": product.id,
         "seller_id": product.seller_id,
+        "store_id": product.store_id,
         "title": product.title,
         "description": product.description,
         "price": product.price,

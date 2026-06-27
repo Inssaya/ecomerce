@@ -12,6 +12,21 @@ export type LabelGroup =
   | "size"
   | "other";
 
+export interface Store {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  theme_color: string;
+  accent_color: string;
+  hero_tagline: string;
+  whatsapp_number: string;
+  icon: string | null;
+  display_order: number;
+  is_active: boolean;
+  created_at: string;
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -40,6 +55,7 @@ export interface ProductMedia {
 export interface Product {
   id: string;
   seller_id: string;
+  store_id: string | null;
   title: string;
   description: string;
   price: number;
