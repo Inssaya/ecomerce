@@ -11,11 +11,11 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     smtp_host: str = "mailpit"
     smtp_port: int = 1025
-    smtp_from: str = "noreply@ecomerce.ma"
+    smtp_from: str = "noreply@mostyle.ma"
     smtp_user: str = ""
     smtp_password: str = ""
     smtp_tls: bool = False
-    app_name: str = "Ecomerce"
+    app_name: str = "MoStyle"
 
     class Config:
         env_file = ".env"

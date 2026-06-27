@@ -35,43 +35,65 @@ async def send_email(to: str, subject: str, html_body: str) -> bool:
 
 ORDER_TEMPLATES = {
     "order.placed": (
-        "Commande #{order_id} confirmée — {app_name}",
+        "Order #{order_id} confirmed — {app_name}",
         """
-        <h2>Merci pour votre commande!</h2>
-        <p>Votre commande <strong>#{order_id}</strong> a été reçue.</p>
-        <p>Montant total: <strong>{total} MAD</strong></p>
-        <p>Suivez votre commande avec le code: <strong>{tracking_token}</strong></p>
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0a0a0a;color:#fff;border-radius:12px;">
+          <h2 style="color:#f97316;margin-bottom:16px;">Thank you for your order!</h2>
+          <p>Your order <strong>#{order_id}</strong> has been received and is being processed.</p>
+          <p>Total amount: <strong style="color:#f97316;">{total} MAD</strong></p>
+          <p>Track your order with code: <strong style="color:#f97316;">{tracking_token}</strong></p>
+          <hr style="border-color:#333;margin:24px 0;" />
+          <p style="color:#666;font-size:13px;">You will receive a notification when your order ships.</p>
+          <p style="color:#666;font-size:13px;">{app_name}</p>
+        </div>
         """,
     ),
     "order.assigned": (
-        "Votre commande #{order_id} est en cours de livraison",
+        "Your order #{order_id} is on its way — {app_name}",
         """
-        <h2>Votre commande est assignée à un livreur!</h2>
-        <p>Commande <strong>#{order_id}</strong> — livraison en cours.</p>
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0a0a0a;color:#fff;border-radius:12px;">
+          <h2 style="color:#f97316;margin-bottom:16px;">Your order is out for delivery!</h2>
+          <p>Order <strong>#{order_id}</strong> has been assigned to a delivery driver and is on its way to you.</p>
+          <p>Track your order with code: <strong style="color:#f97316;">{tracking_token}</strong></p>
+          <hr style="border-color:#333;margin:24px 0;" />
+          <p style="color:#666;font-size:13px;">{app_name}</p>
+        </div>
         """,
     ),
     "order.delivered": (
-        "Commande #{order_id} livrée — {app_name}",
+        "Order #{order_id} delivered — {app_name}",
         """
-        <h2>Commande livrée avec succès!</h2>
-        <p>Votre commande <strong>#{order_id}</strong> a été livrée.</p>
-        <p>Merci d'avoir choisi {app_name}!</p>
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0a0a0a;color:#fff;border-radius:12px;">
+          <h2 style="color:#f97316;margin-bottom:16px;">Order delivered successfully!</h2>
+          <p>Your order <strong>#{order_id}</strong> has been delivered.</p>
+          <p>We hope you enjoy your purchase. Thank you for choosing <strong>{app_name}</strong>!</p>
+          <hr style="border-color:#333;margin:24px 0;" />
+          <p style="color:#666;font-size:13px;">{app_name}</p>
+        </div>
         """,
     ),
     "kyc.approved": (
-        "Votre KYC a été approuvé — {app_name}",
+        "Identity verified — {app_name}",
         """
-        <h2>Félicitations!</h2>
-        <p>Votre vérification d'identité a été approuvée. Votre compte est maintenant actif.</p>
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0a0a0a;color:#fff;border-radius:12px;">
+          <h2 style="color:#22c55e;margin-bottom:16px;">Identity Verified!</h2>
+          <p>Congratulations! Your identity verification has been approved. Your account is now fully active.</p>
+          <hr style="border-color:#333;margin:24px 0;" />
+          <p style="color:#666;font-size:13px;">{app_name}</p>
+        </div>
         """,
     ),
     "kyc.rejected": (
-        "Votre KYC a été rejeté — {app_name}",
+        "Identity verification declined — {app_name}",
         """
-        <h2>Vérification refusée</h2>
-        <p>Votre vérification d'identité a été refusée.</p>
-        <p>Raison: {rejection_reason}</p>
-        <p>Veuillez soumettre à nouveau avec des documents valides.</p>
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:32px;background:#0a0a0a;color:#fff;border-radius:12px;">
+          <h2 style="color:#ef4444;margin-bottom:16px;">Verification Declined</h2>
+          <p>Unfortunately, your identity verification was declined.</p>
+          <p>Reason: <strong>{rejection_reason}</strong></p>
+          <p>Please resubmit with valid, clear documents.</p>
+          <hr style="border-color:#333;margin:24px 0;" />
+          <p style="color:#666;font-size:13px;">{app_name}</p>
+        </div>
         """,
     ),
 }

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatPrice } from "@/lib/utils";
 
-type Tab = "overview" | "stores" | "products" | "orders" | "users";
+type Tab = "overview" | "stores" | "products" | "categories" | "orders" | "users";
 
 interface Store {
   id: string; slug: string; name: string; description: string;
@@ -13,6 +13,11 @@ interface Store {
 interface Product {
   id: string; title: string; price: number; currency: string;
   stock: number; status: string; store_id: string | null; created_at: string;
+}
+
+interface Category {
+  id: string; name: string; slug: string; store_id: string | null;
+  parent_id: string | null; is_active: boolean; display_order: number;
 }
 
 interface Order {
@@ -39,13 +44,16 @@ export default function AdminPage() {
   const [metrics, setMetrics] = useState<Metrics>({});
   const [stores, setStores] = useState<Store[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // New store / product form state
+  // New store / product / category form state
   const [newStore, setNewStore] = useState({ slug: "", name: "", theme_color: "#ff6b35", whatsapp_number: "", hero_tagline: "", description: "" });
-  const [newProduct, setNewProduct] = useState({ title: "", price: "", stock: "", store_id: "", description: "", status: "active" });
+  const [newProduct, setNewProduct] = useState({ title: "", price: "", stock: "", store_id: "", category_id: "", description: "", status: "active" });
+  const [newCategory, setNewCategory] = useState({ name: "", store_id: "", parent_id: "", display_order: "0" });
+  const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
 
@@ -56,13 +64,15 @@ export default function AdminPage() {
     Promise.allSettled([
       fetch("/api/v1/admin/metrics", { headers: authHeaders() }).then(r => r.json()),
       fetch("/api/v1/catalog/stores/all", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
-      fetch("/api/v1/catalog/products?size=50&status=active", { headers: authHeaders() }).then(r => r.json()).then(d => d.items ?? []),
-      fetch("/api/v1/orders/orders/all?size=50", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+      fetch("/api/v1/catalog/products?size=100", { headers: authHeaders() }).then(r => r.json()).then(d => d.items ?? []),
+      fetch("/api/v1/catalog/categories", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+      fetch("/api/v1/orders/orders?size=50", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
       fetch("/api/v1/auth/admin/users", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
-    ]).then(([m, s, p, o, u]) => {
+    ]).then(([m, s, p, c, o, u]) => {
       if (m.status === "fulfilled") setMetrics(m.value);
       if (s.status === "fulfilled") setStores(Array.isArray(s.value) ? s.value : []);
       if (p.status === "fulfilled") setProducts(Array.isArray(p.value) ? p.value : []);
+      if (c.status === "fulfilled") setCategories(Array.isArray(c.value) ? c.value : []);
       if (o.status === "fulfilled") setOrders(Array.isArray(o.value) ? o.value : (o.value?.items ?? []));
       if (u.status === "fulfilled") setUsers(Array.isArray(u.value) ? u.value : []);
       setLoading(false);
@@ -100,15 +110,61 @@ export default function AdminPage() {
         price: parseFloat(newProduct.price),
         stock: parseInt(newProduct.stock),
         store_id: newProduct.store_id || null,
+        category_id: newProduct.category_id || null,
       }),
     });
     if (res.ok) {
       const p = await res.json();
       setProducts(prev => [p, ...prev]);
-      setNewProduct({ title: "", price: "", stock: "", store_id: "", description: "", status: "active" });
-      setMsg("Product created!");
+      setNewProduct({ title: "", price: "", stock: "", store_id: "", category_id: "", description: "", status: "active" });
+      setUploadingProductId(p.id);
+      setMsg("Product created! You can now upload an image.");
     } else {
       setMsg("Error creating product");
+    }
+    setSaving(false);
+    setTimeout(() => setMsg(""), 5000);
+  }
+
+  async function uploadProductImage(productId: string, file: File) {
+    const form = new FormData();
+    form.append("file", file);
+    const res = await fetch(`/api/v1/catalog/products/${productId}/media?is_primary=true`, {
+      method: "POST",
+      headers: { ...authHeaders() },
+      body: form,
+    });
+    if (res.ok) {
+      const media = await res.json();
+      setProducts(prev => prev.map(p => p.id === productId ? { ...p, media: [media] } : p));
+      setUploadingProductId(null);
+      setMsg("Image uploaded!");
+    } else {
+      setMsg("Image upload failed");
+    }
+    setTimeout(() => setMsg(""), 3000);
+  }
+
+  async function createCategory(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
+    const res = await fetch("/api/v1/catalog/categories", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        name: newCategory.name,
+        store_id: newCategory.store_id || null,
+        parent_id: newCategory.parent_id || null,
+        display_order: parseInt(newCategory.display_order) || 0,
+      }),
+    });
+    if (res.ok) {
+      const c = await res.json();
+      setCategories(prev => [c, ...prev]);
+      setNewCategory({ name: "", store_id: "", parent_id: "", display_order: "0" });
+      setMsg("Category created!");
+    } else {
+      setMsg("Error creating category");
     }
     setSaving(false);
     setTimeout(() => setMsg(""), 3000);
@@ -136,6 +192,7 @@ export default function AdminPage() {
     { id: "overview", label: "Overview" },
     { id: "stores", label: "Stores" },
     { id: "products", label: "Products" },
+    { id: "categories", label: "Categories" },
     { id: "orders", label: "Orders" },
     { id: "users", label: "Users" },
   ];
@@ -318,6 +375,15 @@ export default function AdminPage() {
                       </select>
                     </div>
                     <div>
+                      <label className="block text-xs text-white/50 mb-1">Category</label>
+                      <select value={newProduct.category_id} onChange={e => setNewProduct(p => ({ ...p, category_id: e.target.value }))} className={inputCls}>
+                        <option value="">— No category —</option>
+                        {categories.filter(c => !newProduct.store_id || c.store_id === newProduct.store_id || !c.store_id).map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div>
                       <label className="block text-xs text-white/50 mb-1">Status</label>
                       <select value={newProduct.status} onChange={e => setNewProduct(p => ({ ...p, status: e.target.value }))} className={inputCls}>
                         <option value="active">Active</option>
@@ -336,6 +402,24 @@ export default function AdminPage() {
                     </div>
                   </form>
                 </div>
+
+                {uploadingProductId && (
+                  <div className="bg-orange-500/10 border border-orange-500/30 rounded-xl p-5">
+                    <p className="text-sm text-orange-400 font-semibold mb-3">Upload product image</p>
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (file && uploadingProductId) await uploadProductImage(uploadingProductId, file);
+                      }}
+                      className="block text-sm text-white/70 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-orange-500/20 file:text-orange-400 hover:file:bg-orange-500/30"
+                    />
+                    <button onClick={() => setUploadingProductId(null)} className="mt-2 text-xs text-white/30 hover:text-white/60">
+                      Skip
+                    </button>
+                  </div>
+                )}
 
                 <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
                   <table className="w-full text-sm">
@@ -367,6 +451,78 @@ export default function AdminPage() {
                       })}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            )}
+
+            {/* ── CATEGORIES ── */}
+            {tab === "categories" && (
+              <div className="space-y-6">
+                <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+                  <h3 className="font-semibold text-white mb-4">Create Category</h3>
+                  <form onSubmit={createCategory} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs text-white/50 mb-1">Category name</label>
+                      <input required value={newCategory.name} onChange={e => setNewCategory(c => ({ ...c, name: e.target.value }))} className={inputCls} placeholder="e.g. T-Shirts" />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-white/50 mb-1">Store (optional)</label>
+                      <select value={newCategory.store_id} onChange={e => setNewCategory(c => ({ ...c, store_id: e.target.value }))} className={inputCls}>
+                        <option value="">— All stores —</option>
+                        {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-white/50 mb-1">Parent category (optional)</label>
+                      <select value={newCategory.parent_id} onChange={e => setNewCategory(c => ({ ...c, parent_id: e.target.value }))} className={inputCls}>
+                        <option value="">— Root category —</option>
+                        {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-xs text-white/50 mb-1">Display order</label>
+                      <input type="number" min="0" value={newCategory.display_order} onChange={e => setNewCategory(c => ({ ...c, display_order: e.target.value }))} className={inputCls} />
+                    </div>
+                    <div className="sm:col-span-2 flex justify-end">
+                      <button type="submit" disabled={saving} className="bg-orange-500 hover:bg-orange-400 text-white px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors">
+                        Create Category
+                      </button>
+                    </div>
+                  </form>
+                </div>
+
+                <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-white/10">
+                      <tr className="text-left text-white/40 text-xs uppercase">
+                        <th className="px-4 py-3">Name</th>
+                        <th className="px-4 py-3">Store</th>
+                        <th className="px-4 py-3">Parent</th>
+                        <th className="px-4 py-3">Order</th>
+                        <th className="px-4 py-3">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
+                      {categories.map(c => {
+                        const store = stores.find(s => s.id === c.store_id);
+                        const parent = categories.find(p => p.id === c.parent_id);
+                        return (
+                          <tr key={c.id} className="hover:bg-white/5">
+                            <td className="px-4 py-3 text-white font-medium">{c.name}</td>
+                            <td className="px-4 py-3 text-white/50">{store?.name ?? "—"}</td>
+                            <td className="px-4 py-3 text-white/50">{parent?.name ?? "—"}</td>
+                            <td className="px-4 py-3 text-white/50">{c.display_order}</td>
+                            <td className="px-4 py-3">
+                              <span className={`text-xs rounded-full px-2 py-0.5 ${c.is_active ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/40"}`}>
+                                {c.is_active ? "Active" : "Inactive"}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  {categories.length === 0 && <p className="text-white/30 text-center py-8">No categories yet</p>}
                 </div>
               </div>
             )}

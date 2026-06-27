@@ -5,6 +5,7 @@ import { ShoppingCart, Search, Menu, X, User } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useCart } from "@/hooks/useCart";
 import { CartSidebar } from "./CartSidebar";
+import { useLang } from "@/contexts/LanguageContext";
 
 const STORES = [
   { slug: "clothes", name: "Fashion" },
@@ -15,6 +16,7 @@ const STORES = [
 
 export function Navbar() {
   const { count } = useCart();
+  const { lang, toggle: toggleLang } = useLang();
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -140,6 +142,16 @@ export function Navbar() {
                 </Link>
               </div>
             )}
+
+            {/* Language toggle */}
+            <button
+              onClick={toggleLang}
+              className="p-2 rounded-xl hover:bg-white/10 transition-colors text-white/60 hover:text-white text-xs font-bold tracking-wider"
+              aria-label="Toggle language"
+              title={lang === "en" ? "Switch to Arabic" : "Switch to English"}
+            >
+              {lang === "en" ? "ع" : "EN"}
+            </button>
 
             {/* Mobile hamburger */}
             <button
