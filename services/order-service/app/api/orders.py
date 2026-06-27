@@ -169,6 +169,11 @@ async def update_status(
                 "buyer_user_id": order.buyer_user_id or "",
                 "buyer_email": order.buyer_email,
                 "status": body.status.value,
+                # Include items so seller-service can compute commissions
+                "items": [
+                    {"seller_id": it.seller_id, "subtotal": it.subtotal}
+                    for it in (order.items or [])
+                ],
             }
             await exchange.publish(
                 aio_pika.Message(body=json.dumps(payload).encode()),

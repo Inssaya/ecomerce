@@ -3,6 +3,7 @@ import { ShoppingBag, Store, Truck, Shield } from "lucide-react";
 import { getCategories, getProducts } from "@/lib/api";
 import { CategoryCard } from "@/components/CategoryCard";
 import { ProductCard } from "@/components/ProductCard";
+import { RecommendationRail } from "@/components/RecommendationRail";
 
 export default async function HomePage() {
   const [categories, productsData] = await Promise.allSettled([
@@ -78,6 +79,9 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      {/* Personalized recommendations */}
+      <RecommendationRail title="Recommandés pour vous" />
 
       {/* Feature cards */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-20">

@@ -13,7 +13,8 @@ export function AddToCartButton({ product }: { product: Product }) {
   const handleClick = (e: React.MouseEvent) => {
     e.preventDefault();
     if (product.stock === 0) return;
-    const primaryImage = product.media.find((m) => m.is_primary) ?? product.media[0];
+    const media = product.media ?? [];
+    const primaryImage = media.find((m) => m.is_primary) ?? media[0];
     addItem({
       product_id: product.id,
       seller_id: product.seller_id,

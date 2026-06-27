@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.models import RefreshToken, User, UserStatus
-from app.schemas import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
+from app.schemas import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserInToken
 from app.security import (
     create_access_token,
     create_refresh_token,
@@ -40,7 +40,11 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)):
     rt = RefreshToken(user_id=user.id, token_hash=hash_token(refresh_raw), expires_at=expires_at)
     db.add(rt)
     await db.commit()
-    return TokenResponse(access_token=access, refresh_token=refresh_raw)
+    return TokenResponse(
+        access_token=access,
+        refresh_token=refresh_raw,
+        user=UserInToken(id=user.id, role=user.role, status=user.status),
+    )
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -57,7 +61,11 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
     rt = RefreshToken(user_id=user.id, token_hash=hash_token(refresh_raw), expires_at=expires_at)
     db.add(rt)
     await db.commit()
-    return TokenResponse(access_token=access, refresh_token=refresh_raw)
+    return TokenResponse(
+        access_token=access,
+        refresh_token=refresh_raw,
+        user=UserInToken(id=user.id, role=user.role, status=user.status),
+    )
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -98,7 +106,11 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     )
     db.add(new_rt)
     await db.commit()
-    return TokenResponse(access_token=new_access, refresh_token=new_refresh_raw)
+    return TokenResponse(
+        access_token=new_access,
+        refresh_token=new_refresh_raw,
+        user=UserInToken(id=user.id, role=user.role, status=user.status),
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)

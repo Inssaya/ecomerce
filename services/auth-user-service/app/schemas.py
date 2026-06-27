@@ -32,10 +32,17 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class UserInToken(BaseModel):
+    id: str
+    role: UserRole
+    status: UserStatus
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
     token_type: str = "bearer"
+    user: UserInToken
 
 
 class RefreshRequest(BaseModel):

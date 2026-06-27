@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ShoppingCart, Search, Menu, X } from "lucide-react";
-import { useState } from "react";
+import { ShoppingCart, Search, Menu, X, User } from "lucide-react";
+import { useState, useEffect } from "react";
 import { useCart } from "@/hooks/useCart";
 import { CartSidebar } from "./CartSidebar";
 
@@ -10,6 +10,14 @@ export function Navbar() {
   const { count } = useCart();
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    setIsLoggedIn(!!localStorage.getItem("access_token"));
+    const handler = () => setIsLoggedIn(!!localStorage.getItem("access_token"));
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
 
   return (
     <>
@@ -62,13 +70,26 @@ export function Navbar() {
             <nav className="hidden md:flex items-center gap-1">
               <NavLink href="/products">Produits</NavLink>
               <NavLink href="/categories">Catégories</NavLink>
-              <NavLink href="/auth/login">Connexion</NavLink>
-              <Link
-                href="/auth/register"
-                className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:opacity-90 transition-opacity"
-              >
-                S&apos;inscrire
-              </Link>
+              <NavLink href="/track">Suivi</NavLink>
+              {isLoggedIn ? (
+                <Link
+                  href="/account"
+                  className="flex items-center gap-1.5 px-3 py-2 text-sm text-muted-foreground hover:text-foreground rounded-xl hover:bg-muted transition-colors"
+                >
+                  <User className="w-4 h-4" />
+                  Mon compte
+                </Link>
+              ) : (
+                <>
+                  <NavLink href="/auth/login">Connexion</NavLink>
+                  <Link
+                    href="/auth/register"
+                    className="px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl hover:opacity-90 transition-opacity"
+                  >
+                    S&apos;inscrire
+                  </Link>
+                </>
+              )}
             </nav>
 
             {/* Mobile hamburger */}
@@ -86,14 +107,21 @@ export function Navbar() {
           <div className="md:hidden border-t border-border bg-white px-4 py-4 space-y-2">
             <MobileLink href="/products" onClick={() => setMobileOpen(false)}>Produits</MobileLink>
             <MobileLink href="/categories" onClick={() => setMobileOpen(false)}>Catégories</MobileLink>
-            <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>Connexion</MobileLink>
-            <Link
-              href="/auth/register"
-              onClick={() => setMobileOpen(false)}
-              className="block w-full text-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl"
-            >
-              S&apos;inscrire
-            </Link>
+            <MobileLink href="/track" onClick={() => setMobileOpen(false)}>Suivi colis</MobileLink>
+            {isLoggedIn ? (
+              <MobileLink href="/account" onClick={() => setMobileOpen(false)}>Mon compte</MobileLink>
+            ) : (
+              <>
+                <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>Connexion</MobileLink>
+                <Link
+                  href="/auth/register"
+                  onClick={() => setMobileOpen(false)}
+                  className="block w-full text-center px-4 py-2 bg-primary text-primary-foreground text-sm font-medium rounded-xl"
+                >
+                  S&apos;inscrire
+                </Link>
+              </>
+            )}
           </div>
         )}
       </header>

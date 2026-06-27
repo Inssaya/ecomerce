@@ -4,11 +4,10 @@ from app.models import OrderStatus
 
 
 class Address(BaseModel):
-    line1: str
-    line2: str = ""
+    street: str
     city: str
     region: str = ""
-    postal_code: str = ""
+    zip: str = ""
     country: str = "MA"
 
 

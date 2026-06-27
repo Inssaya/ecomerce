@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -19,11 +20,12 @@ logger = logging.getLogger(settings.service_name)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
-        # Tables are created by Alembic migrations in production;
-        # create_all here is a convenience for dev/testing.
         await conn.run_sync(Base.metadata.create_all)
+    from app.consumer import start_consumer
+    consumer_task = asyncio.create_task(start_consumer())
     logger.info("%s started", settings.service_name)
     yield
+    consumer_task.cancel()
     await engine.dispose()
     logger.info("%s shut down", settings.service_name)
 
