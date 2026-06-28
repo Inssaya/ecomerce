@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useCart } from "@/hooks/useCart";
 import { formatPrice } from "@/lib/utils";
+import { getVisitorId } from "@/lib/fingerprint";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -59,6 +60,22 @@ export default function CheckoutPage() {
       }
 
       const order = await res.json();
+
+      getVisitorId().then((vid) => {
+        const token = localStorage.getItem("access_token");
+        const headers: Record<string, string> = { "Content-Type": "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        else headers["X-Guest-ID"] = vid;
+        items.forEach((item) => {
+          fetch("/api/v1/recommendations/events/interaction", {
+            method: "POST",
+            headers,
+            body: JSON.stringify({ product_id: item.product_id, event_type: "purchase" }),
+            keepalive: true,
+          }).catch(() => {});
+        });
+      });
+
       clearCart();
       router.push(`/orders/${order.id}?placed=1`);
     } catch (err: unknown) {

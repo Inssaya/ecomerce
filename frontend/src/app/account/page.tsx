@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { formatPrice } from "@/lib/utils";
 
 interface User {
   id: string;
@@ -32,6 +33,9 @@ export default function AccountPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"profile" | "orders" | "security">("profile");
+  const [pwForm, setPwForm] = useState({ current: "", next: "", confirm: "" });
+  const [pwError, setPwError] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
   const [orders, setOrders] = useState<Array<{
     id: string; tracking_token: string; status: string; total: number; created_at: string;
   }>>([]);
@@ -61,6 +65,27 @@ export default function AccountPage() {
     setSaving(false);
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function changePassword(e: React.FormEvent) {
+    e.preventDefault();
+    setPwError("");
+    if (pwForm.next !== pwForm.confirm) { setPwError("Passwords do not match"); return; }
+    if (pwForm.next.length < 8) { setPwError("Password must be at least 8 characters"); return; }
+    const token = localStorage.getItem("access_token");
+    const res = await fetch("/api/v1/auth/me/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ current_password: pwForm.current, new_password: pwForm.next }),
+    });
+    if (res.ok) {
+      setPwForm({ current: "", next: "", confirm: "" });
+      setPwMsg("Password changed successfully");
+      setTimeout(() => setPwMsg(""), 3000);
+    } else {
+      const data = await res.json().catch(() => ({}));
+      setPwError(data.detail ?? "Failed to change password");
+    }
   }
 
   async function handleLogout() {
@@ -180,7 +205,7 @@ export default function AccountPage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="text-sm font-semibold text-orange-400">
-                    {(order.total / 100).toFixed(2).replace(".", ",")} MAD
+                    {formatPrice(order.total)}
                   </span>
                   <span className="text-xs bg-white/10 text-white/60 rounded-full px-2.5 py-1">
                     {ORDER_STATUS[order.status] ?? order.status}
@@ -198,12 +223,63 @@ export default function AccountPage() {
         )}
 
         {tab === "security" && (
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <h2 className="font-semibold text-white mb-4">Security</h2>
-            <p className="text-sm text-white/50 mb-4">Email: <strong className="text-white">{user.email}</strong></p>
-            <p className="text-sm text-white/40">
-              To change your password, contact support or use the password reset feature.
-            </p>
+          <div className="space-y-4">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+              <p className="text-sm text-white/50">Email: <strong className="text-white">{user.email}</strong></p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-6">
+              <h2 className="font-semibold text-white mb-4">Change password</h2>
+              <form onSubmit={changePassword} className="space-y-3">
+                {pwError && (
+                  <div className="rounded-lg bg-red-500/10 border border-red-500/30 px-4 py-2 text-sm text-red-400">
+                    {pwError}
+                  </div>
+                )}
+                {pwMsg && (
+                  <div className="rounded-lg bg-green-500/10 border border-green-500/30 px-4 py-2 text-sm text-green-400">
+                    {pwMsg}
+                  </div>
+                )}
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1">Current password</label>
+                  <input
+                    type="password"
+                    required
+                    value={pwForm.current}
+                    onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1">New password</label>
+                  <input
+                    type="password"
+                    required
+                    minLength={8}
+                    value={pwForm.next}
+                    onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-white/60 mb-1">Confirm new password</label>
+                  <input
+                    type="password"
+                    required
+                    value={pwForm.confirm}
+                    onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))}
+                    className={inputCls}
+                  />
+                </div>
+                <button
+                  type="submit"
+                  className="rounded-lg bg-orange-500 hover:bg-orange-400 px-5 py-2 text-sm font-semibold text-white transition-colors"
+                >
+                  Update password
+                </button>
+              </form>
+            </div>
           </div>
         )}
       </div>

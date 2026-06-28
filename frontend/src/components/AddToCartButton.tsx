@@ -5,6 +5,7 @@ import { useState } from "react";
 import type { Product } from "@/types";
 import { useCart } from "@/hooks/useCart";
 import { cn } from "@/lib/utils";
+import { getVisitorId } from "@/lib/fingerprint";
 
 export function AddToCartButton({ product }: { product: Product }) {
   const { addItem } = useCart();
@@ -25,6 +26,18 @@ export function AddToCartButton({ product }: { product: Product }) {
     });
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
+
+    getVisitorId().then((vid) => {
+      const token = localStorage.getItem("access_token");
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      else headers["X-Guest-ID"] = vid;
+      fetch("/api/v1/recommendations/events/interaction", {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ product_id: product.id, event_type: "add_to_cart" }),
+      }).catch(() => {});
+    });
   };
 
   return (

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Navbar } from "@/components/Navbar";
+import { AnalyticsTracker } from "@/components/AnalyticsTracker";
 import { LanguageProvider } from "@/contexts/LanguageContext";
 import "./globals.css";
 
@@ -28,6 +29,7 @@ export default function RootLayout({
       <body className={inter.className}>
         <LanguageProvider>
           <Navbar />
+          <AnalyticsTracker />
           <main>{children}</main>
         </LanguageProvider>
       </body>
