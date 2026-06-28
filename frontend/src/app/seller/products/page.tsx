@@ -118,7 +118,8 @@ export default function SellerProductsPage() {
           </div>
         ) : (
           <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-            <table className="w-full">
+            <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px]">
               <thead>
                 <tr className="border-b border-white/10">
                   <th className="px-5 py-3 text-left text-xs font-medium text-white/40 uppercase tracking-wide">Product</th>
@@ -193,6 +194,7 @@ export default function SellerProductsPage() {
                 ))}
               </tbody>
             </table>
+            </div>
 
             {total > PAGE_SIZE && (
               <div className="flex items-center justify-between px-5 py-4 border-t border-white/10">

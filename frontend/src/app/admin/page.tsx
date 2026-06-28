@@ -241,7 +241,7 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-8 w-fit overflow-x-auto">
+        <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-8 w-full overflow-x-auto">
           {tabs.map(t => (
             <button
               key={t.id}
@@ -486,7 +486,8 @@ export default function AdminPage() {
                 )}
 
                 <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead className="border-b border-white/10">
                       <tr className="text-left text-white/40 text-xs uppercase">
                         <th className="px-4 py-3">Product</th>
@@ -515,6 +516,7 @@ export default function AdminPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                 </div>
               </div>
             )}
@@ -556,7 +558,8 @@ export default function AdminPage() {
                 </div>
 
                 <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                  <table className="w-full text-sm">
+                  <div className="overflow-x-auto">
+                  <table className="w-full min-w-[520px] text-sm">
                     <thead className="border-b border-white/10">
                       <tr className="text-left text-white/40 text-xs uppercase">
                         <th className="px-4 py-3">Name</th>
@@ -586,6 +589,7 @@ export default function AdminPage() {
                       })}
                     </tbody>
                   </table>
+                  </div>
                   {categories.length === 0 && <p className="text-white/30 text-center py-8">No categories yet</p>}
                 </div>
               </div>
@@ -594,7 +598,8 @@ export default function AdminPage() {
             {/* ── ORDERS ── */}
             {tab === "orders" && (
               <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[560px] text-sm">
                   <thead className="border-b border-white/10">
                     <tr className="text-left text-white/40 text-xs uppercase">
                       <th className="px-4 py-3">Order</th>
@@ -627,6 +632,7 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {orders.length === 0 && <p className="text-white/30 text-center py-8">No orders yet</p>}
               </div>
             )}
@@ -634,7 +640,8 @@ export default function AdminPage() {
             {/* ── USERS ── */}
             {tab === "users" && (
               <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
+                <div className="overflow-x-auto">
+                <table className="w-full min-w-[460px] text-sm">
                   <thead className="border-b border-white/10">
                     <tr className="text-left text-white/40 text-xs uppercase">
                       <th className="px-4 py-3">User</th>
@@ -667,6 +674,7 @@ export default function AdminPage() {
                     ))}
                   </tbody>
                 </table>
+                </div>
                 {users.length === 0 && <p className="text-white/30 text-center py-8">No users yet</p>}
               </div>
             )}
