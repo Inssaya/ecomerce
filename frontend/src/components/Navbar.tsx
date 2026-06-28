@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { useCart } from "@/hooks/useCart";
 import { CartSidebar } from "./CartSidebar";
 import { useLang } from "@/contexts/LanguageContext";
+import { NotificationBell } from "./NotificationBell";
 
 const STORES = [
   { slug: "clothes", name: "Fashion" },
@@ -116,6 +117,9 @@ export function Navbar() {
                 </span>
               )}
             </button>
+
+            {/* Notifications */}
+            {isLoggedIn && <NotificationBell />}
 
             {/* Account */}
             {isLoggedIn ? (

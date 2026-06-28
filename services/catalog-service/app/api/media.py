@@ -68,6 +68,37 @@ async def upload_product_media(
     return media
 
 
+@router.patch("/{media_id}", response_model=ProductMediaResponse)
+async def set_primary_media(
+    product_id: str,
+    media_id: str,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    if not x_user_id or x_user_role not in ("seller", "admin"):
+        raise HTTPException(status_code=403, detail="Seller or admin required")
+
+    result = await db.execute(
+        select(ProductMedia).where(ProductMedia.id == media_id, ProductMedia.product_id == product_id)
+    )
+    media = result.scalar_one_or_none()
+    if not media:
+        raise HTTPException(status_code=404, detail="Media not found")
+
+    # Unset existing primary
+    existing = await db.execute(
+        select(ProductMedia).where(ProductMedia.product_id == product_id, ProductMedia.is_primary.is_(True))
+    )
+    for m in existing.scalars().all():
+        m.is_primary = False
+
+    media.is_primary = True
+    await db.commit()
+    await db.refresh(media)
+    return media
+
+
 @router.delete("/{media_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_media(
     product_id: str,

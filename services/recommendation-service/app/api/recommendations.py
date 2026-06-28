@@ -1,13 +1,16 @@
 import asyncio
+from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, Depends, Header, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from sqlalchemy import distinct, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.database import get_db
 from app.engine import get_recommendations, get_similar, get_trending
+from app.models import InteractionEvent, ViewEvent
 from app.schemas import RecommendationsResponse, TrendingResponse
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
@@ -66,3 +69,64 @@ async def trending(db: AsyncSession = Depends(get_db)):
 @router.get("/similar/{product_id}", response_model=list[str])
 async def similar(product_id: str, db: AsyncSession = Depends(get_db)):
     return await get_similar(db, product_id, _catalog)
+
+
+@router.get("/admin/stats")
+async def admin_stats(
+    x_user_role: Optional[str] = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    if x_user_role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+
+    total_views = await db.scalar(select(func.count()).select_from(ViewEvent)) or 0
+    unique_visitors_alltime = (
+        await db.scalar(select(func.count(distinct(ViewEvent.user_ref))).select_from(ViewEvent))
+    ) or 0
+    today_views = (
+        await db.scalar(
+            select(func.count()).select_from(ViewEvent).where(ViewEvent.created_at >= today_start)
+        )
+    ) or 0
+    today_unique_visitors = (
+        await db.scalar(
+            select(func.count(distinct(ViewEvent.user_ref)))
+            .select_from(ViewEvent)
+            .where(ViewEvent.created_at >= today_start)
+        )
+    ) or 0
+
+    top_result = await db.execute(
+        select(ViewEvent.product_id, func.count().label("views"))
+        .group_by(ViewEvent.product_id)
+        .order_by(func.count().desc())
+        .limit(10)
+    )
+    top_products = [{"product_id": row[0], "views": row[1]} for row in top_result]
+
+    add_to_cart = (
+        await db.scalar(
+            select(func.count())
+            .select_from(InteractionEvent)
+            .where(InteractionEvent.event_type == "add_to_cart")
+        )
+    ) or 0
+    purchases = (
+        await db.scalar(
+            select(func.count())
+            .select_from(InteractionEvent)
+            .where(InteractionEvent.event_type == "purchase")
+        )
+    ) or 0
+
+    return {
+        "total_views": total_views,
+        "unique_visitors_alltime": unique_visitors_alltime,
+        "today_views": today_views,
+        "today_unique_visitors": today_unique_visitors,
+        "top_products": top_products,
+        "add_to_cart_events": add_to_cart,
+        "purchase_events": purchases,
+    }

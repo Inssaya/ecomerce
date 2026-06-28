@@ -6,6 +6,7 @@ import { getProduct } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { AddToCartButton } from "@/components/AddToCartButton";
 import { SimilarProducts } from "@/components/SimilarProducts";
+import { ProductViewTracker } from "@/components/ProductViewTracker";
 import { notFound } from "next/navigation";
 
 interface PageProps {
@@ -40,8 +41,40 @@ export default async function ProductDetailPage({ params }: PageProps) {
   const primaryImage = product.media.find((m) => m.is_primary) ?? product.media[0];
   const otherImages = product.media.filter((m) => !m.is_primary);
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: product.title,
+    description: product.description,
+    image: product.media.map((m) => m.url),
+    offers: {
+      "@type": "Offer",
+      priceCurrency: product.currency ?? "MAD",
+      price: product.price,
+      availability:
+        product.stock > 0
+          ? "https://schema.org/InStock"
+          : "https://schema.org/OutOfStock",
+      seller: { "@type": "Organization", name: "MoStyle" },
+    },
+    ...(product.rating > 0
+      ? {
+          aggregateRating: {
+            "@type": "AggregateRating",
+            ratingValue: product.rating,
+            reviewCount: product.view_count,
+          },
+        }
+      : {}),
+  };
+
   return (
     <div className="min-h-screen bg-gray-950 text-white">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <ProductViewTracker productId={params.id} categoryId={product.category_id ?? undefined} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-white/40 mb-6">

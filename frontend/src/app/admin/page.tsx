@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { formatPrice } from "@/lib/utils";
 
-type Tab = "overview" | "stores" | "products" | "categories" | "orders" | "users";
+type Tab = "overview" | "stores" | "products" | "categories" | "orders" | "users" | "analytics";
 
 interface Store {
   id: string; slug: string; name: string; description: string;
@@ -34,6 +34,16 @@ interface Metrics {
   active_products?: number; pending_orders?: number;
 }
 
+interface AnalyticsStats {
+  total_views: number;
+  unique_visitors_alltime: number;
+  today_views: number;
+  today_unique_visitors: number;
+  top_products: Array<{ product_id: string; views: number }>;
+  add_to_cart_events: number;
+  purchase_events: number;
+}
+
 function authHeaders() {
   const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -48,6 +58,8 @@ export default function AdminPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState<AnalyticsStats | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
 
   // New store / product / category form state
   const [newStore, setNewStore] = useState({ slug: "", name: "", theme_color: "#ff6b35", whatsapp_number: "", hero_tagline: "", description: "" });
@@ -216,6 +228,18 @@ export default function AdminPage() {
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
   }
 
+  async function loadAnalytics() {
+    setAnalyticsLoading(true);
+    try {
+      const res = await fetch("/api/v1/recommendations/admin/stats", { headers: authHeaders() });
+      if (res.ok) setAnalytics(await res.json());
+    } catch {
+      // silent
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  }
+
   const tabs: { id: Tab; label: string }[] = [
     { id: "overview", label: "Overview" },
     { id: "stores", label: "Stores" },
@@ -223,6 +247,7 @@ export default function AdminPage() {
     { id: "categories", label: "Categories" },
     { id: "orders", label: "Orders" },
     { id: "users", label: "Users" },
+    { id: "analytics", label: "Analytics" },
   ];
 
   const inputCls = "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
@@ -245,7 +270,10 @@ export default function AdminPage() {
           {tabs.map(t => (
             <button
               key={t.id}
-              onClick={() => setTab(t.id)}
+              onClick={() => {
+                setTab(t.id);
+                if (t.id === "analytics" && !analytics) loadAnalytics();
+              }}
               className={`rounded-lg px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors ${
                 tab === t.id ? "bg-orange-500 text-white" : "text-white/50 hover:text-white hover:bg-white/5"
               }`}
@@ -634,6 +662,78 @@ export default function AdminPage() {
                 </table>
                 </div>
                 {orders.length === 0 && <p className="text-white/30 text-center py-8">No orders yet</p>}
+              </div>
+            )}
+
+            {/* ── ANALYTICS ── */}
+            {tab === "analytics" && (
+              <div className="space-y-6">
+                {analyticsLoading ? (
+                  <div className="text-white/40 text-center py-20">Loading analytics...</div>
+                ) : !analytics ? (
+                  <div className="text-white/40 text-center py-20">No data available</div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                      {[
+                        { label: "Visitors today", value: analytics.today_unique_visitors },
+                        { label: "Views today", value: analytics.today_views },
+                        { label: "All-time visitors", value: analytics.unique_visitors_alltime },
+                        { label: "All-time views", value: analytics.total_views },
+                      ].map(s => (
+                        <div key={s.label} className="bg-white/5 border border-white/10 rounded-xl p-5">
+                          <p className="text-xs text-white/40 uppercase tracking-wider">{s.label}</p>
+                          <p className="text-2xl font-bold text-white mt-1">{s.value.toLocaleString()}</p>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                        <p className="text-xs text-white/40 uppercase tracking-wider">Add to cart events</p>
+                        <p className="text-2xl font-bold text-orange-400 mt-1">{analytics.add_to_cart_events.toLocaleString()}</p>
+                      </div>
+                      <div className="bg-white/5 border border-white/10 rounded-xl p-5">
+                        <p className="text-xs text-white/40 uppercase tracking-wider">Purchase events</p>
+                        <p className="text-2xl font-bold text-green-400 mt-1">{analytics.purchase_events.toLocaleString()}</p>
+                      </div>
+                    </div>
+
+                    <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+                      <div className="px-5 py-4 border-b border-white/10">
+                        <h3 className="font-semibold text-white">Top 10 products by views</h3>
+                      </div>
+                      {analytics.top_products.length === 0 ? (
+                        <p className="text-white/30 text-center py-8">No view data yet</p>
+                      ) : (
+                        <div className="divide-y divide-white/5">
+                          {analytics.top_products.map((p, i) => {
+                            const product = products.find(pr => pr.id === p.product_id);
+                            return (
+                              <div key={p.product_id} className="flex items-center justify-between px-5 py-3">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-sm font-bold text-white/30 w-5">{i + 1}</span>
+                                  <div>
+                                    <p className="text-sm text-white font-medium">{product?.title ?? "Unknown product"}</p>
+                                    <p className="text-xs text-white/30 font-mono">{p.product_id.slice(0, 8)}</p>
+                                  </div>
+                                </div>
+                                <span className="text-sm font-semibold text-orange-400">{p.views.toLocaleString()} views</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      onClick={loadAnalytics}
+                      className="text-xs text-white/40 hover:text-white/70 border border-white/10 rounded-lg px-3 py-1.5 transition-colors"
+                    >
+                      Refresh
+                    </button>
+                  </>
+                )}
               </div>
             )}
 
