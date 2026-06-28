@@ -3,7 +3,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models import CommissionLedger, SellerProfile
+from app.models import CommissionLedger, PayoutRecord, SellerProfile
+from app.schemas import PayoutRequest, PayoutRecordResponse
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -78,3 +79,50 @@ async def ledger(
     )
     result = await db.execute(query)
     return result.scalars().all()
+
+
+@router.get("/payouts", response_model=list[PayoutRecordResponse])
+async def list_payouts(
+    page: int = 1,
+    size: int = 20,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    seller_id = _require_seller(x_user_id, x_user_role)
+    result = await db.execute(
+        select(PayoutRecord)
+        .where(PayoutRecord.seller_id == seller_id)
+        .order_by(PayoutRecord.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    return result.scalars().all()
+
+
+@router.post("/payout", response_model=PayoutRecordResponse)
+async def record_payout(
+    body: PayoutRequest,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    seller_id = _require_seller(x_user_id, x_user_role)
+
+    profile_res = await db.execute(select(SellerProfile).where(SellerProfile.user_id == seller_id))
+    profile = profile_res.scalar_one_or_none()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Profile not found")
+
+    amount = body.amount if body.amount is not None else profile.payout_balance
+    if amount <= 0:
+        raise HTTPException(status_code=422, detail="Amount must be greater than 0")
+    if amount > profile.payout_balance:
+        raise HTTPException(status_code=422, detail="Amount exceeds available balance")
+
+    profile.payout_balance = round(profile.payout_balance - amount, 2)
+    record = PayoutRecord(seller_id=seller_id, amount=amount, note=body.note)
+    db.add(record)
+    await db.commit()
+    await db.refresh(record)
+    return record

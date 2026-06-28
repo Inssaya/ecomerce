@@ -105,6 +105,7 @@ export default function SellerDashboardPage() {
             {[
               { href: "/seller/products", label: "My products" },
               { href: "/seller/orders", label: "My orders" },
+              { href: "/seller/earnings", label: "Earnings" },
               { href: "/seller/profile", label: "Edit profile" },
             ].map((link) => (
               <Link

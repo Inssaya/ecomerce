@@ -45,3 +45,18 @@ class CommissionLedgerResponse(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class PayoutRequest(BaseModel):
+    amount: float | None = None
+    note: str | None = None
+
+
+class PayoutRecordResponse(BaseModel):
+    id: str
+    seller_id: str
+    amount: float
+    note: str | None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

@@ -45,3 +45,13 @@ class CommissionLedger(Base):
     settled: Mapped[bool] = mapped_column(Boolean, default=False)
     settled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class PayoutRecord(Base):
+    __tablename__ = "payout_records"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    seller_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    amount: Mapped[float] = mapped_column(Float, nullable=False)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
