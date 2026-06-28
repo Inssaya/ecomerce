@@ -18,6 +18,12 @@ def _require_admin(x_user_role: str | None):
         raise HTTPException(status_code=403, detail="Admin access required")
 
 
+def _require_seller_or_admin(x_user_id: str | None, x_user_role: str | None) -> str:
+    if not x_user_id or x_user_role not in ("seller", "admin"):
+        raise HTTPException(status_code=403, detail="Seller or admin access required")
+    return x_user_id
+
+
 @router.get("", response_model=ProductListResponse)
 async def list_products(
     store_id: str | None = None,
@@ -124,10 +130,10 @@ async def create_product(
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    _require_admin(x_user_role)
+    seller_id = _require_seller_or_admin(x_user_id, x_user_role)
 
     product = Product(
-        seller_id=x_user_id or "admin",
+        seller_id=seller_id,
         store_id=body.store_id,
         title=body.title,
         description=body.description,
@@ -169,7 +175,7 @@ async def update_product(
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    _require_admin(x_user_role)
+    caller_id = _require_seller_or_admin(x_user_id, x_user_role)
 
     result = await db.execute(
         select(Product)
@@ -179,6 +185,8 @@ async def update_product(
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    if x_user_role != "admin" and product.seller_id != caller_id:
+        raise HTTPException(status_code=403, detail="You can only edit your own products")
 
     for field, value in body.model_dump(exclude_none=True, exclude={"label_ids"}).items():
         setattr(product, field, value)
@@ -196,14 +204,17 @@ async def update_product(
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_product_route(
     product_id: str,
+    x_user_id: str | None = Header(default=None),
     x_user_role: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
 ):
-    _require_admin(x_user_role)
+    caller_id = _require_seller_or_admin(x_user_id, x_user_role)
     result = await db.execute(select(Product).where(Product.id == product_id))
     product = result.scalar_one_or_none()
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    if x_user_role != "admin" and product.seller_id != caller_id:
+        raise HTTPException(status_code=403, detail="You can only delete your own products")
 
     product.status = ProductStatus.deleted
     await db.commit()

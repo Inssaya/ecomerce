@@ -114,6 +114,27 @@ async def my_orders(
     return result.scalars().all()
 
 
+@router.get("/seller", response_model=list[OrderResponse])
+async def seller_orders(
+    page: int = 1,
+    size: int = 50,
+    x_user_id: str | None = Header(default=None),
+    x_user_role: str | None = Header(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    if not x_user_id or x_user_role not in ("seller", "admin"):
+        raise HTTPException(status_code=403, detail="Seller access required")
+    subq = select(OrderItem.order_id).where(OrderItem.seller_id == x_user_id).distinct()
+    result = await db.execute(
+        select(Order)
+        .where(Order.id.in_(subq))
+        .order_by(Order.created_at.desc())
+        .offset((page - 1) * size)
+        .limit(size)
+    )
+    return result.scalars().all()
+
+
 @router.get("/{order_id}", response_model=OrderResponse)
 async def get_order(
     order_id: str,
