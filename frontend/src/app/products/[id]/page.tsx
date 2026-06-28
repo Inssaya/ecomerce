@@ -5,6 +5,7 @@ import { Star, Package, ArrowLeft, Tag } from "lucide-react";
 import { getProduct } from "@/lib/api";
 import { formatPrice } from "@/lib/utils";
 import { AddToCartButton } from "@/components/AddToCartButton";
+import { SimilarProducts } from "@/components/SimilarProducts";
 import { notFound } from "next/navigation";
 
 interface PageProps {
@@ -185,6 +186,8 @@ export default async function ProductDetailPage({ params }: PageProps) {
             )}
           </div>
         </div>
+
+        <SimilarProducts productId={params.id} />
       </div>
     </div>
   );

@@ -16,6 +16,14 @@ class Settings(BaseSettings):
     minio_secret_key: str = "minioadmin_secret"
     minio_use_ssl: bool = False
     kyc_bucket: str = "kyc-documents"
+    smtp_host: str = "mailpit"
+    smtp_port: int = 1025
+    smtp_from: str = "noreply@mostyle.ma"
+    smtp_user: str = ""
+    smtp_password: str = ""
+    smtp_tls: bool = False
+    app_name: str = "MoStyle"
+    app_url: str = "http://localhost:3000"
 
     class Config:
         env_file = ".env"

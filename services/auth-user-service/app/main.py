@@ -45,11 +45,13 @@ from app.api.auth import router as auth_router
 from app.api.users import router as users_router
 from app.api.admin import router as admin_router
 from app.api.kyc import router as kyc_router
+from app.api.password_reset import router as password_reset_router
 
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(admin_router)
 app.include_router(kyc_router)
+app.include_router(password_reset_router)
 
 
 @app.get("/health", tags=["ops"])

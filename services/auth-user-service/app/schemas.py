@@ -80,3 +80,19 @@ class KycDocumentResponse(BaseModel):
 
 class AdminUserResponse(UserResponse):
     kyc_documents: list[KycDocumentResponse] = []
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+
+    @field_validator("new_password")
+    @classmethod
+    def strong_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must be at least 8 characters")
+        return v

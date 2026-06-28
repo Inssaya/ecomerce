@@ -42,6 +42,19 @@ app.add_middleware(
 )
 
 
+_AUTH_PATHS = ("/api/v1/auth/login", "/api/v1/auth/register", "/api/v1/auth/forgot-password", "/api/v1/auth/reset-password")
+_GENERAL_LIMIT = 200
+_AUTH_LIMIT = 10
+
+
+async def _check_rate_limit(redis: aioredis.Redis, key: str, limit: int) -> bool:
+    """Returns True if request is allowed, False if rate limit exceeded."""
+    count = await redis.incr(key)
+    if count == 1:
+        await redis.expire(key, 60)
+    return count <= limit
+
+
 @app.middleware("http")
 async def auth_and_correlation(request: Request, call_next) -> Response:
     correlation_id = request.headers.get("X-Correlation-ID", str(uuid.uuid4()))
@@ -49,6 +62,19 @@ async def auth_and_correlation(request: Request, call_next) -> Response:
 
     path = request.url.path
     method = request.method
+
+    # Rate limiting
+    client_ip = request.client.host if request.client else "unknown"
+    minute_bucket = int(time.time() // 60)
+    is_auth_path = any(path.startswith(p) for p in _AUTH_PATHS)
+    limit = _AUTH_LIMIT if is_auth_path else _GENERAL_LIMIT
+    rl_key = f"rl:{client_ip}:{'auth' if is_auth_path else 'api'}:{minute_bucket}"
+    try:
+        allowed = await _check_rate_limit(request.app.state.redis, rl_key, limit)
+        if not allowed:
+            return JSONResponse(status_code=429, content={"detail": "Too many requests. Please slow down."})
+    except Exception:
+        pass  # Don't block requests if Redis is unavailable
 
     # JWT validation — enforce on protected routes
     if not is_public(path, method):
