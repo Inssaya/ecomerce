@@ -55,18 +55,18 @@ async def _handle_order_placed(data: dict):
     order_id = data.get("order_id", "")
     total = data.get("total", 0)
     token = data.get("tracking_token", "")
-    title = f"Commande #{order_id[:8]} confirmée"
-    body_text = f"Votre commande a été reçue. Total: {total} MAD"
+    title = f"Order #{order_id[:8].upper()} confirmed"
+    body_text = f"Your order has been received. Total: {total} MAD"
     await _save_in_app(user_id, "order.placed", title, body_text, data)
     if email:
-        await send_templated_email(email, "order.placed", {"order_id": order_id[:8], "total": total, "tracking_token": token})
+        await send_templated_email(email, "order.placed", {"order_id": order_id[:8].upper(), "total": total, "tracking_token": token})
 
 
 async def _handle_order_assigned(data: dict):
     user_id = data.get("buyer_user_id", "")
     order_id = data.get("order_id", "")
-    title = "Votre commande est en route!"
-    body_text = f"Commande #{order_id[:8]} assignée à un livreur."
+    title = "Your order is on its way!"
+    body_text = f"Order #{order_id[:8].upper()} has been assigned to a delivery agent."
     await _save_in_app(user_id, "order.assigned", title, body_text, data)
 
 
@@ -74,26 +74,26 @@ async def _handle_order_delivered(data: dict):
     user_id = data.get("buyer_user_id", "")
     email = data.get("buyer_email", "")
     order_id = data.get("order_id", "")
-    title = "Commande livrée!"
-    body_text = f"Commande #{order_id[:8]} livrée avec succès."
+    title = "Order delivered!"
+    body_text = f"Order #{order_id[:8].upper()} has been delivered successfully. Thank you!"
     await _save_in_app(user_id, "order.delivered", title, body_text, data)
     if email:
-        await send_templated_email(email, "order.delivered", {"order_id": order_id[:8]})
+        await send_templated_email(email, "order.delivered", {"order_id": order_id[:8].upper()})
 
 
 async def _handle_order_cancelled(data: dict):
     user_id = data.get("buyer_user_id", "")
     order_id = data.get("order_id", "")
-    title = "Commande annulée"
-    body_text = f"Commande #{order_id[:8]} a été annulée."
+    title = "Order cancelled"
+    body_text = f"Order #{order_id[:8].upper()} has been cancelled."
     await _save_in_app(user_id, "order.cancelled", title, body_text, data)
 
 
 async def _handle_kyc_approved(data: dict):
     user_id = data.get("user_id", "")
     email = data.get("email", "")
-    title = "Votre KYC a été approuvé"
-    body_text = "Votre compte est maintenant actif."
+    title = "Account verified"
+    body_text = "Your account has been verified and is now active."
     await _save_in_app(user_id, "kyc.approved", title, body_text, data)
     if email:
         await send_templated_email(email, "kyc.approved", {})
@@ -103,8 +103,8 @@ async def _handle_kyc_rejected(data: dict):
     user_id = data.get("user_id", "")
     email = data.get("email", "")
     reason = data.get("rejection_reason", "")
-    title = "Votre KYC a été refusé"
-    body_text = f"Raison: {reason}"
+    title = "Verification rejected"
+    body_text = f"Your verification was rejected. Reason: {reason}"
     await _save_in_app(user_id, "kyc.rejected", title, body_text, data)
     if email:
         await send_templated_email(email, "kyc.rejected", {"rejection_reason": reason})

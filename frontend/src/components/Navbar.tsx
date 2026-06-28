@@ -7,6 +7,7 @@ import { useCart } from "@/hooks/useCart";
 import { CartSidebar } from "./CartSidebar";
 import { useLang } from "@/contexts/LanguageContext";
 import { NotificationBell } from "./NotificationBell";
+import { useT } from "@/hooks/useT";
 
 const STORES = [
   { slug: "clothes", name: "Fashion" },
@@ -18,6 +19,7 @@ const STORES = [
 export function Navbar() {
   const { count } = useCart();
   const { lang, toggle: toggleLang } = useLang();
+  const { t } = useT();
   const [cartOpen, setCartOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -58,7 +60,7 @@ export function Navbar() {
             <input
               name="q"
               type="search"
-              placeholder="Search products..."
+              placeholder={t("Search products...", "ابحث عن منتجات...")}
               className="bg-transparent flex-1 text-sm outline-none placeholder:text-white/30 text-white"
             />
           </form>
@@ -79,7 +81,7 @@ export function Navbar() {
                 onMouseLeave={() => setStoresOpen(false)}
                 className="px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
               >
-                Stores ▾
+                {t("Stores", "المتاجر")} ▾
               </button>
               {storesOpen && (
                 <div
@@ -101,7 +103,7 @@ export function Navbar() {
             </div>
 
             <Link href="/track" className="hidden md:block px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors">
-              Track
+              {t("Track", "تتبع")}
             </Link>
 
             {/* Cart */}
@@ -128,7 +130,7 @@ export function Navbar() {
                 className="hidden md:flex items-center gap-1.5 px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
               >
                 <User className="w-4 h-4" />
-                Account
+                {t("Account", "حسابي")}
               </Link>
             ) : (
               <div className="hidden md:flex items-center gap-1">
@@ -136,13 +138,13 @@ export function Navbar() {
                   href="/auth/login"
                   className="px-3 py-2 text-sm text-white/60 hover:text-white rounded-xl hover:bg-white/10 transition-colors"
                 >
-                  Sign in
+                  {t("Sign in", "الدخول")}
                 </Link>
                 <Link
                   href="/auth/register"
                   className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-white text-sm font-semibold rounded-xl transition-colors"
                 >
-                  Sign up
+                  {t("Sign up", "إنشاء حساب")}
                 </Link>
               </div>
             )}
@@ -170,25 +172,25 @@ export function Navbar() {
         {/* Mobile menu */}
         {mobileOpen && (
           <div className="md:hidden border-t border-white/10 bg-black/90 px-4 py-4 space-y-1">
-            <p className="text-xs text-white/30 uppercase tracking-widest px-3 py-2">Stores</p>
+            <p className="text-xs text-white/30 uppercase tracking-widest px-3 py-2">{t("Stores", "المتاجر")}</p>
             {STORES.map((s) => (
               <MobileLink key={s.slug} href={`/store/${s.slug}`} onClick={() => setMobileOpen(false)}>
                 {s.name}
               </MobileLink>
             ))}
             <div className="h-px bg-white/10 my-2" />
-            <MobileLink href="/track" onClick={() => setMobileOpen(false)}>Track Order</MobileLink>
+            <MobileLink href="/track" onClick={() => setMobileOpen(false)}>{t("Track Order", "تتبع الطلب")}</MobileLink>
             {isLoggedIn ? (
-              <MobileLink href="/account" onClick={() => setMobileOpen(false)}>My Account</MobileLink>
+              <MobileLink href="/account" onClick={() => setMobileOpen(false)}>{t("My Account", "حسابي")}</MobileLink>
             ) : (
               <>
-                <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>Sign In</MobileLink>
+                <MobileLink href="/auth/login" onClick={() => setMobileOpen(false)}>{t("Sign In", "الدخول")}</MobileLink>
                 <Link
                   href="/auth/register"
                   onClick={() => setMobileOpen(false)}
                   className="block w-full text-center px-4 py-2.5 bg-orange-500 text-white text-sm font-semibold rounded-xl mt-2"
                 >
-                  Create Account
+                  {t("Create Account", "إنشاء حساب")}
                 </Link>
               </>
             )}

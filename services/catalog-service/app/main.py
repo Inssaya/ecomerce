@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import sqlalchemy
 from contextlib import asynccontextmanager
@@ -21,11 +22,15 @@ async def lifespan(app: FastAPI):
 
     from app.storage import ensure_bucket
     from app.search import ensure_index
+    from app.consumer import start_consumer
 
     await ensure_bucket(settings.media_bucket)
     await ensure_index()
+
+    consumer_task = asyncio.create_task(start_consumer())
     logger.info("%s started", settings.service_name)
     yield
+    consumer_task.cancel()
     await engine.dispose()
     logger.info("%s shut down", settings.service_name)
 

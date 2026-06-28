@@ -74,12 +74,18 @@ async def checkout(
         connection = await aio_pika.connect_robust(settings.rabbitmq_url)
         channel = await connection.channel()
         exchange = await channel.declare_exchange("ecomerce", aio_pika.ExchangeType.TOPIC, durable=True)
+        items_result = await db.execute(select(OrderItem).where(OrderItem.order_id == saved.id))
+        order_items = items_result.scalars().all()
         payload = {
             "order_id": saved.id,
             "tracking_token": saved.tracking_token,
             "buyer_user_id": saved.buyer_user_id or "",
             "buyer_email": saved.buyer_email,
             "total": saved.total,
+            "items": [
+                {"product_id": i.product_id, "quantity": i.quantity}
+                for i in order_items
+            ],
         }
         await exchange.publish(
             aio_pika.Message(body=json.dumps(payload).encode()),

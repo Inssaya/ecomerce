@@ -29,6 +29,10 @@ interface User {
   id: string; email: string; full_name: string | null; role: string; status: string; created_at: string;
 }
 
+interface DeliveryAgent {
+  id: string; user_id: string; company_name: string | null; kind: string; availability_status: string;
+}
+
 interface Metrics {
   total_users?: number; total_orders?: number; total_revenue?: number;
   active_products?: number; pending_orders?: number;
@@ -60,6 +64,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState<AnalyticsStats | null>(null);
   const [analyticsLoading, setAnalyticsLoading] = useState(false);
+  const [agents, setAgents] = useState<DeliveryAgent[]>([]);
+  const [agentsLoaded, setAgentsLoaded] = useState(false);
+  const [assigningOrderId, setAssigningOrderId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState("");
 
   // New store / product / category form state
   const [newStore, setNewStore] = useState({ slug: "", name: "", theme_color: "#ff6b35", whatsapp_number: "", hero_tagline: "", description: "" });
@@ -226,6 +234,34 @@ export default function AdminPage() {
       body: JSON.stringify({ status }),
     });
     setUsers(prev => prev.map(u => u.id === userId ? { ...u, status } : u));
+  }
+
+  async function loadAgents() {
+    if (agentsLoaded) return;
+    try {
+      const res = await fetch("/api/v1/delivery/agents/available", { headers: authHeaders() });
+      if (res.ok) setAgents(await res.json());
+    } catch { /* silent */ } finally {
+      setAgentsLoaded(true);
+    }
+  }
+
+  async function assignDelivery(orderId: string, agentId: string) {
+    const res = await fetch("/api/v1/delivery/assignments", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({ order_id: orderId, agent_id: agentId }),
+    });
+    if (res.ok) {
+      setOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: "assigned" } : o));
+      setAssigningOrderId(null);
+      setSelectedAgentId("");
+      setMsg("Driver assigned!");
+      setTimeout(() => setMsg(""), 3000);
+    } else {
+      setMsg("Assignment failed");
+      setTimeout(() => setMsg(""), 3000);
+    }
   }
 
   async function loadAnalytics() {
@@ -627,7 +663,7 @@ export default function AdminPage() {
             {tab === "orders" && (
               <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
-                <table className="w-full min-w-[560px] text-sm">
+                <table className="w-full min-w-[700px] text-sm">
                   <thead className="border-b border-white/10">
                     <tr className="text-left text-white/40 text-xs uppercase">
                       <th className="px-4 py-3">Order</th>
@@ -635,6 +671,7 @@ export default function AdminPage() {
                       <th className="px-4 py-3">Total</th>
                       <th className="px-4 py-3">Date</th>
                       <th className="px-4 py-3">Status</th>
+                      <th className="px-4 py-3">Assign Driver</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/5">
@@ -655,6 +692,48 @@ export default function AdminPage() {
                           >
                             {ORDER_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                           </select>
+                        </td>
+                        <td className="px-4 py-3">
+                          {["confirmed", "processing"].includes(o.status) ? (
+                            assigningOrderId === o.id ? (
+                              <div className="flex items-center gap-2">
+                                <select
+                                  value={selectedAgentId}
+                                  onChange={e => setSelectedAgentId(e.target.value)}
+                                  className="bg-white/5 border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none min-w-[120px]"
+                                >
+                                  <option value="">— Pick agent —</option>
+                                  {agents.map(a => (
+                                    <option key={a.user_id} value={a.user_id}>{a.company_name ?? `Agent ${a.user_id.slice(0, 8)}`}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  disabled={!selectedAgentId}
+                                  onClick={() => assignDelivery(o.id, selectedAgentId)}
+                                  className="text-xs bg-orange-500 hover:bg-orange-400 text-white px-2 py-1 rounded-lg disabled:opacity-40 transition-colors"
+                                >
+                                  Assign
+                                </button>
+                                <button
+                                  onClick={() => { setAssigningOrderId(null); setSelectedAgentId(""); }}
+                                  className="text-xs text-white/30 hover:text-white/60"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => { setAssigningOrderId(o.id); loadAgents(); }}
+                                className="text-xs bg-white/10 hover:bg-white/20 text-white/70 hover:text-white px-3 py-1 rounded-lg transition-colors"
+                              >
+                                Assign
+                              </button>
+                            )
+                          ) : o.status === "assigned" ? (
+                            <span className="text-xs text-green-400">Assigned</span>
+                          ) : (
+                            <span className="text-xs text-white/20">—</span>
+                          )}
                         </td>
                       </tr>
                     ))}

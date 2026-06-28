@@ -2,19 +2,7 @@
 
 import { useState } from "react";
 import { formatPrice } from "@/lib/utils";
-
-const STATUS_LABELS: Record<string, string> = {
-  pending: "Awaiting confirmation",
-  confirmed: "Confirmed",
-  processing: "Being prepared",
-  assigned: "Driver assigned",
-  picked_up: "Picked up from warehouse",
-  in_transit: "Out for delivery",
-  delivered_paid: "Delivered & paid",
-  delivery_failed: "Delivery failed",
-  cancelled: "Cancelled",
-  returned: "Returned",
-};
+import { useT } from "@/hooks/useT";
 
 const STATUS_STEP: Record<string, number> = {
   pending: 1, confirmed: 2, processing: 2,
@@ -22,8 +10,6 @@ const STATUS_STEP: Record<string, number> = {
   delivered_paid: 5, delivery_failed: 5,
   cancelled: 0, returned: 0,
 };
-
-const STEPS = ["Received", "Confirmed", "Driver assigned", "On the way", "Delivered"];
 
 interface Order {
   id: string;
@@ -37,10 +23,32 @@ interface Order {
 }
 
 export default function TrackPage() {
+  const { t } = useT();
   const [token, setToken] = useState("");
   const [order, setOrder] = useState<Order | null>(null);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  const STATUS_LABELS: Record<string, string> = {
+    pending: t("Awaiting confirmation", "في انتظار التأكيد"),
+    confirmed: t("Confirmed", "تم التأكيد"),
+    processing: t("Being prepared", "قيد التحضير"),
+    assigned: t("Driver assigned", "تم تعيين سائق"),
+    picked_up: t("Picked up from warehouse", "تم الاستلام من المستودع"),
+    in_transit: t("Out for delivery", "في الطريق إليك"),
+    delivered_paid: t("Delivered & paid", "تم التسليم والدفع"),
+    delivery_failed: t("Delivery failed", "فشل التسليم"),
+    cancelled: t("Cancelled", "ملغي"),
+    returned: t("Returned", "مُرجَع"),
+  };
+
+  const STEPS = [
+    t("Received", "تم الاستلام"),
+    t("Confirmed", "تم التأكيد"),
+    t("Driver assigned", "سائق معين"),
+    t("On the way", "في الطريق"),
+    t("Delivered", "تم التسليم"),
+  ];
 
   async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
@@ -49,7 +57,7 @@ export default function TrackPage() {
     setLoading(true);
     try {
       const res = await fetch(`/api/v1/orders/orders/track/${token.trim()}`);
-      if (!res.ok) throw new Error("Order not found. Check your tracking code.");
+      if (!res.ok) throw new Error(t("Order not found. Check your tracking code.", "الطلب غير موجود. تحقق من رمز التتبع."));
       setOrder(await res.json());
     } catch (err: unknown) {
       setError((err as Error).message);
@@ -66,15 +74,15 @@ export default function TrackPage() {
     <main className="min-h-screen bg-gray-950 py-12 px-4">
       <div className="mx-auto max-w-2xl">
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-white">Track my order</h1>
-          <p className="text-white/50 mt-2">Enter your tracking code from your email or SMS</p>
+          <h1 className="text-3xl font-bold text-white">{t("Track my order", "تتبع طلبي")}</h1>
+          <p className="text-white/50 mt-2">{t("Enter your tracking code from your email", "أدخل رمز التتبع من بريدك الإلكتروني")}</p>
         </div>
 
         <form onSubmit={handleSearch} className="flex gap-3 mb-8">
           <input
             value={token}
             onChange={(e) => setToken(e.target.value)}
-            placeholder="Tracking code..."
+            placeholder={t("Tracking code...", "رمز التتبع...")}
             className="flex-1 rounded-xl bg-white/5 border border-white/10 px-4 py-3 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30"
           />
           <button
@@ -82,7 +90,7 @@ export default function TrackPage() {
             disabled={loading || !token.trim()}
             className="rounded-xl bg-orange-500 hover:bg-orange-400 px-6 py-3 text-sm font-semibold text-white disabled:opacity-50 transition-colors"
           >
-            {loading ? "..." : "Track"}
+            {loading ? "..." : t("Track", "تتبع")}
           </button>
         </form>
 
@@ -108,7 +116,7 @@ export default function TrackPage() {
                     {new Date(order.created_at).toLocaleDateString("en-MA")}
                   </p>
                   <p className="font-bold text-white mt-0.5">{formatPrice(order.total)}</p>
-                  <p className="text-xs text-orange-400 font-medium">Cash on delivery</p>
+                  <p className="text-xs text-orange-400 font-medium">{t("Cash on delivery", "الدفع عند الاستلام")}</p>
                 </div>
               </div>
 
@@ -148,7 +156,7 @@ export default function TrackPage() {
 
             {order.events.length > 0 && (
               <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-                <h2 className="font-semibold text-white mb-4">History</h2>
+                <h2 className="font-semibold text-white mb-4">{t("History", "السجل")}</h2>
                 <ol className="relative border-l border-white/10 ml-2 space-y-4">
                   {order.events.map((ev) => (
                     <li key={ev.id} className="ml-4">
