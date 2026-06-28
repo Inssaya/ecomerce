@@ -50,26 +50,35 @@ const STATUS_COLORS: Record<string, string> = {
   returned: "bg-white/10 text-white/50",
 };
 
+const PAGE_SIZE = 20;
+
 export default function SellerOrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { window.location.href = "/auth/login"; return; }
+    setLoading(true);
 
-    fetch("/api/v1/orders/orders/seller", {
+    fetch(`/api/v1/orders/orders/seller?page=${page}&size=${PAGE_SIZE}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then((r) => {
         if (!r.ok) throw new Error("Failed to load");
         return r.json();
       })
-      .then((data) => setOrders(Array.isArray(data) ? data : []))
+      .then((data) => {
+        const items = Array.isArray(data) ? data : [];
+        setOrders(items);
+        setHasMore(items.length === PAGE_SIZE);
+      })
       .catch(() => setError("Failed to load orders"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page]);
 
   if (loading) {
     return (
@@ -157,6 +166,26 @@ export default function SellerOrdersPage() {
                 </div>
               </div>
             ))}
+
+            {(page > 1 || hasMore) && (
+              <div className="flex items-center justify-between mt-4">
+                <button
+                  onClick={() => setPage((p) => p - 1)}
+                  disabled={page === 1}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                >
+                  ← Previous
+                </button>
+                <span className="text-xs text-white/40">Page {page}</span>
+                <button
+                  onClick={() => setPage((p) => p + 1)}
+                  disabled={!hasMore}
+                  className="rounded-lg border border-white/10 px-4 py-2 text-sm text-white/60 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -21,28 +21,38 @@ const STATUS_COLORS: Record<string, string> = {
   archived: "bg-red-500/20 text-red-400",
 };
 
+const PAGE_SIZE = 20;
+
 export default function SellerProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
     const token = localStorage.getItem("access_token");
     if (!token) { window.location.href = "/auth/login"; return; }
+    setLoading(true);
 
     fetch("/api/v1/seller/profile/me", { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => r.json())
       .then((profile) => {
         if (profile.detail) { window.location.href = "/seller/onboarding"; return; }
-        return fetch(`/api/v1/catalog/products?seller_id=${profile.user_id}&size=100`, {
+        return fetch(`/api/v1/catalog/products?seller_id=${profile.user_id}&size=${PAGE_SIZE}&page=${page}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
       })
       .then((r) => r?.json())
-      .then((data) => { if (data) setProducts(data.items ?? []); })
+      .then((data) => {
+        if (data) {
+          setProducts(data.items ?? []);
+          setTotal(data.total ?? 0);
+        }
+      })
       .catch(() => setError("Failed to load products"))
       .finally(() => setLoading(false));
-  }, []);
+  }, [page]);
 
   async function toggleStatus(product: Product) {
     const token = localStorage.getItem("access_token");
@@ -75,7 +85,7 @@ export default function SellerProductsPage() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-2xl font-bold text-white">My products</h1>
-            <p className="text-sm text-white/40 mt-0.5">{products.length} product{products.length !== 1 ? "s" : ""}</p>
+            <p className="text-sm text-white/40 mt-0.5">{total} product{total !== 1 ? "s" : ""}</p>
           </div>
           <div className="flex gap-3">
             <Link
@@ -166,6 +176,12 @@ export default function SellerProductsPage() {
                           {product.status === "active" ? "Deactivate" : "Activate"}
                         </button>
                         <Link
+                          href={`/products/${product.id}/edit`}
+                          className="text-xs text-white/50 hover:text-white transition-colors"
+                        >
+                          Edit
+                        </Link>
+                        <Link
                           href={`/products/${product.id}`}
                           className="text-xs text-orange-400 hover:underline"
                         >
@@ -177,6 +193,30 @@ export default function SellerProductsPage() {
                 ))}
               </tbody>
             </table>
+
+            {total > PAGE_SIZE && (
+              <div className="flex items-center justify-between px-5 py-4 border-t border-white/10">
+                <p className="text-xs text-white/40">
+                  Page {page} of {Math.ceil(total / PAGE_SIZE)}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setPage((p) => p - 1)}
+                    disabled={page === 1}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    onClick={() => setPage((p) => p + 1)}
+                    disabled={page >= Math.ceil(total / PAGE_SIZE)}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/60 hover:bg-white/5 disabled:opacity-30 transition-colors"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
