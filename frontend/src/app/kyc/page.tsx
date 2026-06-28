@@ -4,9 +4,9 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 const DOC_TYPES = [
-  { value: "national_id", label: "Carte Nationale d'Identité (CIN)" },
-  { value: "passport", label: "Passeport" },
-  { value: "residence_permit", label: "Titre de séjour" },
+  { value: "national_id", label: "National ID Card (CIN)" },
+  { value: "passport", label: "Passport" },
+  { value: "residence_permit", label: "Residence permit" },
 ];
 
 export default function KycPage() {
@@ -24,7 +24,7 @@ export default function KycPage() {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!selfie || !idCard) { setError("Les deux fichiers sont requis"); return; }
+    if (!selfie || !idCard) { setError("Both files are required"); return; }
     setError("");
     setLoading(true);
 
@@ -46,63 +46,65 @@ export default function KycPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail ?? "Erreur lors de la soumission");
+        throw new Error(data.detail ?? "Submission failed");
       }
 
       router.push("/account?tab=kyc&submitted=1");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
+  const inputCls = "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
+
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
+    <main className="min-h-screen bg-gray-950 py-12 px-4">
       <div className="mx-auto max-w-lg">
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900">Vérification d&apos;identité (KYC)</h1>
-          <p className="text-gray-500 mt-1 text-sm">
-            Conformément à la loi 09-08, vos données sont chiffrées et strictement confidentielles.
+          <h1 className="text-2xl font-bold text-white">Identity Verification (KYC)</h1>
+          <p className="text-white/50 mt-1 text-sm">
+            Your documents are encrypted and strictly confidential.
           </p>
         </div>
 
-        <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 mb-6 text-sm text-blue-700">
-          <strong>Documents nécessaires:</strong>
+        <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl px-4 py-3 mb-6 text-sm text-blue-400">
+          <strong>Required documents:</strong>
           <ul className="mt-1 ml-4 list-disc space-y-0.5">
-            <li>Un selfie clair de votre visage</li>
-            <li>Une photo lisible de votre document d&apos;identité (recto)</li>
+            <li>A clear selfie of your face</li>
+            <li>A legible photo of your ID document (front side)</li>
           </ul>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-white/5 border border-white/10 rounded-2xl p-8 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Nom complet (tel qu&apos;il figure sur le document) *
+            <label className="block text-sm font-medium text-white/70 mb-1">
+              Full name (as it appears on your document) *
             </label>
             <input
               required
               value={form.full_name}
               onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-              placeholder="Prénom Nom"
+              className={inputCls}
+              placeholder="First Last"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Type de document *
+            <label className="block text-sm font-medium text-white/70 mb-1">
+              Document type *
             </label>
             <select
               value={form.doc_type}
               onChange={e => setForm(f => ({ ...f, doc_type: e.target.value }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className={inputCls}
             >
               {DOC_TYPES.map(d => (
                 <option key={d.value} value={d.value}>{d.label}</option>
@@ -111,14 +113,14 @@ export default function KycPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Selfie (photo de votre visage) *
+            <label className="block text-sm font-medium text-white/70 mb-1">
+              Selfie (photo of your face) *
             </label>
-            <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
-              <span className="text-sm text-gray-500">
-                {previewName(selfie) ?? "Cliquez pour choisir un fichier"}
+            <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-white/10 rounded-xl cursor-pointer hover:border-orange-400/50 hover:bg-white/5 transition-colors">
+              <span className="text-sm text-white/50">
+                {previewName(selfie) ?? "Click to choose a file"}
               </span>
-              <span className="text-xs text-gray-400 mt-1">JPEG, PNG ou WebP — max 10 MB</span>
+              <span className="text-xs text-white/30 mt-1">JPEG, PNG or WebP — max 10 MB</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -129,14 +131,14 @@ export default function KycPage() {
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Photo du document d&apos;identité *
+            <label className="block text-sm font-medium text-white/70 mb-1">
+              ID document photo *
             </label>
-            <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-gray-300 rounded-xl cursor-pointer hover:border-orange-400 hover:bg-orange-50 transition-colors">
-              <span className="text-sm text-gray-500">
-                {previewName(idCard) ?? "Cliquez pour choisir un fichier"}
+            <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-white/10 rounded-xl cursor-pointer hover:border-orange-400/50 hover:bg-white/5 transition-colors">
+              <span className="text-sm text-white/50">
+                {previewName(idCard) ?? "Click to choose a file"}
               </span>
-              <span className="text-xs text-gray-400 mt-1">JPEG, PNG ou WebP — max 10 MB</span>
+              <span className="text-xs text-white/30 mt-1">JPEG, PNG or WebP — max 10 MB</span>
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
@@ -146,18 +148,18 @@ export default function KycPage() {
             </label>
           </div>
 
-          <p className="text-xs text-gray-400 leading-relaxed">
-            En soumettant ces documents, vous consentez au traitement de vos données
-            conformément à la loi marocaine 09-08 relative à la protection des personnes physiques.
-            Vos documents sont chiffrés et accessibles uniquement aux administrateurs autorisés.
+          <p className="text-xs text-white/30 leading-relaxed">
+            By submitting these documents, you consent to the processing of your personal data
+            in accordance with Moroccan law 09-08. Your documents are encrypted and accessible
+            only to authorized administrators.
           </p>
 
           <button
             type="submit"
             disabled={loading || !selfie || !idCard || !form.full_name}
-            className="w-full rounded-xl bg-orange-600 py-3 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-40 transition-colors"
+            className="w-full rounded-xl bg-orange-500 py-3 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-40 transition-colors"
           >
-            {loading ? "Envoi en cours..." : "Soumettre les documents"}
+            {loading ? "Submitting..." : "Submit documents"}
           </button>
         </form>
       </div>

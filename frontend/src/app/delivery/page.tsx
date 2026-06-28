@@ -13,12 +13,12 @@ interface Assignment {
 }
 
 const STATUS_LABELS: Record<string, string> = {
-  assigned: "Assignée",
-  picked_up: "Ramassée",
-  in_transit: "En transit",
-  delivered: "Livrée",
-  failed: "Échec",
-  cancelled: "Annulée",
+  assigned: "Assigned",
+  picked_up: "Picked up",
+  in_transit: "In transit",
+  delivered: "Delivered",
+  failed: "Failed",
+  cancelled: "Cancelled",
 };
 
 const NEXT_STATUS: Record<string, string> = {
@@ -65,7 +65,7 @@ export default function DeliveryDashboardPage() {
     setUpdating(assignment.id);
     const token = localStorage.getItem("access_token");
     try {
-      const payload: any = { status: next };
+      const payload: Record<string, unknown> = { status: next };
       if (next === "delivered") {
         payload.cod_collected = null;
       }
@@ -85,9 +85,9 @@ export default function DeliveryDashboardPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen flex items-center justify-center">
-        <p className="text-gray-500">Chargement...</p>
-      </main>
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <div className="w-10 h-10 rounded-full border-4 border-orange-500/20 border-t-orange-500 animate-spin" />
+      </div>
     );
   }
 
@@ -95,29 +95,29 @@ export default function DeliveryDashboardPage() {
   const completed = assignments.filter((a) => ["delivered", "failed", "cancelled"].includes(a.status));
 
   return (
-    <main className="min-h-screen bg-gray-50 py-8 px-4">
+    <main className="min-h-screen bg-gray-950 py-8 px-4">
       <div className="mx-auto max-w-3xl">
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Mes livraisons</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">My deliveries</h1>
 
         {active.length > 0 && (
           <section className="mb-6">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              En cours ({active.length})
+            <h2 className="text-xs font-semibold text-white/40 uppercase tracking-wide mb-3">
+              Active ({active.length})
             </h2>
             <ul className="space-y-3">
               {active.map((a) => (
-                <li key={a.id} className="bg-white rounded-xl shadow-sm p-5">
+                <li key={a.id} className="bg-white/5 border border-white/10 rounded-xl p-5">
                   <div className="flex items-start justify-between mb-3">
                     <div>
-                      <p className="font-semibold text-gray-900">
-                        Commande #{a.order_id.slice(0, 8).toUpperCase()}
+                      <p className="font-semibold text-white">
+                        Order #{a.order_id.slice(0, 8).toUpperCase()}
                       </p>
-                      <p className="text-xs text-gray-400 mt-0.5">
-                        {new Date(a.assigned_at).toLocaleString("fr-MA")}
+                      <p className="text-xs text-white/40 mt-0.5">
+                        {new Date(a.assigned_at).toLocaleString("en-MA")}
                       </p>
-                      {a.notes && <p className="text-sm text-gray-600 mt-1">{a.notes}</p>}
+                      {a.notes && <p className="text-sm text-white/60 mt-1">{a.notes}</p>}
                     </div>
-                    <span className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-medium text-orange-700">
+                    <span className="rounded-full bg-orange-500/20 px-2.5 py-0.5 text-xs font-medium text-orange-400">
                       {STATUS_LABELS[a.status] ?? a.status}
                     </span>
                   </div>
@@ -125,11 +125,11 @@ export default function DeliveryDashboardPage() {
                     <button
                       onClick={() => advanceStatus(a)}
                       disabled={updating === a.id}
-                      className="w-full rounded-lg bg-orange-600 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                      className="w-full rounded-lg bg-orange-500 py-2 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-50 transition-colors"
                     >
                       {updating === a.id
-                        ? "Mise à jour..."
-                        : `Marquer comme: ${STATUS_LABELS[NEXT_STATUS[a.status]]}`}
+                        ? "Updating..."
+                        : `Mark as: ${STATUS_LABELS[NEXT_STATUS[a.status]]}`}
                     </button>
                   )}
                 </li>
@@ -139,30 +139,40 @@ export default function DeliveryDashboardPage() {
         )}
 
         {active.length === 0 && (
-          <div className="bg-white rounded-xl shadow-sm p-12 text-center mb-6">
-            <p className="text-gray-500">Aucune livraison active pour le moment</p>
+          <div className="bg-white/5 border border-white/10 rounded-xl p-12 text-center mb-6">
+            <p className="text-white/40">No active deliveries at the moment</p>
           </div>
         )}
 
         {completed.length > 0 && (
           <section>
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              Terminées ({completed.length})
+            <h2 className="text-xs font-semibold text-white/40 uppercase tracking-wide mb-3">
+              Completed ({completed.length})
             </h2>
             <ul className="space-y-2">
               {completed.slice(0, 10).map((a) => (
-                <li key={a.id} className="bg-white rounded-xl shadow-sm p-4 flex items-center justify-between">
+                <li
+                  key={a.id}
+                  className="bg-white/5 border border-white/10 rounded-xl p-4 flex items-center justify-between"
+                >
                   <div>
-                    <p className="text-sm font-medium text-gray-900">
+                    <p className="text-sm font-medium text-white">
                       #{a.order_id.slice(0, 8).toUpperCase()}
                     </p>
-                    <p className="text-xs text-gray-400">{new Date(a.assigned_at).toLocaleDateString("fr-MA")}</p>
+                    <p className="text-xs text-white/40">
+                      {new Date(a.assigned_at).toLocaleDateString("en-MA")}
+                    </p>
+                    {a.cod_collected != null && (
+                      <p className="text-xs text-green-400 mt-0.5">
+                        COD: {formatPrice(a.cod_collected)}
+                      </p>
+                    )}
                   </div>
                   <span
                     className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
                       a.status === "delivered"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-600"
+                        ? "bg-green-500/20 text-green-400"
+                        : "bg-white/10 text-white/50"
                     }`}
                   >
                     {STATUS_LABELS[a.status] ?? a.status}

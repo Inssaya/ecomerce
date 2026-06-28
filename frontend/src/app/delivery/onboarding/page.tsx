@@ -29,7 +29,7 @@ export default function DeliveryOnboardingPage() {
     setLoading(true);
     try {
       const token = localStorage.getItem("access_token");
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         kind: form.kind,
         vehicle_type: form.vehicle_type || null,
         coverage_zones: form.coverage_zones,
@@ -47,78 +47,81 @@ export default function DeliveryOnboardingPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail ?? "Erreur");
+        throw new Error(data.detail ?? "Something went wrong");
       }
       router.push("/delivery");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
+  const inputCls =
+    "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
+
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
+    <main className="min-h-screen bg-gray-950 py-12 px-4">
       <div className="mx-auto max-w-lg">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Profil livreur</h1>
-        <p className="text-gray-500 mb-8">Complétez votre profil pour commencer à livrer</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Driver profile</h1>
+        <p className="text-white/50 mb-8">Complete your profile to start delivering</p>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-sm p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="bg-white/5 border border-white/10 rounded-2xl p-8 space-y-5">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type de compte</label>
+            <label className="block text-sm font-medium text-white/70 mb-1">Account type</label>
             <select
               value={form.kind}
-              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as any }))}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value as "individual" | "company" }))}
+              className={inputCls}
             >
-              <option value="individual">Livreur individuel</option>
-              <option value="company">Société de livraison</option>
+              <option value="individual">Individual driver</option>
+              <option value="company">Delivery company</option>
             </select>
           </div>
 
           {form.kind === "company" && (
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Nom de la société</label>
+              <label className="block text-sm font-medium text-white/70 mb-1">Company name</label>
               <input
                 value={form.company_name}
                 onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className={inputCls}
               />
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Type de véhicule</label>
+            <label className="block text-sm font-medium text-white/70 mb-1">Vehicle type</label>
             <input
               value={form.vehicle_type}
               onChange={(e) => setForm((f) => ({ ...f, vehicle_type: e.target.value }))}
-              placeholder="Moto, Voiture, Van..."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              placeholder="Motorcycle, Car, Van..."
+              className={inputCls}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Zones de couverture</label>
+            <label className="block text-sm font-medium text-white/70 mb-1">Coverage zones</label>
             <div className="flex gap-2">
               <input
                 value={zoneInput}
                 onChange={(e) => setZoneInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addZone())}
-                placeholder="Ex: Casablanca"
-                className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                placeholder="e.g. Casablanca"
+                className={inputCls}
               />
               <button
                 type="button"
                 onClick={addZone}
-                className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+                className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 transition-colors"
               >
-                Ajouter
+                Add
               </button>
             </div>
             {form.coverage_zones.length > 0 && (
@@ -126,7 +129,7 @@ export default function DeliveryOnboardingPage() {
                 {form.coverage_zones.map((z) => (
                   <span
                     key={z}
-                    className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700"
+                    className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 px-3 py-1 text-xs font-medium text-orange-400"
                   >
                     {z}
                     <button
@@ -134,7 +137,7 @@ export default function DeliveryOnboardingPage() {
                       onClick={() =>
                         setForm((f) => ({ ...f, coverage_zones: f.coverage_zones.filter((x) => x !== z) }))
                       }
-                      className="text-blue-400 hover:text-blue-700"
+                      className="text-orange-400/60 hover:text-orange-400"
                     >
                       ×
                     </button>
@@ -147,9 +150,9 @@ export default function DeliveryOnboardingPage() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full rounded-lg bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+            className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-40 transition-colors"
           >
-            {loading ? "Enregistrement..." : "Créer le profil"}
+            {loading ? "Saving..." : "Create profile"}
           </button>
         </form>
       </div>

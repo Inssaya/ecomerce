@@ -6,7 +6,7 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatPrice(amount: number, currency = "MAD"): string {
-  return new Intl.NumberFormat("fr-MA", {
+  return new Intl.NumberFormat("en-MA", {
     style: "currency",
     currency,
     minimumFractionDigits: 2,
@@ -14,7 +14,7 @@ export function formatPrice(amount: number, currency = "MAD"): string {
 }
 
 export function formatDate(dateStr: string): string {
-  return new Intl.DateTimeFormat("fr-MA", {
+  return new Intl.DateTimeFormat("en-MA", {
     day: "numeric",
     month: "long",
     year: "numeric",

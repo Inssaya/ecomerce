@@ -6,16 +6,26 @@ import { Package, MessageCircle, ShoppingCart, Star, ArrowLeft } from "lucide-re
 import { formatPrice } from "@/lib/utils";
 import { AddToCartButton } from "@/components/AddToCartButton";
 
-const WHATSAPP: Record<string, string> = {
-  clothes: "212600000000",
-  "3dprint": "212600000000",
-};
+const INTERNAL_BASE = process.env.INTERNAL_API_URL ?? "http://gateway:8000";
 
 async function getProduct(id: string) {
   try {
     const res = await fetch(
-      `${process.env.CATALOG_SERVICE_URL ?? "http://catalog-service:8000"}/products/${id}`,
+      `${INTERNAL_BASE}/api/v1/catalog/products/${id}`,
       { next: { revalidate: 30 } }
+    );
+    if (!res.ok) return null;
+    return res.json();
+  } catch {
+    return null;
+  }
+}
+
+async function getStore(slug: string) {
+  try {
+    const res = await fetch(
+      `${INTERNAL_BASE}/api/v1/catalog/stores/${slug}`,
+      { next: { revalidate: 60 } }
     );
     if (!res.ok) return null;
     return res.json();
@@ -30,9 +40,15 @@ export async function generateMetadata({
   params: { slug: string; id: string };
 }): Promise<Metadata> {
   const product = await getProduct(params.id);
+  if (!product) return { title: "Product not found" };
   return {
-    title: product?.title ?? "Product",
-    description: product?.description ?? "",
+    title: product.title,
+    description: product.description ?? "",
+    openGraph: {
+      images: product.media?.find((m: { is_primary: boolean }) => m.is_primary)?.url
+        ? [product.media.find((m: { is_primary: boolean }) => m.is_primary).url]
+        : [],
+    },
   };
 }
 
@@ -41,16 +57,19 @@ export default async function ProductPage({
 }: {
   params: { slug: string; id: string };
 }) {
-  const product = await getProduct(params.id);
+  const [product, store] = await Promise.all([
+    getProduct(params.id),
+    getStore(params.slug),
+  ]);
   if (!product) notFound();
 
   const primaryImage =
     product.media?.find((m: { is_primary: boolean }) => m.is_primary)?.url ??
     product.media?.[0]?.url;
 
-  const whatsappNumber = WHATSAPP[params.slug];
-  const waLink = whatsappNumber
-    ? `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(
+  const waNumber = store?.whatsapp_number;
+  const waLink = waNumber
+    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(
         `Hi MoStyle! I'm interested in: ${product.title} (${formatPrice(product.price, product.currency)})`
       )}`
     : null;

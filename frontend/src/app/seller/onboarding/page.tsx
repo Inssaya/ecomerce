@@ -44,82 +44,87 @@ export default function SellerOnboardingPage() {
       });
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.detail ?? "Erreur");
+        throw new Error(data.detail ?? "Something went wrong");
       }
       router.push("/seller/dashboard");
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
       setLoading(false);
     }
   }
 
+  const inputCls =
+    "w-full rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500 placeholder:text-white/30";
+
   return (
-    <main className="min-h-screen bg-gray-50 py-12 px-4">
+    <main className="min-h-screen bg-gray-950 py-12 px-4">
       <div className="mx-auto max-w-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Créez votre boutique</h1>
-          <p className="text-gray-500 mt-1">Quelques informations pour démarrer la vente</p>
+          <h1 className="text-3xl font-bold text-white">Create your store</h1>
+          <p className="text-white/50 mt-1">A few details to get you selling</p>
         </div>
 
         <div className="flex gap-2 mb-8">
           {[1, 2].map((s) => (
             <div
               key={s}
-              className={`flex-1 h-1.5 rounded-full ${s <= step ? "bg-orange-500" : "bg-gray-200"}`}
+              className={`flex-1 h-1.5 rounded-full ${s <= step ? "bg-orange-500" : "bg-white/10"}`}
             />
           ))}
         </div>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 border border-red-200 px-4 py-3 text-sm text-red-700">
+          <div className="mb-4 rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
             {error}
           </div>
         )}
 
-        <div className="bg-white rounded-2xl shadow-sm p-8">
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-8">
           {step === 1 && (
             <div className="space-y-5">
-              <h2 className="text-lg font-semibold">Informations de la boutique</h2>
+              <h2 className="text-lg font-semibold text-white">Store information</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Nom de la boutique *
+                <label className="block text-sm font-medium text-white/70 mb-1">
+                  Store name *
                 </label>
                 <input
                   type="text"
                   required
                   value={form.store_name}
                   onChange={(e) => setForm((f) => ({ ...f, store_name: e.target.value }))}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  placeholder="Ma Super Boutique"
+                  className={inputCls}
+                  placeholder="My Awesome Store"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                <label className="block text-sm font-medium text-white/70 mb-1">
+                  Description
+                </label>
                 <textarea
                   value={form.description}
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                   rows={4}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 resize-none"
-                  placeholder="Décrivez votre boutique..."
+                  className={`${inputCls} resize-none`}
+                  placeholder="Describe your store..."
                 />
               </div>
               <button
                 onClick={() => form.store_name && setStep(2)}
                 disabled={!form.store_name}
-                className="w-full rounded-lg bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-40 transition-colors"
+                className="w-full rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-40 transition-colors"
               >
-                Continuer
+                Continue
               </button>
             </div>
           )}
 
           {step === 2 && (
             <form onSubmit={handleSubmit} className="space-y-5">
-              <h2 className="text-lg font-semibold">Zones de couverture</h2>
+              <h2 className="text-lg font-semibold text-white">Coverage zones</h2>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Villes/Régions desservies
+                <label className="block text-sm font-medium text-white/70 mb-1">
+                  Cities / Regions you serve
                 </label>
                 <div className="flex gap-2">
                   <input
@@ -127,15 +132,15 @@ export default function SellerOnboardingPage() {
                     value={zoneInput}
                     onChange={(e) => setZoneInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addZone())}
-                    className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    placeholder="Ex: Casablanca"
+                    className={inputCls}
+                    placeholder="e.g. Casablanca"
                   />
                   <button
                     type="button"
                     onClick={addZone}
-                    className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-medium hover:bg-gray-200"
+                    className="rounded-lg bg-white/10 px-4 py-2 text-sm font-medium text-white hover:bg-white/15 transition-colors"
                   >
-                    Ajouter
+                    Add
                   </button>
                 </div>
                 {form.coverage_zones.length > 0 && (
@@ -143,13 +148,13 @@ export default function SellerOnboardingPage() {
                     {form.coverage_zones.map((z) => (
                       <span
                         key={z}
-                        className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-orange-700"
+                        className="inline-flex items-center gap-1 rounded-full bg-orange-500/20 px-3 py-1 text-xs font-medium text-orange-400"
                       >
                         {z}
                         <button
                           type="button"
                           onClick={() => removeZone(z)}
-                          className="text-orange-400 hover:text-orange-700"
+                          className="text-orange-400/60 hover:text-orange-400"
                         >
                           ×
                         </button>
@@ -162,16 +167,16 @@ export default function SellerOnboardingPage() {
                 <button
                   type="button"
                   onClick={() => setStep(1)}
-                  className="flex-1 rounded-lg border border-gray-300 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="flex-1 rounded-xl border border-white/10 py-2.5 text-sm font-medium text-white/70 hover:bg-white/5 transition-colors"
                 >
-                  Retour
+                  Back
                 </button>
                 <button
                   type="submit"
                   disabled={loading}
-                  className="flex-1 rounded-lg bg-orange-600 py-2.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50 transition-colors"
+                  className="flex-1 rounded-xl bg-orange-500 py-2.5 text-sm font-semibold text-white hover:bg-orange-400 disabled:opacity-40 transition-colors"
                 >
-                  {loading ? "Création..." : "Créer la boutique"}
+                  {loading ? "Creating..." : "Create store"}
                 </button>
               </div>
             </form>

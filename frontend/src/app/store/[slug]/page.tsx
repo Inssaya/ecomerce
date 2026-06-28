@@ -58,10 +58,12 @@ const STORE_META: Record<string, {
   },
 };
 
+const INTERNAL_BASE = process.env.INTERNAL_API_URL ?? "http://gateway:8000";
+
 async function getStore(slug: string) {
   try {
     const res = await fetch(
-      `${process.env.CATALOG_SERVICE_URL ?? "http://catalog-service:8000"}/stores/${slug}`,
+      `${INTERNAL_BASE}/api/v1/catalog/stores/${slug}`,
       { next: { revalidate: 60 } }
     );
     if (!res.ok) return null;
@@ -74,7 +76,7 @@ async function getStore(slug: string) {
 async function getProducts(storeId: string) {
   try {
     const res = await fetch(
-      `${process.env.CATALOG_SERVICE_URL ?? "http://catalog-service:8000"}/products?store_id=${storeId}&status=active&size=24`,
+      `${INTERNAL_BASE}/api/v1/catalog/products?store_id=${storeId}&status=active&size=48`,
       { next: { revalidate: 30 } }
     );
     if (!res.ok) return [];
@@ -88,7 +90,7 @@ async function getProducts(storeId: string) {
 async function getCategories(storeId: string) {
   try {
     const res = await fetch(
-      `${process.env.CATALOG_SERVICE_URL ?? "http://catalog-service:8000"}/categories?store_id=${storeId}`,
+      `${INTERNAL_BASE}/api/v1/catalog/categories?store_id=${storeId}`,
       { next: { revalidate: 60 } }
     );
     if (!res.ok) return [];
@@ -117,8 +119,10 @@ export default async function StorePage({ params }: { params: { slug: string } }
     ? await Promise.all([getProducts(storeId), getCategories(storeId)])
     : [[], []];
 
-  const waLink = meta.whatsapp
-    ? `https://wa.me/${meta.whatsapp}?text=${encodeURIComponent(meta.whatsappMessage)}`
+  // Prefer WhatsApp number from DB; fall back to STORE_META hardcoded default
+  const waNumber = store?.whatsapp_number || meta.whatsapp;
+  const waLink = waNumber
+    ? `https://wa.me/${waNumber}?text=${encodeURIComponent(meta.whatsappMessage)}`
     : null;
 
   return (

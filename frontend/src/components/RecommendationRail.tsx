@@ -17,7 +17,7 @@ interface Props {
   title?: string;
 }
 
-export function RecommendationRail({ title = "Recommandé pour vous" }: Props) {
+export function RecommendationRail({ title = "Recommended for you" }: Props) {
   const [products, setProducts] = useState<RecommendedProduct[]>([]);
 
   useEffect(() => {

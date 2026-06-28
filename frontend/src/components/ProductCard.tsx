@@ -31,7 +31,7 @@ export function ProductCard({ product }: Props) {
         {product.stock === 0 && (
           <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
             <span className="text-white text-sm font-semibold bg-black/60 px-3 py-1 rounded-full">
-              Rupture de stock
+              Out of stock
             </span>
           </div>
         )}
@@ -49,7 +49,7 @@ export function ProductCard({ product }: Props) {
         <div className="flex items-center gap-1 mt-auto">
           <Star className="w-3.5 h-3.5 fill-amber-400 text-amber-400" />
           <span className="text-xs text-muted-foreground">
-            {product.rating.toFixed(1)} · {product.view_count} vues
+            {product.rating.toFixed(1)} · {product.view_count} views
           </span>
         </div>
 

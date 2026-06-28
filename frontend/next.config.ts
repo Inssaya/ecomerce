@@ -19,7 +19,9 @@ const nextConfig: NextConfig = {
     ],
   },
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://gateway:8000";
+    // INTERNAL_API_URL is for server-to-server (Docker network)
+    // NEXT_PUBLIC_API_URL is the public URL for browser use
+    const apiUrl = process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://gateway:8000";
     return [
       {
         source: "/api/:path*",

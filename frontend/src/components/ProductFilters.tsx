@@ -54,14 +54,14 @@ export function ProductFilters({ categories, labels, selectedCategory, selectedL
 
   const groupNames: Record<string, string> = {
     style: "Style",
-    material: "Matière",
+    material: "Material",
     audience: "Audience",
-    use_case: "Usage",
-    season: "Saison",
-    color: "Couleur",
-    brand: "Marque",
-    size: "Taille",
-    other: "Autre",
+    use_case: "Use case",
+    season: "Season",
+    color: "Color",
+    brand: "Brand",
+    size: "Size",
+    other: "Other",
   };
 
   return (
@@ -69,7 +69,7 @@ export function ProductFilters({ categories, labels, selectedCategory, selectedL
       {/* Categories */}
       <div>
         <h3 className="font-semibold mb-3 text-sm uppercase tracking-wide text-muted-foreground">
-          Catégories
+          Categories
         </h3>
         <div className="space-y-1">
           <button
@@ -78,7 +78,7 @@ export function ProductFilters({ categories, labels, selectedCategory, selectedL
               !selectedCategory ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
             }`}
           >
-            Toutes les catégories
+            All categories
           </button>
           {categories.map((cat) => (
             <button

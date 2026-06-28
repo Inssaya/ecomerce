@@ -51,6 +51,7 @@ export default function AdminPage() {
 
   // New store / product / category form state
   const [newStore, setNewStore] = useState({ slug: "", name: "", theme_color: "#ff6b35", whatsapp_number: "", hero_tagline: "", description: "" });
+  const [editingStore, setEditingStore] = useState<Store | null>(null);
   const [newProduct, setNewProduct] = useState({ title: "", price: "", stock: "", store_id: "", category_id: "", description: "", status: "active" });
   const [newCategory, setNewCategory] = useState({ name: "", store_id: "", parent_id: "", display_order: "0" });
   const [uploadingProductId, setUploadingProductId] = useState<string | null>(null);
@@ -67,14 +68,14 @@ export default function AdminPage() {
       fetch("/api/v1/catalog/products?size=100", { headers: authHeaders() }).then(r => r.json()).then(d => d.items ?? []),
       fetch("/api/v1/catalog/categories", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
       fetch("/api/v1/orders/orders?size=50", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
-      fetch("/api/v1/auth/admin/users", { headers: authHeaders() }).then(r => r.ok ? r.json() : []),
+      fetch("/api/v1/auth/admin/users", { headers: authHeaders() }).then(r => r.ok ? r.json().then((d: { items?: User[] }) => d.items ?? []) : []),
     ]).then(([m, s, p, c, o, u]) => {
       if (m.status === "fulfilled") setMetrics(m.value);
       if (s.status === "fulfilled") setStores(Array.isArray(s.value) ? s.value : []);
       if (p.status === "fulfilled") setProducts(Array.isArray(p.value) ? p.value : []);
       if (c.status === "fulfilled") setCategories(Array.isArray(c.value) ? c.value : []);
       if (o.status === "fulfilled") setOrders(Array.isArray(o.value) ? o.value : (o.value?.items ?? []));
-      if (u.status === "fulfilled") setUsers(Array.isArray(u.value) ? u.value : []);
+      if (u.status === "fulfilled") setUsers(Array.isArray(u.value) ? u.value : (u.value?.items ?? []));
       setLoading(false);
     });
   }, []);
@@ -94,6 +95,33 @@ export default function AdminPage() {
       setMsg("Store created!");
     } else {
       setMsg("Error creating store");
+    }
+    setSaving(false);
+    setTimeout(() => setMsg(""), 3000);
+  }
+
+  async function updateStore(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingStore) return;
+    setSaving(true);
+    const res = await fetch(`/api/v1/catalog/stores/${editingStore.id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", ...authHeaders() },
+      body: JSON.stringify({
+        name: editingStore.name,
+        whatsapp_number: editingStore.whatsapp_number,
+        theme_color: editingStore.theme_color,
+        description: editingStore.description,
+        is_active: editingStore.is_active,
+      }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setStores(prev => prev.map(s => s.id === updated.id ? updated : s));
+      setEditingStore(null);
+      setMsg("Store updated!");
+    } else {
+      setMsg("Error updating store");
     }
     setSaving(false);
     setTimeout(() => setMsg(""), 3000);
@@ -322,6 +350,41 @@ export default function AdminPage() {
                   </form>
                 </div>
 
+                {editingStore && (
+                  <div className="bg-white/5 border border-orange-500/30 rounded-xl p-6">
+                    <h3 className="font-semibold text-white mb-4">Edit: {editingStore.name}</h3>
+                    <form onSubmit={updateStore} className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-xs text-white/50 mb-1">Store name</label>
+                        <input value={editingStore.name} onChange={e => setEditingStore(s => s ? { ...s, name: e.target.value } : s)} className={inputCls} />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/50 mb-1">WhatsApp number</label>
+                        <input value={editingStore.whatsapp_number} onChange={e => setEditingStore(s => s ? { ...s, whatsapp_number: e.target.value } : s)} className={inputCls} placeholder="212600000000" />
+                      </div>
+                      <div>
+                        <label className="block text-xs text-white/50 mb-1">Theme color</label>
+                        <div className="flex gap-2">
+                          <input type="color" value={editingStore.theme_color} onChange={e => setEditingStore(s => s ? { ...s, theme_color: e.target.value } : s)} className="h-10 w-14 rounded-lg border border-white/10 bg-transparent cursor-pointer" />
+                          <input value={editingStore.theme_color} onChange={e => setEditingStore(s => s ? { ...s, theme_color: e.target.value } : s)} className={`${inputCls} flex-1`} />
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <label className="text-xs text-white/50">Active</label>
+                        <input type="checkbox" checked={editingStore.is_active} onChange={e => setEditingStore(s => s ? { ...s, is_active: e.target.checked } : s)} className="w-4 h-4 rounded" />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <label className="block text-xs text-white/50 mb-1">Description</label>
+                        <input value={editingStore.description} onChange={e => setEditingStore(s => s ? { ...s, description: e.target.value } : s)} className={inputCls} />
+                      </div>
+                      <div className="sm:col-span-2 flex gap-3 justify-end">
+                        <button type="button" onClick={() => setEditingStore(null)} className="px-4 py-2 bg-white/10 text-white/60 rounded-lg text-sm hover:bg-white/20">Cancel</button>
+                        <button type="submit" disabled={saving} className="bg-orange-500 hover:bg-orange-400 text-white px-6 py-2 rounded-lg text-sm font-semibold disabled:opacity-50 transition-colors">Save Changes</button>
+                      </div>
+                    </form>
+                  </div>
+                )}
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   {stores.map(store => (
                     <div key={store.id} className="bg-white/5 border border-white/10 rounded-xl p-5">
@@ -339,9 +402,10 @@ export default function AdminPage() {
                         <span className={`text-xs rounded-full px-2 py-0.5 ${store.is_active ? "bg-green-500/20 text-green-400" : "bg-white/10 text-white/40"}`}>
                           {store.is_active ? "Active" : "Inactive"}
                         </span>
-                        <a href={`/store/${store.slug}`} target="_blank" className="text-xs text-orange-400 hover:underline">
-                          View →
-                        </a>
+                        <div className="flex gap-3">
+                          <button onClick={() => setEditingStore(store)} className="text-xs text-orange-400 hover:underline">Edit</button>
+                          <a href={`/store/${store.slug}`} target="_blank" className="text-xs text-white/40 hover:text-white/70">View →</a>
+                        </div>
                       </div>
                     </div>
                   ))}
