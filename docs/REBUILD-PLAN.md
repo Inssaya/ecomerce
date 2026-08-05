@@ -2,6 +2,12 @@
 
 **Status:** Planning. No code written yet against this plan.
 **Supersedes:** the multi-store / microservices architecture in the current `main`.
+**Read with:** [`BRAND.md`](./BRAND.md) — positioning and why any of this matters commercially.
+
+> We are a **workshop**, not a shop. Two offers, and they map straight onto the architecture:
+> **The Shelf** (pieces already made — finite, real photos, piece-numbered) and
+> **The Workshop** (made to order — the `request_custom_item` flow in §5).
+> The feed engine in §3 is the workshop's **demand sensor**: it decides what we make next.
 
 ---
 
