@@ -13,6 +13,7 @@ from app.models.catalog import (
     ProductStatus,
     ProductVariant,
 )
+from app.models.local import City, Service
 from app.models.notify import Notification
 from app.models.orders import (
     ALLOWED_TRANSITIONS,
@@ -41,6 +42,8 @@ from app.models.signals import (
 from app.models.user import RefreshToken, User, UserRole
 
 __all__ = [
+    "City",
+    "Service",
     "AFFINITY_HALF_LIFE_DAYS",
     "PieceAlert",
     "REQUEST_TRANSITIONS",

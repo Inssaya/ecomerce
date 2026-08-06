@@ -54,6 +54,36 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
+  // The local network: what we make, and where we deliver it. These are the
+  // pages that answer a search naming a service or a city, so they are the
+  // ones most worth having crawled.
+  const services = await fromApi<{ items: { slug: string }[] }>("/services", "en", {
+    revalidate: 3600,
+  });
+  const places = await fromApi<{ items: { slug: string }[] }>("/places", "en", {
+    revalidate: 3600,
+  });
+
+  for (const [prefix, rows, priority] of [
+    ["make", services?.items ?? [], 0.8],
+    ["delivery", places?.items ?? [], 0.6],
+  ] as const) {
+    for (const row of rows) {
+      for (const lang of LANGS) {
+        entries.push({
+          url: `${siteUrl}/${lang}/${prefix}/${row.slug}`,
+          changeFrequency: "monthly",
+          priority,
+          alternates: {
+            languages: Object.fromEntries(
+              LANGS.map((other) => [other, `${siteUrl}/${other}/${prefix}/${row.slug}`]),
+            ),
+          },
+        });
+      }
+    }
+  }
+
   for (const piece of await catalogue()) {
     for (const lang of LANGS) {
       entries.push({

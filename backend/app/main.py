@@ -19,12 +19,14 @@ from app.config import settings
 from app.core.cache import close_redis, get_redis
 from app.core.llm import close_client
 from app.core.storage import ensure_bucket
-from app.db import engine
+from app.db import SessionLocal, engine
 from app.modules.admin.routes import router as admin_router
 from app.modules.ai.routes import router as ai_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.catalog.routes import router as catalog_router
 from app.modules.feed.routes import router as feed_router
+from app.modules.local.routes import router as local_router
+from app.modules.local.seed import seed as seed_local
 from app.modules.notify.routes import router as notify_router
 from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
@@ -43,6 +45,21 @@ async def lifespan(app: FastAPI):
         # storage, so the storefront keeps working and orders keep being taken
         # while it is unreachable; only uploads fail, and they fail loudly.
         logger.warning("Object storage is not reachable yet: %s", exc)
+
+    # The cities we deliver to and the services we offer are content, and a
+    # deployment with neither has no local pages at all. Seeding here means a
+    # fresh install is complete without anybody remembering a command; it only
+    # ever inserts what is missing, so the owner's edits are never overwritten.
+    try:
+        async with SessionLocal() as db:
+            added_cities, added_services = await seed_local(db)
+        if added_cities or added_services:
+            logger.info("Seeded %s cities and %s services", added_cities, added_services)
+    except Exception as exc:
+        # Same reasoning as storage: a shop that will not start because a
+        # landing page is missing is worse than a shop without that page.
+        logger.warning("Could not seed cities and services: %s", exc)
+
     logger.info("%s API ready", settings.app_name)
     yield
     await close_redis()
@@ -103,6 +120,7 @@ api.include_router(catalog_router)
 api.include_router(orders_router)
 api.include_router(requests_router)
 api.include_router(feed_router)
+api.include_router(local_router)
 api.include_router(notify_router)
 api.include_router(admin_router)
 api.include_router(ai_router)

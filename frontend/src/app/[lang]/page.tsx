@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-import type { WorkshopNumbers } from "@/lib/api";
+import type { Place, ServiceSummary, WorkshopNumbers } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 import { fromApi, siteUrl } from "@/lib/server";
 
@@ -18,7 +18,15 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
   // A count a minute stale is fine; a slow first paint is not. Never throws —
   // a landing page that fails because a counter was unavailable is worse than
   // a landing page without a counter.
-  const numbers = await fromApi<WorkshopNumbers>("/workshop", lang);
+  // Three reads, in parallel — sequential awaits here would be three round
+  // trips on the page every visitor sees first.
+  const [numbers, serviceList, placeList] = await Promise.all([
+    fromApi<WorkshopNumbers>("/workshop", lang),
+    fromApi<{ items: ServiceSummary[] }>("/services", lang, { revalidate: 3600 }),
+    fromApi<{ items: Place[] }>("/places", lang, { revalidate: 3600 }),
+  ]);
+  const services = serviceList?.items ?? [];
+  const places = placeList?.items ?? [];
 
   return (
     <div className="page pt-14 pb-8">
@@ -80,6 +88,63 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
           action={t("askUs")}
         />
       </section>
+
+      {/*
+        What the workshop does, as opposed to what is on the shelf today.
+
+        Here for two reasons and both matter. A visitor who wants something
+        made has no idea from the two doors above that we cut, print and
+        engrave — the Workshop door says "tell us what you need", which assumes
+        they already know we can. And these are the pages that answer a search
+        for the work itself, so they have to be linked from the homepage or
+        nothing crawls them.
+      */}
+      {services.length > 0 ? (
+        <section className="mt-14">
+          <h2 className="text-[19px] font-semibold">
+            {lang === "ar" ? "ما نصنعه" : "What we make"}
+          </h2>
+          <div className="mt-4 flex flex-col gap-2.5">
+            {services.map((item) => (
+              <Link
+                key={item.slug}
+                href={`/${lang}/make/${item.slug}`}
+                className="card block p-4 shadow-soft active:scale-[0.99] transition-transform duration-gentle"
+              >
+                <h3 className="text-[16px] font-semibold">{item.name}</h3>
+                <p className="mt-1 text-[14px] text-ink-soft leading-relaxed">{item.summary}</p>
+              </Link>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      {/*
+        And where it goes. Only the handful of biggest cities are named here —
+        the rest are reachable from any service page, so every city is two taps
+        from this page without turning the homepage into a list of thirty
+        towns.
+      */}
+      {places.length > 0 ? (
+        <section className="mt-10">
+          <h2 className="text-[17px] font-semibold">
+            {lang === "ar" ? "نوصّل في كل المغرب" : "We deliver across Morocco"}
+          </h2>
+          <p className="mt-2 text-[14px] text-ink-soft leading-relaxed">
+            {places.slice(0, 8).map((place, index) => (
+              <span key={place.slug}>
+                {index > 0 ? <span aria-hidden> · </span> : null}
+                <Link
+                  href={`/${lang}/delivery/${place.slug}`}
+                  className="underline underline-offset-4 decoration-sand"
+                >
+                  {place.name}
+                </Link>
+              </span>
+            ))}
+          </p>
+        </section>
+      ) : null}
 
       <section className="mt-14 card p-6 shadow-soft">
         <h2 className="text-[19px] font-semibold">{t("ourStory")}</h2>

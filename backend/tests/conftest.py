@@ -69,6 +69,7 @@ async def clean_db() -> AsyncGenerator[None, None]:
                 "TRUNCATE request_events, custom_requests, order_events, order_items, orders, "
                 "piece_alerts, pieces, product_variants, "
                 "product_embeddings, product_media, products, signals, feed_weights, categories, "
+                "cities, services, "
                 "notifications, refresh_tokens, users RESTART IDENTITY CASCADE"
             )
         )

@@ -40,6 +40,34 @@ export interface PieceDetail extends Piece {
   created_at: string;
 }
 
+/** A city we deliver to, and what we can honestly say about it. */
+export interface Place {
+  slug: string;
+  name: string;
+  name_en: string;
+  region: string;
+  delivery_days: [number, number];
+  delivery_fee: number;
+  free_delivery_over: number;
+  history?: { delivered: number; worth_saying: boolean; average_days: number | null };
+  services?: ServiceSummary[];
+}
+
+/** Something the workshop does, as opposed to something it has made. */
+export interface ServiceSummary {
+  slug: string;
+  name: string;
+  summary: string;
+  from_price: number | null;
+  lead_time_days: number | null;
+  category_slug: string | null;
+}
+
+export interface ServicePage extends ServiceSummary {
+  body: string;
+  places: Place[];
+}
+
 /** What the workshop has actually made. Real counts, no rounding up. */
 export interface WorkshopNumbers {
   pieces_made: number;
