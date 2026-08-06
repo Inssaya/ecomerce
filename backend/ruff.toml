@@ -16,3 +16,7 @@ known-first-party = ["app"]
 # Generated migrations: the enum column definitions are one expression per line
 # and rewriting them by hand risks changing what the migration does.
 "alembic/versions/*.py" = ["E501"]
+# System prompts are one line per instruction on purpose: they are prose sent
+# to a model, and a line break inside one changes the text being sent.
+"app/modules/ai/copilot.py" = ["E501"]
+"app/modules/ai/shopper.py" = ["E501"]
