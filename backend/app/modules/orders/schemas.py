@@ -17,6 +17,7 @@ class CartLine(BaseModel):
     """
 
     product_id: str
+    variant_id: str | None = None
     quantity: int = Field(ge=1, le=20)
 
 
@@ -56,7 +57,14 @@ class CheckoutRequest(BaseModel):
 
 class OrderItemResponse(BaseModel):
     product_id: str
+    variant_id: str | None = None
+    piece_id: str | None = None
     title: str
+    variant_label: str = ""
+    #: "04/12" when the workshop numbered this batch.
+    piece_label: str = ""
+    #: Days promised at the time of ordering, for made-to-order work.
+    lead_time_days: int | None = None
     unit_price: float
     quantity: int
     subtotal: float

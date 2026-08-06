@@ -105,9 +105,28 @@ class OrderItem(Base):
     product_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
     )
+    variant_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("product_variants.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    # Which physical object this line is. Set for a shelf piece — the customer
+    # is buying piece 04 of 12, not "one of them" — and null for made-to-order
+    # work, where the object does not exist yet.
+    piece_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("pieces.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     # Snapshot of what was bought, at the price it was bought for. The product
     # may be renamed or repriced later; the order may not change.
     title: Mapped[str] = mapped_column(String(300), nullable=False)
+    # "M · Matte black", "04/12" — resolved at purchase time so the order still
+    # reads correctly after a variant is renamed or a batch is closed.
+    variant_label: Mapped[str] = mapped_column(String(160), default="", nullable=False)
+    piece_label: Mapped[str] = mapped_column(String(20), default="", nullable=False)
+    # For a made-to-order line: what we promised, in days, on the day we
+    # promised it. BRAND.md §8 — the timeline has to stay auditable.
+    lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     subtotal: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)

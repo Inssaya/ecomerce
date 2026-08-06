@@ -1,32 +1,39 @@
-"""The catalogue — public reads, owner writes.
-
-Ported from catalog-service. Gone in the move: the Store model and its four
-subdomain storefronts, the Meilisearch index and its sync calls, and every
-`seller_id` ownership check (there is one workshop).
-"""
+"""The catalogue — public reads, owner writes."""
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.errors import bad_request, get_or_404
+from app.core.errors import bad_request, conflict, get_or_404
 from app.core.slug import unique_slug
 from app.core.storage import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, delete_object, upload_image
 from app.deps import DbSession, Lang, Owner, Paging
-from app.models import Category, Product, ProductMedia, ProductStatus
+from app.models import (
+    Category,
+    Piece,
+    PieceState,
+    Product,
+    ProductKind,
+    ProductMedia,
+    ProductStatus,
+    ProductVariant,
+)
 from app.modules.catalog import service
 from app.modules.catalog.schemas import (
     CategoryAdmin,
     CategoryNode,
     CategoryWrite,
     MediaResponse,
+    PieceAdmin,
+    PieceBatchWrite,
     ProductAdmin,
     ProductDetail,
     ProductPage,
     ProductPatch,
     ProductWrite,
+    VariantOut,
+    VariantWrite,
 )
 
 router = APIRouter(tags=["catalog"])
@@ -43,9 +50,13 @@ async def category_tree(db: DbSession, lang: Lang) -> list[CategoryNode]:
     return service.build_tree(list(rows), lang)
 
 
-@router.post(
-    "/admin/categories", response_model=CategoryAdmin, status_code=status.HTTP_201_CREATED
-)
+@router.get("/admin/categories", response_model=list[CategoryAdmin])
+async def list_categories_admin(db: DbSession, owner: Owner) -> list[Category]:
+    rows = await db.scalars(select(Category).order_by(Category.display_order))
+    return list(rows)
+
+
+@router.post("/admin/categories", response_model=CategoryAdmin, status_code=status.HTTP_201_CREATED)
 async def create_category(body: CategoryWrite, db: DbSession, owner: Owner) -> Category:
     if body.parent_id:
         await get_or_404(db, Category, body.parent_id, detail="Parent category not found")
@@ -57,12 +68,6 @@ async def create_category(body: CategoryWrite, db: DbSession, owner: Owner) -> C
     await db.commit()
     await db.refresh(category)
     return category
-
-
-@router.get("/admin/categories", response_model=list[CategoryAdmin])
-async def list_categories_admin(db: DbSession, owner: Owner) -> list[Category]:
-    rows = await db.scalars(select(Category).order_by(Category.display_order))
-    return list(rows)
 
 
 @router.patch("/admin/categories/{category_id}", response_model=CategoryAdmin)
@@ -88,6 +93,7 @@ async def list_products(
     lang: Lang,
     paging: Paging,
     category: str | None = Query(default=None, description="Category slug"),
+    kind: ProductKind | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=120),
 ) -> ProductPage:
     query = service.visible()
@@ -95,7 +101,9 @@ async def list_products(
         node = await db.scalar(select(Category).where(Category.slug == category))
         if node is None:
             raise HTTPException(status_code=404, detail="Category not found")
-        query = query.where(Product.category_id.in_(await _descendant_ids(db, node.id)))
+        query = query.where(Product.category_id.in_(await service.descendant_ids(db, node.id)))
+    if kind is not None:
+        query = query.where(Product.kind == kind)
     if q:
         query = query.where(service.text_match(q))
 
@@ -103,7 +111,9 @@ async def list_products(
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
-    items = [service.to_card(product, lang) for product in rows.unique()]
+    products = list(rows.unique())
+    left = await service.availability(db, [product.id for product in products])
+    items = [service.to_card(product, lang, left.get(product.id, 0)) for product in products]
     return ProductPage(
         items=items,
         total=total,
@@ -116,37 +126,36 @@ async def list_products(
 @router.get("/products/{slug}", response_model=ProductDetail)
 async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
     product = await get_or_404(
-        db,
-        Product,
-        slug,
-        field="slug",
-        detail="Product not found",
-        options=(selectinload(Product.media), selectinload(Product.category)),
+        db, Product, slug, field="slug", detail="Product not found", options=service.LOADED
     )
     if product.status is not ProductStatus.active:
         raise HTTPException(status_code=404, detail="Product not found")
-    return service.to_detail(product, lang)
 
-
-async def _descendant_ids(db: AsyncSession, root_id: str) -> list[str]:
-    """A category page shows everything beneath it: choosing T-Shirts shows
-    Oversize and Slim too."""
-    pairs = (await db.execute(select(Category.id, Category.parent_id))).all()
-    children: dict[str, list[str]] = {}
-    for child_id, parent_id in pairs:
-        children.setdefault(parent_id, []).append(child_id)
-
-    collected = [root_id]
-    frontier = [root_id]
-    while frontier:
-        current = frontier.pop()
-        for child in children.get(current, []):
-            collected.append(child)
-            frontier.append(child)
-    return collected
+    left = await service.availability(db, [product.id])
+    per_variant = await service.variant_availability(db, product.id)
+    pieces = list(
+        await db.scalars(
+            select(Piece)
+            .where(Piece.product_id == product.id, Piece.state == PieceState.available)
+            .order_by(Piece.number)
+        )
+    )
+    return service.to_detail(
+        product,
+        lang,
+        available=left.get(product.id, 0),
+        per_variant=per_variant,
+        pieces=pieces,
+    )
 
 
 # ── Products, owner ───────────────────────────────────────────────────────────
+
+
+async def _admin_view(db: DbSession, product: Product) -> ProductAdmin:
+    left = await service.availability(db, [product.id])
+    per_variant = await service.variant_availability(db, product.id)
+    return service.to_admin(product, left.get(product.id, 0), per_variant)
 
 
 @router.get("/admin/products", response_model=list[ProductAdmin])
@@ -155,14 +164,19 @@ async def list_products_admin(
     owner: Owner,
     paging: Paging,
     status_filter: ProductStatus | None = Query(default=None, alias="status"),
+    kind: ProductKind | None = Query(default=None),
 ) -> list[ProductAdmin]:
-    query = service.with_media(select(Product))
+    query = service.with_relations(select(Product))
     if status_filter is not None:
         query = query.where(Product.status == status_filter)
+    if kind is not None:
+        query = query.where(Product.kind == kind)
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
-    return [service.to_admin(product) for product in rows.unique()]
+    products = list(rows.unique())
+    left = await service.availability(db, [product.id for product in products])
+    return [service.to_admin(product, left.get(product.id, 0), None) for product in products]
 
 
 @router.post("/admin/products", response_model=ProductAdmin, status_code=status.HTTP_201_CREATED)
@@ -178,8 +192,8 @@ async def create_product(body: ProductWrite, db: DbSession, owner: Owner) -> Pro
     )
     db.add(product)
     await db.commit()
-    await db.refresh(product, attribute_names=["media"])
-    return service.to_admin(product)
+    await db.refresh(product, attribute_names=["media", "variants", "category"])
+    return await _admin_view(db, product)
 
 
 @router.patch("/admin/products/{product_id}", response_model=ProductAdmin)
@@ -187,30 +201,185 @@ async def update_product(
     product_id: str, body: ProductPatch, db: DbSession, owner: Owner
 ) -> ProductAdmin:
     product = await get_or_404(
-        db, Product, product_id, detail="Product not found", options=(selectinload(Product.media),)
+        db, Product, product_id, detail="Product not found", options=service.LOADED
     )
     changes = body.model_dump(exclude_unset=True)
 
-    # BRAND.md §8, the real-photo rule: the image on the page is the actual
-    # piece. Nothing can prove a file is genuine, but a product with no
-    # photograph of its own cannot go on sale.
-    if changes.get("status") is ProductStatus.active and not product.media:
-        raise bad_request("Add at least one photo of the piece before publishing it")
+    if changes.get("status") is ProductStatus.active:
+        # BRAND.md §8, the real-photo rule: the image is the actual piece.
+        # Nothing can prove a file is genuine, but nothing goes on sale
+        # without one.
+        if not product.media:
+            raise bad_request("Add at least one photo of the piece before publishing it")
+        # A shelf piece with nothing on the shelf is not for sale. Publishing
+        # it would be advertising something that does not exist.
+        if product.kind is ProductKind.shelf:
+            left = await service.availability(db, [product.id])
+            if not left.get(product.id):
+                raise bad_request("Add the pieces you made before publishing this")
+
     if "category_id" in changes and changes["category_id"]:
         await get_or_404(db, Category, changes["category_id"], detail="Category not found")
+    if product.kind is ProductKind.workshop and changes.get("lead_time_days") is None:
+        changes.pop("lead_time_days", None)
 
     for field, value in changes.items():
         setattr(product, field, value)
     await db.commit()
-    await db.refresh(product, attribute_names=["media"])
-    return service.to_admin(product)
+    await db.refresh(product, attribute_names=["media", "variants", "category"])
+    return await _admin_view(db, product)
 
 
-@router.delete("/admin/products/{product_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/admin/products/{product_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
 async def archive_product(product_id: str, db: DbSession, owner: Owner) -> None:
     """Archived, never deleted — order history has to stay reconstructable."""
     product = await get_or_404(db, Product, product_id, detail="Product not found")
     product.status = ProductStatus.archived
+    await db.commit()
+
+
+# ── Variants ──────────────────────────────────────────────────────────────────
+
+
+@router.post(
+    "/admin/products/{product_id}/variants",
+    response_model=VariantOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_variant(
+    product_id: str, body: VariantWrite, db: DbSession, owner: Owner
+) -> VariantOut:
+    product = await get_or_404(db, Product, product_id, detail="Product not found")
+    if await db.scalar(select(ProductVariant.id).where(ProductVariant.sku == body.sku)):
+        raise conflict(f"SKU '{body.sku}' is already used")
+
+    variant = ProductVariant(product_id=product.id, **body.model_dump())
+    db.add(variant)
+    await db.commit()
+    await db.refresh(variant)
+    return VariantOut(
+        id=variant.id,
+        sku=variant.sku,
+        option=variant.option_en,
+        price=float(variant.price if variant.price is not None else product.price),
+        available=0 if product.kind is ProductKind.shelf else None,
+    )
+
+
+@router.delete(
+    "/admin/variants/{variant_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
+async def retire_variant(variant_id: str, db: DbSession, owner: Owner) -> None:
+    """Deactivated rather than deleted: an order line may point at it."""
+    variant = await get_or_404(db, ProductVariant, variant_id, detail="Variant not found")
+    variant.is_active = False
+    await db.commit()
+
+
+# ── Pieces ────────────────────────────────────────────────────────────────────
+
+
+@router.get("/admin/products/{product_id}/pieces", response_model=list[PieceAdmin])
+async def list_pieces(product_id: str, db: DbSession, owner: Owner) -> list[PieceAdmin]:
+    rows = await db.scalars(
+        select(Piece).where(Piece.product_id == product_id).order_by(Piece.number)
+    )
+    return [
+        PieceAdmin(
+            id=piece.id,
+            number=piece.number,
+            batch_size=piece.batch_size,
+            label=piece.label,
+            state=piece.state.value,
+            variant_id=piece.variant_id,
+            made_on=piece.made_on,
+            photo_url=piece.photo_url,
+            note_en=piece.note_en,
+            note_ar=piece.note_ar,
+        )
+        for piece in rows
+    ]
+
+
+@router.post(
+    "/admin/products/{product_id}/pieces",
+    response_model=list[PieceAdmin],
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_pieces(
+    product_id: str, body: PieceBatchWrite, db: DbSession, owner: Owner
+) -> list[PieceAdmin]:
+    """You made twelve; twelve rows appear, numbered.
+
+    One action, and afterwards the number on the page is a count of real
+    objects rather than something typed into a stock field.
+    """
+    product = await get_or_404(db, Product, product_id, detail="Product not found")
+    if product.kind is not ProductKind.shelf:
+        raise bad_request("Made-to-order pieces have no shelf — they are made per order")
+    if product.batch_closed:
+        raise conflict("This batch is closed. Reopen it before adding more.")
+    if body.variant_id:
+        variant = await get_or_404(
+            db, ProductVariant, body.variant_id, detail="Variant not found"
+        )
+        if variant.product_id != product_id:
+            raise bad_request("That variant belongs to another piece")
+
+    highest = await db.scalar(
+        select(func.coalesce(func.max(Piece.number), 0)).where(Piece.product_id == product_id)
+    )
+    batch_size = highest + body.quantity
+
+    # The batch grows, so the pieces already numbered are part of a larger run
+    # than they were: 04/08 becomes 04/12. Saying "04 of 8" when twelve exist
+    # would be the invented scarcity BRAND.md §10 rules out.
+    await db.execute(
+        Piece.__table__.update()
+        .where(Piece.product_id == product_id)
+        .values(batch_size=batch_size)
+    )
+
+    created = [
+        Piece(
+            product_id=product_id,
+            variant_id=body.variant_id,
+            number=highest + offset,
+            batch_size=batch_size,
+            made_on=body.made_on or product.made_on,
+            note_en=body.note_en,
+            note_ar=body.note_ar,
+        )
+        for offset in range(1, body.quantity + 1)
+    ]
+    db.add_all(created)
+    await db.commit()
+    return [
+        PieceAdmin(
+            id=piece.id,
+            number=piece.number,
+            batch_size=piece.batch_size,
+            label=piece.label,
+            state=piece.state.value,
+            variant_id=piece.variant_id,
+            made_on=piece.made_on,
+            photo_url=piece.photo_url,
+            note_en=piece.note_en,
+            note_ar=piece.note_ar,
+        )
+        for piece in created
+    ]
+
+
+@router.delete("/admin/pieces/{piece_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
+    """Only a piece nobody has bought. A sold piece is part of an order."""
+    piece = await get_or_404(db, Piece, piece_id, detail="Piece not found")
+    if piece.state is not PieceState.available:
+        raise conflict(f"That piece is {piece.state.value} — it cannot be removed")
+    await db.delete(piece)
     await db.commit()
 
 
@@ -229,6 +398,7 @@ async def upload_product_photo(
     owner: Owner,
     alt_en: str = "",
     alt_ar: str = "",
+    is_process_footage: bool = False,
 ) -> MediaResponse:
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=(selectinload(Product.media),)
@@ -238,10 +408,10 @@ async def upload_product_photo(
         raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
 
     data = await file.read()
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="That photo is larger than 12 MB")
     if not data:
         raise bad_request("That file is empty")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="That photo is larger than 12 MB")
 
     url = await upload_image(data, content_type, prefix=f"products/{product_id}")
     media = ProductMedia(
@@ -249,6 +419,7 @@ async def upload_product_photo(
         url=url,
         alt_en=alt_en,
         alt_ar=alt_ar,
+        is_process_footage=is_process_footage,
         is_primary=not product.media,
         sort_order=len(product.media),
     )

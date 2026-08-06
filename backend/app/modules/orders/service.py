@@ -10,9 +10,11 @@ in a cash-on-delivery market:
    status over any other, so a delivered order could be moved back to pending
    and re-notified.
 
-Stock is decremented under a row lock, so two people checking out the last
-piece at the same moment cannot both get it — the honest scarcity in
-BRAND.md §10 only holds if the count is right.
+Buying a shelf piece **reserves specific pieces**, taken under a row lock and
+lowest-numbered first. That is what makes the count on the page true: two
+people checking out the last piece at the same moment cannot both get it,
+because there is one row and only one of them can lock it. Made-to-order lines
+reserve nothing — there is nothing yet to reserve, only a promise about when.
 """
 from __future__ import annotations
 
@@ -25,10 +27,29 @@ from sqlalchemy.orm import selectinload
 from app.config import settings
 from app.core.errors import bad_request, conflict
 from app.core.security import new_order_reference, new_tracking_token
-from app.models import Order, OrderEvent, OrderItem, OrderStatus, Product, ProductStatus, User
+from app.models import (
+    Order,
+    OrderEvent,
+    OrderItem,
+    OrderStatus,
+    Piece,
+    PieceState,
+    Product,
+    ProductKind,
+    ProductStatus,
+    ProductVariant,
+    User,
+)
 from app.modules.catalog.service import primary_image
 from app.modules.notify.service import notify_order_status
-from app.modules.orders.schemas import CheckoutRequest
+from app.modules.orders.schemas import CartLine, CheckoutRequest
+
+#: Pieces move with the order they belong to.
+PIECE_STATE_FOR_ORDER: dict[OrderStatus, PieceState] = {
+    OrderStatus.delivered: PieceState.sold,
+    OrderStatus.cancelled: PieceState.available,
+    OrderStatus.returned: PieceState.available,
+}
 
 
 def delivery_fee_for(subtotal: Decimal) -> Decimal:
@@ -39,54 +60,99 @@ def delivery_fee_for(subtotal: Decimal) -> Decimal:
     return Decimal(str(settings.delivery_fee))
 
 
-async def place_order(
-    db: AsyncSession, body: CheckoutRequest, customer: User | None
-) -> Order:
-    wanted = {line.product_id: line.quantity for line in body.items}
-    if len(wanted) != len(body.items):
-        raise bad_request("The same piece appears twice in the cart")
+async def _take_pieces(
+    db: AsyncSession, product: Product, line: CartLine
+) -> list[Piece]:
+    """Lock and reserve the pieces this line is buying."""
+    query = (
+        select(Piece)
+        .where(Piece.product_id == product.id, Piece.state == PieceState.available)
+        .order_by(Piece.number)
+        .limit(line.quantity)
+        .with_for_update()
+    )
+    if line.variant_id:
+        query = query.where(Piece.variant_id == line.variant_id)
 
-    # FOR UPDATE: hold the rows until this checkout commits, so concurrent
-    # checkouts serialize on the stock they are both trying to take.
-    products = (
-        await db.scalars(
-            select(Product)
-            .where(Product.id.in_(wanted))
-            .options(selectinload(Product.media))
-            .with_for_update()
+    pieces = list(await db.scalars(query))
+    if len(pieces) < line.quantity:
+        raise conflict(
+            f"We have {len(pieces)} of '{product.title_en}' — we made that many"
         )
-    ).all()
+    for piece in pieces:
+        piece.state = PieceState.reserved
+    return pieces
 
-    found = {product.id: product for product in products}
-    missing = set(wanted) - set(found)
-    if missing:
-        raise bad_request("Something in your cart is no longer available")
+
+async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | None) -> Order:
+    seen = {(line.product_id, line.variant_id) for line in body.items}
+    if len(seen) != len(body.items):
+        raise bad_request("The same piece appears twice in the cart")
 
     subtotal = Decimal("0")
     lines: list[OrderItem] = []
-    for product_id, quantity in wanted.items():
-        product = found[product_id]
-        if product.status is not ProductStatus.active:
-            raise conflict(f"'{product.title_en}' is no longer available")
-        if product.stock < quantity:
-            raise conflict(
-                f"We only have {product.stock} of '{product.title_en}' — we made that many"
-            )
-        product.stock -= quantity
 
-        unit_price = Decimal(product.price)
-        line_total = unit_price * quantity
-        subtotal += line_total
-        lines.append(
-            OrderItem(
-                product_id=product.id,
-                title=product.title(body.lang),
-                unit_price=unit_price,
-                quantity=quantity,
-                subtotal=line_total,
-                image_url=primary_image(product),
-            )
+    for line in body.items:
+        product = await db.scalar(
+            select(Product)
+            .where(Product.id == line.product_id)
+            .options(selectinload(Product.media))
         )
+        if product is None or product.status is not ProductStatus.active:
+            raise conflict("Something in your cart is no longer available")
+
+        variant: ProductVariant | None = None
+        if line.variant_id:
+            variant = await db.scalar(
+                select(ProductVariant).where(
+                    ProductVariant.id == line.variant_id,
+                    ProductVariant.product_id == product.id,
+                    ProductVariant.is_active.is_(True),
+                )
+            )
+            if variant is None:
+                raise conflict("That option is no longer available")
+
+        unit_price = Decimal(variant.price if variant and variant.price is not None else product.price)
+
+        if product.kind is ProductKind.shelf:
+            pieces = await _take_pieces(db, product, line)
+            # One line per physical object: the customer is buying piece 04 of
+            # 12, not "one of them".
+            for piece in pieces:
+                subtotal += unit_price
+                lines.append(
+                    OrderItem(
+                        product_id=product.id,
+                        variant_id=variant.id if variant else None,
+                        piece_id=piece.id,
+                        title=product.title(body.lang),
+                        variant_label=variant.option(body.lang) if variant else "",
+                        piece_label=piece.label if product.show_piece_numbers else "",
+                        unit_price=unit_price,
+                        quantity=1,
+                        subtotal=unit_price,
+                        image_url=piece.photo_url or primary_image(product),
+                    )
+                )
+        else:
+            line_total = unit_price * line.quantity
+            subtotal += line_total
+            lines.append(
+                OrderItem(
+                    product_id=product.id,
+                    variant_id=variant.id if variant else None,
+                    piece_id=None,
+                    title=product.title(body.lang),
+                    variant_label=variant.option(body.lang) if variant else "",
+                    # What we promised, on the day we promised it.
+                    lead_time_days=product.lead_time_days,
+                    unit_price=unit_price,
+                    quantity=line.quantity,
+                    subtotal=line_total,
+                    image_url=primary_image(product),
+                )
+            )
 
     fee = delivery_fee_for(subtotal)
     order = Order(
@@ -119,16 +185,19 @@ async def change_status(
     if order.status is target:
         return order
     if not order.can_move_to(target):
-        raise conflict(
-            f"An order that is '{order.status.value}' cannot become '{target.value}'"
-        )
+        raise conflict(f"An order that is '{order.status.value}' cannot become '{target.value}'")
 
-    # A cancelled or returned order puts its pieces back on the shelf.
-    if target in (OrderStatus.cancelled, OrderStatus.returned):
-        for line in order.items:
-            product = await db.get(Product, line.product_id, with_for_update=True)
-            if product is not None:
-                product.stock += line.quantity
+    piece_state = PIECE_STATE_FOR_ORDER.get(target)
+    if piece_state is not None:
+        # A cancelled or returned order puts its pieces back on the shelf; a
+        # delivered one marks them sold. Either way the count on the page
+        # follows the objects, not a number someone remembered to update.
+        piece_ids = [item.piece_id for item in order.items if item.piece_id]
+        if piece_ids:
+            for piece in await db.scalars(
+                select(Piece).where(Piece.id.in_(piece_ids)).with_for_update()
+            ):
+                piece.state = piece_state
 
     order.status = target
     db.add(OrderEvent(order_id=order.id, status=target, actor=actor, note=note))
