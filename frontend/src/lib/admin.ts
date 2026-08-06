@@ -36,7 +36,20 @@ async function call<T>(path: string, lang: Lang, init: RequestInit = {}): Promis
     setOwnerToken(null);
     throw new NotSignedIn();
   }
-  if (!response.ok) throw new Error(`Request failed (${response.status})`);
+  if (!response.ok) {
+    // The server's own sentence, not a status code. It refuses things for
+    // reasons the owner needs to read — "Add at least one photo of the piece
+    // before publishing it" is an instruction; "Request failed (400)" is a
+    // dead end on the one screen that puts things in the shop.
+    let detail = "";
+    try {
+      const body = await response.json();
+      detail = Array.isArray(body?.detail) ? body.detail[0]?.msg : body?.detail;
+    } catch {
+      /* not JSON — the status is all there is */
+    }
+    throw new Error(detail || `Request failed (${response.status})`);
+  }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
@@ -167,6 +180,95 @@ export interface ForecastRow {
   because: string;
 }
 
+/** An order as the workshop sees it. */
+export interface AdminOrder {
+  reference: string;
+  tracking_token: string;
+  customer_name: string;
+  customer_phone: string;
+  city: string;
+  address: { line1?: string; city?: string; notes?: string };
+  items: {
+    title: string;
+    variant_label: string;
+    piece_label: string;
+    quantity: number;
+    unit_price: number;
+    subtotal: number;
+    image_url: string | null;
+  }[];
+  events: { status: string; created_at: string }[];
+  subtotal: number;
+  delivery_fee: number;
+  total: number;
+  status: string;
+  created_at: string;
+  whatsapp_url: string;
+}
+
+/** A custom request waiting on a price. */
+export interface AdminRequest {
+  reference: string;
+  tracking_token: string;
+  description: string;
+  status: string;
+  quote_price: number | null;
+  lead_time_days: number | null;
+  promised_for: string | null;
+  order_reference: string | null;
+  created_at: string;
+  whatsapp_url: string;
+}
+
+/** A piece as the owner edits it, with its batch and its waiting list. */
+export interface AdminProduct {
+  id: string;
+  slug: string;
+  kind: "shelf" | "workshop";
+  title_en: string;
+  title_ar: string;
+  description_en: string;
+  price: number;
+  status: "draft" | "active" | "archived";
+  //: Null for made-to-order, which never has a count.
+  available: number | null;
+  lead_time_days: number | null;
+  show_piece_numbers: boolean;
+  /** The API calls these `images`, and so does this. */
+  images: { id: string; url: string; alt: string; is_primary: boolean }[];
+}
+
+export interface AdminPiece {
+  id: string;
+  number: number;
+  batch_size: number;
+  label: string;
+  state: "available" | "reserved" | "sold" | "kept";
+}
+
+/**
+ * The states an order may legally move to next.
+ *
+ * A mirror of ALLOWED_TRANSITIONS on the server, kept here so the panel offers
+ * only the buttons that will work rather than showing six and letting four of
+ * them fail. The server remains the authority — this decides what to draw, not
+ * what is permitted.
+ */
+export const NEXT_STATUSES: Record<string, string[]> = {
+  placed: ["confirmed", "cancelled"],
+  confirmed: ["preparing", "cancelled"],
+  preparing: ["ready", "cancelled"],
+  ready: ["out_for_delivery", "cancelled"],
+  out_for_delivery: ["delivered", "failed"],
+  // Terminal. A delivered order cannot be walked back into another state —
+  // the piece is sold and the customer has already been told.
+  delivered: [],
+  // The courier could not hand it over: send it out again, or accept it back.
+  failed: ["out_for_delivery", "returned"],
+  cancelled: [],
+  returned: [],
+};
+
 export const admin = {
   async signIn(lang: Lang, email: string, password: string): Promise<void> {
     const response = await fetch(`/api/auth/login?lang=${lang}`, {
@@ -189,20 +291,67 @@ export const admin = {
   explain: (lang: Lang) => call<{ name: string; explanation: string }[]>("/admin/explain", lang),
 
   orders: (lang: Lang, status?: string) =>
-    call<Record<string, unknown>[]>(`/admin/orders${status ? `?status=${status}` : ""}`, lang),
-  moveOrder: (lang: Lang, reference: string, status: string) =>
-    call(`/admin/orders/${reference}/status`, lang, {
+    call<AdminOrder[]>(`/admin/orders?size=60${status ? `&status=${status}` : ""}`, lang),
+  moveOrder: (lang: Lang, reference: string, status: string, note?: string) =>
+    call<AdminOrder>(`/admin/orders/${reference}/status`, lang, {
       method: "POST",
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, note: note || null }),
     }),
 
   requests: (lang: Lang, status?: string) =>
-    call<Record<string, unknown>[]>(`/admin/requests${status ? `?status=${status}` : ""}`, lang),
-  quote: (lang: Lang, reference: string, price: number, leadTimeDays: number) =>
-    call(`/admin/requests/${reference}/quote`, lang, {
+    call<AdminRequest[]>(`/admin/requests?size=60${status ? `&status=${status}` : ""}`, lang),
+  quote: (lang: Lang, reference: string, price: number, leadTimeDays: number, note = "") =>
+    call<AdminRequest>(`/admin/requests/${reference}/quote`, lang, {
       method: "POST",
-      body: JSON.stringify({ price, lead_time_days: leadTimeDays }),
+      body: JSON.stringify({ price, lead_time_days: leadTimeDays, note_en: note, note_ar: note }),
     }),
+
+  moveRequest: (lang: Lang, reference: string, status: string, note?: string) =>
+    call<AdminRequest>(`/admin/requests/${reference}/status`, lang, {
+      method: "POST",
+      body: JSON.stringify({ status, note: note || null }),
+    }),
+
+  // ── The shelf ──────────────────────────────────────────────────────────────
+
+  products: (lang: Lang) => call<AdminProduct[]>("/admin/products?size=60", lang),
+
+  createProduct: (lang: Lang, body: Record<string, unknown>) =>
+    call<AdminProduct>("/admin/products", lang, { method: "POST", body: JSON.stringify(body) }),
+
+  updateProduct: (lang: Lang, id: string, body: Record<string, unknown>) =>
+    call<AdminProduct>(`/admin/products/${id}`, lang, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
+  /** Multipart, so it cannot go through `call` — that one sets a JSON body. */
+  async addPhoto(lang: Lang, productId: string, file: File): Promise<void> {
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`/api/admin/products/${productId}/media?lang=${lang}`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${ownerToken() ?? ""}` },
+      body,
+    });
+    if (response.status === 401) throw new NotSignedIn();
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.detail || "That photo would not upload");
+    }
+  },
+
+  pieces: (lang: Lang, productId: string) =>
+    call<AdminPiece[]>(`/admin/products/${productId}/pieces`, lang),
+
+  addPieces: (lang: Lang, productId: string, quantity: number) =>
+    call<AdminPiece[]>(`/admin/products/${productId}/pieces`, lang, {
+      method: "POST",
+      body: JSON.stringify({ quantity }),
+    }),
+
+  waiting: (lang: Lang, productId: string) =>
+    call<{ waiting: number }>(`/admin/products/${productId}/waiting`, lang),
 
   weights: (lang: Lang) =>
     call<{ key: string; value: number; explains: string }[]>("/admin/feed/weights", lang),

@@ -15,6 +15,9 @@ import { type Lang, isLang, money as formatMoney } from "@/lib/i18n";
 
 import { Live } from "./Live";
 import { NextWeek } from "./NextWeek";
+import { Orders } from "./Orders";
+import { Pieces } from "./Pieces";
+import { Requests } from "./Requests";
 
 /**
  * The control room.
@@ -24,7 +27,24 @@ import { NextWeek } from "./NextWeek";
  * money, then the assistant. Everything else is a tap away rather than a tab
  * competing for the first glance.
  */
-type Tab = "today" | "live" | "next" | "decide" | "money" | "ask";
+/**
+ * The panel's tabs, in the order the day happens.
+ *
+ * The four that *do* something come first — orders, quotes, the shelf — because
+ * they are the reason to open this at all. The ones that only report come
+ * after. Before these existed the panel was entirely read-only: it could tell
+ * the owner an order had been placed and offer no way to move it.
+ */
+type Tab =
+  | "today"
+  | "orders"
+  | "requests"
+  | "pieces"
+  | "live"
+  | "next"
+  | "decide"
+  | "money"
+  | "ask";
 
 export default function Workshop({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = use(params);
@@ -60,6 +80,9 @@ export default function Workshop({ params }: { params: Promise<{ lang: string }>
         {(
           [
             ["today", lang === "ar" ? "اليوم" : "Today"],
+            ["orders", lang === "ar" ? "الطلبات" : "Orders"],
+            ["requests", lang === "ar" ? "الأسعار" : "Quotes"],
+            ["pieces", lang === "ar" ? "الرف" : "The shelf"],
             ["live", lang === "ar" ? "الحركة" : "Live"],
             ["next", lang === "ar" ? "الأسبوع القادم" : "Next week"],
             ["decide", lang === "ar" ? "ماذا أصنع" : "What to make"],
@@ -82,6 +105,9 @@ export default function Workshop({ params }: { params: Promise<{ lang: string }>
 
       <div className="mt-6">
         {tab === "today" ? <Today lang={lang} onExpire={() => setSignedIn(false)} /> : null}
+        {tab === "orders" ? <Orders lang={lang} onExpire={() => setSignedIn(false)} /> : null}
+        {tab === "requests" ? <Requests lang={lang} onExpire={() => setSignedIn(false)} /> : null}
+        {tab === "pieces" ? <Pieces lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "live" ? <Live lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "next" ? <NextWeek lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "decide" ? <WhatToMake lang={lang} onExpire={() => setSignedIn(false)} /> : null}
