@@ -145,6 +145,7 @@ const copy = {
     "صِفه بكلماتك. نقرأ كل طلب بأنفسنا، ونعود إليك بالثمن وبتاريخ حقيقي.",
   ],
   whatIsIt: ["What is it?", "ما هو؟"],
+  whatKind: ["What kind of thing? (optional)", "من أي نوع؟ (اختياري)"],
   whatIsItHint: [
     "Size, colour, material, what it is for — whatever you know.",
     "المقاس، اللون، المادة، ولأي غرض — كل ما تعرفه.",

@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type { WorkshopNumbers } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { fromApi } from "@/lib/server";
+import { fromApi, siteUrl } from "@/lib/server";
 
 /**
  * The landing page. One idea, one action.
@@ -22,6 +22,21 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
 
   return (
     <div className="page pt-14 pb-8">
+      {/*
+        Who we are, for a machine.
+
+        The `makesOffer` line is the whole positioning stated in the one
+        vocabulary Google reads: this is a workshop that manufactures what it
+        sells. It is also what makes the site eligible to be shown as a
+        business rather than as a page — and the sitelinks search box is what
+        puts the shelf's own search under the result instead of sending people
+        to a homepage they then have to navigate.
+      */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(workshopSchema(lang, t)) }}
+      />
+
       <section className="animate-rise">
         <h1 className="text-[34px] leading-[1.15] font-semibold tracking-tight">{t("tagline")}</h1>
         <p className="mt-4 text-[17px] text-ink-soft leading-relaxed">{t("taglineSupport")}</p>
@@ -126,4 +141,48 @@ function Door({
       <p className={`mt-5 text-[15px] font-semibold ${primary ? "" : "text-clay"}`}>{action} →</p>
     </Link>
   );
+}
+
+function workshopSchema(lang: Lang, t: ReturnType<typeof translator>) {
+  const home = `${siteUrl}/${lang}`;
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": ["Organization", "HomeAndConstructionBusiness"],
+        "@id": `${siteUrl}#workshop`,
+        name: "MoStyle",
+        url: home,
+        slogan: t("tagline"),
+        description: t("taglineSupport"),
+        address: { "@type": "PostalAddress", addressCountry: "MA" },
+        currenciesAccepted: "MAD",
+        paymentAccepted: "Cash on delivery",
+        // The position, in the one vocabulary a crawler reads: we make the
+        // things we sell.
+        makesOffer: {
+          "@type": "Offer",
+          itemOffered: { "@type": "Product", name: t("theShelf") },
+        },
+      },
+      {
+        "@type": "WebSite",
+        "@id": `${siteUrl}#site`,
+        url: home,
+        name: "MoStyle",
+        inLanguage: lang,
+        publisher: { "@id": `${siteUrl}#workshop` },
+        // Puts the shelf's own search under the search result, so people
+        // arrive at a piece rather than at a homepage to navigate.
+        potentialAction: {
+          "@type": "SearchAction",
+          target: {
+            "@type": "EntryPoint",
+            urlTemplate: `${siteUrl}/${lang}/store?q={search_term_string}`,
+          },
+          "query-input": "required name=search_term_string",
+        },
+      },
+    ],
+  };
 }

@@ -13,6 +13,9 @@ import {
 } from "@/lib/admin";
 import { type Lang, isLang, money as formatMoney } from "@/lib/i18n";
 
+import { Live } from "./Live";
+import { NextWeek } from "./NextWeek";
+
 /**
  * The control room.
  *
@@ -21,7 +24,7 @@ import { type Lang, isLang, money as formatMoney } from "@/lib/i18n";
  * money, then the assistant. Everything else is a tap away rather than a tab
  * competing for the first glance.
  */
-type Tab = "today" | "decide" | "money" | "ask";
+type Tab = "today" | "live" | "next" | "decide" | "money" | "ask";
 
 export default function Workshop({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = use(params);
@@ -57,6 +60,8 @@ export default function Workshop({ params }: { params: Promise<{ lang: string }>
         {(
           [
             ["today", lang === "ar" ? "اليوم" : "Today"],
+            ["live", lang === "ar" ? "الحركة" : "Live"],
+            ["next", lang === "ar" ? "الأسبوع القادم" : "Next week"],
             ["decide", lang === "ar" ? "ماذا أصنع" : "What to make"],
             ["money", lang === "ar" ? "المال" : "Money"],
             ["ask", lang === "ar" ? "اسأل" : "Ask"],
@@ -77,6 +82,8 @@ export default function Workshop({ params }: { params: Promise<{ lang: string }>
 
       <div className="mt-6">
         {tab === "today" ? <Today lang={lang} onExpire={() => setSignedIn(false)} /> : null}
+        {tab === "live" ? <Live lang={lang} onExpire={() => setSignedIn(false)} /> : null}
+        {tab === "next" ? <NextWeek lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "decide" ? <WhatToMake lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "money" ? <TheMoney lang={lang} onExpire={() => setSignedIn(false)} /> : null}
         {tab === "ask" ? <Copilot lang={lang} /> : null}

@@ -74,6 +74,99 @@ export interface Decide {
   best_sellers: { pieces: { title: string; sold: number; revenue_mad: number }[] };
 }
 
+/** `date_from`/`date_to` for the last N days, inclusive of today. */
+function periodQuery(days: number): string {
+  const end = new Date();
+  const start = new Date(end);
+  start.setDate(start.getDate() - (days - 1));
+  const iso = (value: Date) => value.toISOString().slice(0, 10);
+  return `date_from=${iso(start)}&date_to=${iso(end)}`;
+}
+
+/** What people did here. Every count is people, never events. */
+export interface Analytics {
+  period: { from: string; to: string };
+  audience: {
+    visitors: number;
+    returning: number;
+    returning_pct: number;
+    actions: number;
+    actions_per_visitor: number;
+    daily: { date: string; visitors: number }[];
+  };
+  funnel: {
+    steps: {
+      step: string;
+      step_ar: string;
+      people: number;
+      of_all_pct: number;
+      kept_pct: number;
+      lost: number;
+    }[];
+  };
+  pages: {
+    items: {
+      path: string;
+      people: number;
+      scrolled: number;
+      scrolled_pct: number;
+      avg_seconds: number;
+      acted: number;
+      acted_pct: number;
+    }[];
+  };
+  products: {
+    items: {
+      product_id: string;
+      title: string;
+      saw: number;
+      opened: number;
+      opened_pct: number;
+      stayed: number;
+      avg_seconds: number;
+      added: number;
+      bought: number;
+      bought_pct: number;
+    }[];
+  };
+  unmet: {
+    searched_and_found_nothing: { query: string; people: number }[];
+    asked_us_to_make: {
+      category: string;
+      category_ar: string;
+      requests: number;
+      avg_budget: number | null;
+    }[];
+  };
+}
+
+/** What we expect to sell next week, and how many to make. */
+export interface Forecast {
+  horizon_days: number;
+  based_on_days: number;
+  expected_units: number;
+  expected_revenue: number;
+  shop_open_to_order_pct: number;
+  make_now: ForecastRow[];
+  items: ForecastRow[];
+}
+
+export interface ForecastRow {
+  product_id: string;
+  slug: string;
+  title: string;
+  title_ar: string;
+  kind: "shelf" | "workshop";
+  expected: number;
+  range: [number, number];
+  on_the_shelf: number;
+  days_of_cover: number | null;
+  make: number;
+  revenue_if_met: number;
+  confidence: "low" | "medium" | "high";
+  because: string;
+}
+
 export const admin = {
   async signIn(lang: Lang, email: string, password: string): Promise<void> {
     const response = await fetch(`/api/auth/login?lang=${lang}`, {
@@ -90,6 +183,9 @@ export const admin = {
   pulse: (lang: Lang) => call<Pulse>("/admin/pulse", lang),
   money: (lang: Lang) => call<Money>("/admin/money", lang),
   decide: (lang: Lang) => call<Decide>("/admin/decide", lang),
+  analytics: (lang: Lang, days = 30) =>
+    call<Analytics>(`/admin/analytics?${periodQuery(days)}`, lang),
+  forecast: (lang: Lang) => call<Forecast>("/admin/forecast", lang),
   explain: (lang: Lang) => call<{ name: string; explanation: string }[]>("/admin/explain", lang),
 
   orders: (lang: Lang, status?: string) =>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { use, useState } from "react";
+import { use, useEffect, useState } from "react";
 
 import { api, ApiError } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
@@ -20,6 +20,17 @@ export default function Ask({ params }: { params: Promise<{ lang: string }> }) {
 
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
+  const [kind, setKind] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Silently absent if the shop has not made any categories yet. A form that
+    // shows an empty row of chips is worse than one that shows none.
+    api
+      .categories(lang)
+      .then((tree) => setCategories(tree.map(({ id, name }) => ({ id, name }))))
+      .catch(() => setCategories([]));
+  }, [lang]);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -35,6 +46,7 @@ export default function Ask({ params }: { params: Promise<{ lang: string }> }) {
         email: form.get("email") || null,
         city: form.get("city") || null,
         description: form.get("description"),
+        category_id: kind,
         budget: form.get("budget") ? Number(form.get("budget")) : null,
         lang,
       });
@@ -65,6 +77,38 @@ export default function Ask({ params }: { params: Promise<{ lang: string }> }) {
           />
           <p className="mt-1.5 text-[13px] text-ink-soft">{t("whatIsItHint")}</p>
         </div>
+
+        {/*
+          What kind of thing it is.
+
+          Chips rather than a select, because a select on a phone opens a wheel
+          and this has to be one tap. Optional on purpose — a required field
+          here is a request that never gets sent, and the description is still
+          the part that matters. But when it is answered it turns twenty
+          differently-worded requests for the same thing into "eleven people
+          asked for a lamp", which is the difference between a pile of text and
+          a number the workshop can act on.
+        */}
+        {categories.length > 0 ? (
+          <div>
+            <p className="label">{t("whatKind")}</p>
+            <div className="flex flex-wrap gap-2">
+              {categories.map((category) => (
+                <button
+                  key={category.id}
+                  type="button"
+                  aria-pressed={kind === category.id}
+                  onClick={() => setKind(kind === category.id ? null : category.id)}
+                  className={`tap rounded-2xl px-4 text-[14px] font-medium transition-colors duration-gentle ${
+                    kind === category.id ? "bg-clay text-white" : "bg-clay-soft text-ink"
+                  }`}
+                >
+                  {category.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div>
           <label className="label" htmlFor="full_name">
