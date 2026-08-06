@@ -314,6 +314,18 @@ class ProductEmbedding(Base):
     """
 
     __tablename__ = "product_embeddings"
+    __table_args__ = (
+        # Declared here rather than only in the migration, so the models stay
+        # the single description of the schema and autogenerate does not keep
+        # proposing to drop an index it cannot see.
+        Index(
+            "ix_product_embeddings_cosine",
+            "embedding",
+            postgresql_using="ivfflat",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+            postgresql_with={"lists": "10"},
+        ),
+    )
 
     product_id: Mapped[str] = mapped_column(
         UUID(as_uuid=False), ForeignKey("products.id", ondelete="CASCADE"), primary_key=True

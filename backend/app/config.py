@@ -45,6 +45,14 @@ class Settings(BaseSettings):
     # The workshop's own contact point — used for the WhatsApp handoff.
     whatsapp_number: str = ""
 
+    # ── AI ──
+    # Any OpenAI-compatible endpoint. Empty key means every AI feature reports
+    # itself unavailable rather than degrading to a guess.
+    llm_api_key: str = ""
+    llm_base_url: str = "https://api.openai.com/v1"
+    llm_model: str = "gpt-4o-mini"
+    embedding_model: str = "text-embedding-3-small"
+
     # Cash on delivery is the only payment method; Morocco, MAD.
     currency: str = "MAD"
     delivery_fee: float = 30.0

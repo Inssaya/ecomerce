@@ -63,7 +63,7 @@ async def clean_db() -> AsyncGenerator[None, None]:
         await connection.execute(
             text(
                 "TRUNCATE order_events, order_items, orders, pieces, product_variants, "
-                "product_embeddings, product_media, products, signals, categories, "
+                "product_embeddings, product_media, products, signals, feed_weights, categories, "
                 "notifications, refresh_tokens, users RESTART IDENTITY CASCADE"
             )
         )

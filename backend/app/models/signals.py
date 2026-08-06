@@ -105,3 +105,62 @@ class Signal(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class FeedWeight(Base):
+    """The ranking function's coefficients, in the database.
+
+    REBUILD-PLAN §3.3 puts these here rather than in code so the owner can tune
+    what the store pushes — promote new arrivals this week, stop pushing a
+    batch that is not moving — without a deploy and without asking anyone.
+    """
+
+    __tablename__ = "feed_weights"
+
+    key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    value: Mapped[float] = mapped_column(Numeric(6, 3), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
+#: Starting coefficients, seeded on first read. `fatigue` is subtracted; the
+#: rest are added. Each is explained to the owner in the panel by
+#: `FEED_WEIGHT_COPY` below rather than by these names.
+DEFAULT_FEED_WEIGHTS: dict[str, float] = {
+    "affinity": 1.0,
+    "semantic": 0.8,
+    "popular": 0.4,
+    "fresh": 0.3,
+    "business": 0.5,
+    "fatigue": 0.6,
+}
+
+#: What each lever actually does, in both languages. The panel should make the
+#: owner better at running the shop, not just expose six sliders.
+FEED_WEIGHT_COPY: dict[str, tuple[str, str]] = {
+    "affinity": (
+        "How much someone's own browsing decides what they see next.",
+        "إلى أي حد يقرّر تصفّح الزائر ما سيراه بعد ذلك.",
+    ),
+    "semantic": (
+        "How much we show things that feel like what they liked, even from another category.",
+        "إلى أي حد نعرض ما يشبه ما أعجبه، ولو من فئة أخرى.",
+    ),
+    "popular": (
+        "How much what everyone else is looking at this week counts.",
+        "إلى أي حد يهمّ ما ينظر إليه الآخرون هذا الأسبوع.",
+    ),
+    "fresh": (
+        "How much we push what we made recently.",
+        "إلى أي حد ندفع بما صنعناه حديثاً.",
+    ),
+    "business": (
+        "How much your own boost on a piece counts.",
+        "إلى أي حد يُحتسب تفضيلك الخاص لقطعة ما.",
+    ),
+    "fatigue": (
+        "How hard we push down a piece someone has already been shown.",
+        "إلى أي حد نُنزل قطعة سبق أن رآها الزائر.",
+    ),
+}

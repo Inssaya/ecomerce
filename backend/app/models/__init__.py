@@ -23,8 +23,11 @@ from app.models.orders import (
 )
 from app.models.signals import (
     AFFINITY_HALF_LIFE_DAYS,
+    DEFAULT_FEED_WEIGHTS,
+    FEED_WEIGHT_COPY,
     MAX_DWELL_WEIGHT,
     SIGNAL_WEIGHTS,
+    FeedWeight,
     Signal,
     SignalType,
 )
@@ -32,8 +35,11 @@ from app.models.user import RefreshToken, User, UserRole
 
 __all__ = [
     "AFFINITY_HALF_LIFE_DAYS",
+    "DEFAULT_FEED_WEIGHTS",
+    "FEED_WEIGHT_COPY",
     "ALLOWED_TRANSITIONS",
     "EMBEDDING_DIMENSIONS",
+    "FeedWeight",
     "MAX_DWELL_WEIGHT",
     "SIGNAL_WEIGHTS",
     "TERMINAL_STATUSES",
