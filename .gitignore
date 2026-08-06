@@ -1,42 +1,38 @@
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Python
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.Python
-*.egg-info/
-dist/
-build/
-.venv/
-venv/
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Node / Next.js
-node_modules/
-.next/
-out/
-.turbo/
-*.tsbuildinfo
 
 # Docker volumes (local mounts)
-.docker-data/
-
+# Environment
 # IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
 # Logs
+# Node / Next.js
+# OS
+# Python
+*.egg-info/
 *.log
+*.pyc
+*.pyd
+*.pyo
+*.swo
+*.swp
+*.tsbuildinfo
+.DS_Store
+.Python
+.docker-data/
+.env
+.env.*.local
+.env.local
+.idea/
+.mypy_cache/
+.next/
+.pytest_cache/
+.ruff_cache/
+.turbo/
+.venv/
+.vscode/
+Thumbs.db
+__pycache__/
+backups/
+build/
+dist/
+node_modules/
+out/
+venv/

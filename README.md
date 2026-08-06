@@ -135,6 +135,52 @@ frontend/src/
 Every route lives under `/en` or `/ar`. There is no third language and no
 translation layer: both are authored, and the Arabic is written as Arabic.
 
+## Putting it on a machine
+
+One VPS runs all of it: Postgres with pgvector, Redis, MinIO, the API, the
+storefront and nginx. That is the shape this rebuild consolidated toward, and
+splitting it back across three providers to deploy it would undo the point.
+
+A 2 vCPU / 4 GB box is enough. Point `mostyle.ma`, `www.mostyle.ma` and
+`media.mostyle.ma` at its IP first — the certificate covers all three.
+
+```bash
+git clone <this repo> && cd ecomerce
+cp .env.example .env && $EDITOR .env      # see the table below
+./infra/certbot-init.sh mostyle.ma you@yourdomain
+./deploy.sh
+docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+  exec api python -m app.cli seed-owner you@yourdomain 'a long password' 'Your Name'
+```
+
+`deploy.sh` is also the update path — pull and run it again.
+
+**The order inside it is not arbitrary.** The service and city pages enumerate
+their slugs at build time by asking the API, so the API is started and migrated
+*before* the storefront image is built. Build them the other way round and you
+get a site with no `/make` and no `/delivery` pages at all, which looks like a
+successful deploy until someone searches for one.
+
+### What has to be right
+
+| Value | Why it matters |
+|---|---|
+| `APP_URL` | Every tracking link, quote link and reset link in every email, and every canonical URL and share card. Wrong here and the shop emails dead links. |
+| `MEDIA_HOSTNAMES` | Next refuses images from unlisted hosts. Empty in production means every product photo is silently broken. |
+| `JWT_SECRET` | The API refuses to start in production without at least 32 characters. `openssl rand -hex 64`. |
+| `SMTP_*` | Order emails go to spam without SPF and DKIM on the domain — and a customer who never sees "on its way" refuses the package. |
+
+### What the production overlay changes
+
+Nothing is published to the internet except nginx on 80 and 443. The API, the
+storefront and Postgres are reachable only inside the compose network, and
+MinIO only on loopback — photographs reach browsers through nginx on
+`media.` instead, so they get TLS and a year of caching.
+
+It also runs certificate renewal every twelve hours and a nightly `pg_dump`
+into `./backups`, kept a fortnight. **Copy that directory off the machine as
+well** — a backup on the same disk as the database is not a backup.
+
 ## The AI
 
 Both assistants need an OpenAI-compatible key. Without one they report
