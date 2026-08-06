@@ -1,0 +1,18 @@
+line-length = 110
+target-version = "py311"
+
+[lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4"]
+ignore = ["B008"]  # FastAPI declares dependencies as parameter defaults by design
+
+[lint.isort]
+known-first-party = ["app"]
+
+[lint.per-file-ignores]
+# The email layout is a single HTML template string: its inline CSS cannot be
+# wrapped without putting line breaks into the markup that goes out to
+# customers.
+"app/modules/notify/email.py" = ["E501"]
+# Generated migrations: the enum column definitions are one expression per line
+# and rewriting them by hand risks changing what the migration does.
+"alembic/versions/*.py" = ["E501"]

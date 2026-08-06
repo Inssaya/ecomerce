@@ -1,63 +1,42 @@
+# Six containers, down from sixteen.
+#
+# Dropped in Phase 0: eight service containers, the gateway, RabbitMQ and
+# Meilisearch. What the broker used to carry between containers is now a
+# function call, and Postgres full-text search plus pgvector replaces the
+# search engine — see docs/REBUILD-PLAN.md §2.
+
+name: mostyle
+
 networks:
-  ecomerce-net:
+  mostyle:
     driver: bridge
 
 volumes:
   postgres_data:
   redis_data:
-  rabbitmq_data:
-  meilisearch_data:
   minio_data:
 
-x-service-defaults: &service-defaults
-  restart: unless-stopped
-  networks:
-    - ecomerce-net
-
-x-svc-env: &svc-env
-  RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbitmq:5672/
-  REDIS_URL: redis://redis:6379/0
-  MINIO_ENDPOINT: minio:9000
-  MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-  MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-  MINIO_USE_SSL: "false"
-  JWT_SECRET: ${JWT_SECRET}
-  JWT_ALGORITHM: HS256
-
-x-svc-depends: &svc-depends
-  postgres:
-    condition: service_healthy
-  redis:
-    condition: service_healthy
-  rabbitmq:
-    condition: service_healthy
-
 services:
-  # ──────────────────────────────────────────
-  # Infrastructure
-  # ──────────────────────────────────────────
-
   postgres:
-    <<: *service-defaults
     image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    networks: [mostyle]
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: postgres
+      POSTGRES_DB: ${POSTGRES_DB:-mostyle}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./infra/postgres/init-databases.sh:/docker-entrypoint-initdb.d/01-init-databases.sh
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB:-mostyle}"]
       interval: 10s
       timeout: 5s
       retries: 10
-    ports:
-      - "5432:5432"
 
   redis:
-    <<: *service-defaults
     image: redis:7-alpine
+    restart: unless-stopped
+    networks: [mostyle]
     command: redis-server --save 60 1 --loglevel warning
     volumes:
       - redis_data:/data
@@ -66,336 +45,93 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    ports:
-      - "6379:6379"
-
-  rabbitmq:
-    <<: *service-defaults
-    image: rabbitmq:3.13-management-alpine
-    environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-
-  meilisearch:
-    <<: *service-defaults
-    image: getmeili/meilisearch:v1.8
-    environment:
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
-      MEILI_ENV: ${MEILI_ENV:-production}
-    volumes:
-      - meilisearch_data:/meili_data
-    healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:7700/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-    ports:
-      - "7700:7700"
 
   minio:
-    <<: *service-defaults
     image: minio/minio:latest
+    restart: unless-stopped
+    networks: [mostyle]
     command: server /data --console-address ":9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
     ports:
       - "9000:9000"
       - "9001:9001"
-
-  mailpit:
-    <<: *service-defaults
-    image: axllent/mailpit:latest
-    ports:
-      - "1025:1025"
-      - "8025:8025"
-
-  # ──────────────────────────────────────────
-  # Microservices
-  # ──────────────────────────────────────────
-
-  auth-user-service:
-    <<: *service-defaults
-    build:
-      context: ./services/auth-user-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: auth-user-service
-      PORT: "8001"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/auth_db
-      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
-      REFRESH_TOKEN_EXPIRE_DAYS: "7"
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8001:8001"
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8001/health || exit 1"]
+      test: ["CMD-SHELL", "mc ready local || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 20s
 
-  catalog-service:
-    <<: *service-defaults
+  api:
     build:
-      context: ./services/catalog-service
-      dockerfile: Dockerfile
+      context: ./backend
+    restart: unless-stopped
+    networks: [mostyle]
     environment:
-      <<: *svc-env
-      SERVICE_NAME: catalog-service
-      PORT: "8002"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/catalog_db
-      MEILI_URL: http://meilisearch:7700
-      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY}
-    depends_on:
-      <<: *svc-depends
-      meilisearch:
-        condition: service_healthy
-    ports:
-      - "8002:8002"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8002/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  seller-service:
-    <<: *service-defaults
-    build:
-      context: ./services/seller-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: seller-service
-      PORT: "8003"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/seller_db
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8003:8003"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8003/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  order-service:
-    <<: *service-defaults
-    build:
-      context: ./services/order-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: order-service
-      PORT: "8004"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/order_db
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8004:8004"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8004/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  delivery-service:
-    <<: *service-defaults
-    build:
-      context: ./services/delivery-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: delivery-service
-      PORT: "8005"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/delivery_db
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8005:8005"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8005/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  notification-service:
-    <<: *service-defaults
-    build:
-      context: ./services/notification-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: notification-service
-      PORT: "8006"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/notification_db
-      SMTP_HOST: mailpit
-      SMTP_PORT: "1025"
-      SMTP_FROM: ${SMTP_FROM:-noreply@mostyle.ma}
       APP_NAME: ${APP_NAME:-MoStyle}
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8006:8006"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8006/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  recommendation-service:
-    <<: *service-defaults
-    build:
-      context: ./services/recommendation-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: recommendation-service
-      PORT: "8007"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/recommendation_db
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8007:8007"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8007/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  admin-service:
-    <<: *service-defaults
-    build:
-      context: ./services/admin-service
-      dockerfile: Dockerfile
-    environment:
-      <<: *svc-env
-      SERVICE_NAME: admin-service
-      PORT: "8008"
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/admin_db
-    depends_on:
-      <<: *svc-depends
-    ports:
-      - "8008:8008"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8008/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 20s
-
-  # ──────────────────────────────────────────
-  # Gateway
-  # ──────────────────────────────────────────
-
-  gateway:
-    <<: *service-defaults
-    build:
-      context: ./gateway
-      dockerfile: Dockerfile
-    environment:
-      PORT: "8000"
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_ALGORITHM: HS256
+      APP_URL: ${APP_URL:-http://localhost:3000}
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-mostyle}
       REDIS_URL: redis://redis:6379/0
-      AUTH_SERVICE_URL: http://auth-user-service:8001
-      CATALOG_SERVICE_URL: http://catalog-service:8002
-      SELLER_SERVICE_URL: http://seller-service:8003
-      ORDER_SERVICE_URL: http://order-service:8004
-      DELIVERY_SERVICE_URL: http://delivery-service:8005
-      NOTIFICATION_SERVICE_URL: http://notification-service:8006
-      RECOMMENDATION_SERVICE_URL: http://recommendation-service:8007
-      ADMIN_SERVICE_URL: http://admin-service:8008
+      JWT_SECRET: ${JWT_SECRET}
+      MINIO_ENDPOINT: minio:9000
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
+      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_FROM: ${SMTP_FROM:-workshop@mostyle.ma}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+      DELIVERY_FEE: ${DELIVERY_FEE:-30}
+      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-500}
     depends_on:
-      auth-user-service:
-        condition: service_healthy
-      catalog-service:
-        condition: service_healthy
-      seller-service:
-        condition: service_healthy
-      order-service:
-        condition: service_healthy
-      delivery-service:
-        condition: service_healthy
-      notification-service:
-        condition: service_healthy
-      recommendation-service:
-        condition: service_healthy
-      admin-service:
+      postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     ports:
       - "8000:8000"
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
-  # ──────────────────────────────────────────
-  # Frontend
-  # ──────────────────────────────────────────
-
-  frontend:
-    <<: *service-defaults
+  web:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
+    restart: unless-stopped
+    networks: [mostyle]
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
-      INTERNAL_API_URL: http://gateway:8000
-      NEXT_PUBLIC_APP_NAME: "MoStyle"
-      NODE_ENV: ${NODE_ENV:-production}
+      INTERNAL_API_URL: http://api:8000
+      NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
+      NODE_ENV: production
     depends_on:
-      - gateway
+      - api
     ports:
       - "3000:3000"
 
-  # ──────────────────────────────────────────
-  # Nginx (production reverse proxy)
-  # ──────────────────────────────────────────
-
   nginx:
-    <<: *service-defaults
     image: nginx:1.27-alpine
+    restart: unless-stopped
+    networks: [mostyle]
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
     depends_on:
-      - frontend
-      - gateway
+      - web
+      - api
     ports:
       - "80:80"
       - "443:443"
-    profiles:
-      - production
+    profiles: [production]
+
+  # Development only: catches every outgoing email at http://localhost:8025
+  # instead of sending it. `docker compose --profile dev up`.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    networks: [mostyle]
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    profiles: [dev]
