@@ -22,6 +22,7 @@ interface Pending {
   product_id?: string;
   query?: string;
   value?: number;
+  path?: string;
 }
 
 const FLUSH_AFTER_MS = 4000;
@@ -53,6 +54,13 @@ export function setSignalLanguage(lang: Lang): void {
 }
 
 export function track(signal: Pending): void {
+  // Which screen this happened on, filled in here rather than at each call
+  // site — every caller would otherwise have to remember, and the one that
+  // forgot would leave a hole in the analytics nobody would notice for weeks.
+  // The server reduces it to a known route pattern and drops anything else,
+  // so a tracking token in the URL never reaches the signals table.
+  signal.path ??= typeof window === "undefined" ? undefined : window.location.pathname;
+
   // An impression for a card already counted this page-view is noise.
   if (
     signal.type === "impression" &&

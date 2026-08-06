@@ -37,6 +37,55 @@ def weight_for(signal_type: SignalType, value: int | None) -> float:
     return SIGNAL_WEIGHTS[signal_type]
 
 
+#: The screens, as patterns. Anything not in here is not recorded.
+#:
+#: The client already knows its own route and could simply send the pattern —
+#: but then a bug or a stray caller could put `/track/9f3a…` into a table the
+#: whole owner panel reads, and someone's tracking token is their credential.
+#: So the server reduces whatever it is given, and an unrecognised path is
+#: dropped rather than stored. An allowlist is the only version of this that
+#: cannot leak.
+PATHS: dict[str, str] = {
+    "": "/",
+    "store": "/store",
+    "cart": "/cart",
+    "checkout": "/checkout",
+    "ask": "/ask",
+    "orders": "/orders",
+    "workshop": "/workshop",
+    "ambient": "/ambient",
+}
+
+#: First segment → the pattern it collapses to, whatever follows it.
+PATH_PREFIXES: dict[str, str] = {
+    "piece": "/piece/[slug]",
+    "track": "/track/[token]",
+    "request": "/request/[token]",
+}
+
+
+def clean_path(raw: str | None) -> str | None:
+    """Reduce a path to one of `PATHS`, or to nothing.
+
+    Drops the language prefix, because `/en/store` and `/ar/store` are one
+    screen and splitting them would halve every count for no insight — the
+    language is already its own column on the visitor's other signals.
+    """
+    if not raw:
+        return None
+    # A full URL, a query string or a fragment can all arrive here.
+    trimmed = raw.split("?", 1)[0].split("#", 1)[0]
+    segments = [part for part in trimmed.split("/") if part]
+    if segments and segments[0] in {"en", "ar"}:
+        segments = segments[1:]
+
+    if not segments:
+        return "/"
+    if segments[0] in PATH_PREFIXES:
+        return PATH_PREFIXES[segments[0]]
+    return PATHS.get(segments[0])
+
+
 async def record(
     db: AsyncSession,
     *,
@@ -47,6 +96,7 @@ async def record(
     category_id: str | None = None,
     query: str | None = None,
     value: int | None = None,
+    path: str | None = None,
 ) -> Signal | None:
     """One interaction. Returns None when the signal carries no information
     (a zero-second dwell, a product that no longer exists)."""
@@ -73,6 +123,7 @@ async def record(
         category_id=category_id,
         query=(query or None),
         value=value,
+        path=clean_path(path),
     )
     db.add(signal)
     return signal

@@ -26,8 +26,12 @@ class SignalIn(BaseModel):
     product_id: str | None = None
     category_id: str | None = None
     query: str | None = Field(default=None, max_length=200)
-    #: `dwell`: seconds. `scroll_depth`: percent.
+    #: `dwell`: seconds. `scroll_depth`: percent. `search`: results found.
     value: int | None = Field(default=None, ge=0, le=100_000)
+    #: Which screen. Reduced to a known pattern server-side — see
+    #: `service.clean_path` — so nothing that identifies one person can land
+    #: in a table the whole panel reads.
+    path: str | None = Field(default=None, max_length=200)
 
 
 class SignalBatch(BaseModel):
@@ -57,6 +61,7 @@ async def record_signals(
             category_id=item.category_id,
             query=item.query,
             value=item.value,
+            path=item.path,
         )
         recorded += signal is not None
     await db.commit()

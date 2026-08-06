@@ -14,7 +14,8 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel
 
 from app.deps import DbSession, Lang, Owner
-from app.modules.admin import metrics
+from app.modules.admin import analytics as analytics_service
+from app.modules.admin import forecast, metrics
 from app.modules.admin.metrics import KPI_EXPLANATIONS, Period
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -69,6 +70,34 @@ async def money(
         "refusals": await metrics.refusals(db, period),
         "conversion": await metrics.conversion(db, period),
     }
+
+
+@router.get("/analytics")
+async def analytics(
+    db: DbSession,
+    owner: Owner,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict:
+    """What people actually did here — visitors, the funnel, and the tables.
+
+    One response rather than five. The panel is read on a phone on mobile data,
+    and five round trips to draw one screen is what makes a dashboard feel
+    broken.
+    """
+    return await analytics_service.overview(db, _period(date_from, date_to, 30))
+
+
+@router.get("/forecast")
+async def forecast_next_week(db: DbSession, owner: Owner) -> dict:
+    """How many of each piece we expect to sell in the next seven days.
+
+    A decayed sales rate with a Poisson interval — see `forecast.py` for why
+    that and not something cleverer. Every row carries the reasoning that
+    produced it and how confident it is, because a number the owner cannot
+    interrogate is a number they will either over-trust or ignore.
+    """
+    return await forecast.next_seven_days(db)
 
 
 class Explanation(BaseModel):

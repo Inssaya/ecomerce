@@ -20,6 +20,10 @@ class RequestCreate(BaseModel):
     email: EmailStr | None = None
     city: str | None = Field(default=None, max_length=120)
     description: str = Field(min_length=10, max_length=4000)
+    #: What kind of thing it is. Optional, because a required field on this
+    #: form is a request that does not get sent — and a request in free text
+    #: is still worth having.
+    category_id: str | None = None
     budget: float | None = Field(default=None, gt=0)
     references: list[str] = Field(default_factory=list, max_length=6)
     lang: str = "en"

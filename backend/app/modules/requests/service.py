@@ -10,11 +10,12 @@ from __future__ import annotations
 from datetime import date, timedelta
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import conflict
 from app.core.security import new_order_reference, new_tracking_token
-from app.models import Order, OrderEvent, OrderItem, OrderStatus, User
+from app.models import Category, Order, OrderEvent, OrderItem, OrderStatus, User
 from app.models.requests import CustomRequest, RequestEvent, RequestStatus
 from app.modules.notify.service import notify_order_status, notify_request_status
 from app.modules.orders.service import delivery_fee_for
@@ -24,6 +25,16 @@ from app.modules.requests.schemas import Quote, RequestCreate
 async def raise_request(
     db: AsyncSession, body: RequestCreate, customer: User | None
 ) -> CustomRequest:
+    # A category we do not recognise is dropped rather than refused. The
+    # picker only ever offers real ones, so this is a stale tab or a bad
+    # client — and losing a lead over a dropdown would be the expensive way to
+    # be right. The description, which is the part that matters, is untouched.
+    category_id = body.category_id or None
+    if category_id and not await db.scalar(
+        select(Category.id).where(Category.id == category_id, Category.is_active.is_(True))
+    ):
+        category_id = None
+
     request = CustomRequest(
         reference=new_order_reference(),
         tracking_token=new_tracking_token(),
@@ -34,6 +45,7 @@ async def raise_request(
         city=body.city,
         lang=body.lang,
         description=body.description,
+        category_id=category_id,
         budget=body.budget,
         references=body.references,
         product_id=body.product_id,

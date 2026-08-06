@@ -53,7 +53,9 @@ export default function Store({ params }: { params: Promise<{ lang: string }> })
         setResults(found.items);
         // The heaviest signal there is (weight 4) — someone typing a word is
         // telling the workshop what to make far more plainly than a click.
-        track({ type: "search", query: typed });
+        // How many came back matters as much as the word: a search that found
+        // nothing is a person who wanted something we do not make.
+        track({ type: "search", query: typed, value: found.items.length });
       } catch {
         if (!cancelled) setResults([]);
       }

@@ -14,7 +14,7 @@ from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.agent import Toolbox, dispatch, spec
-from app.modules.admin import metrics
+from app.modules.admin import analytics, forecast, metrics
 from app.modules.admin.metrics import KPI_EXPLANATIONS, Period
 
 # Frozen constant — nothing that varies per request may appear here.
@@ -68,6 +68,25 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
     ) -> dict:
         return await metrics.best_sellers(db, period_from(date_from, date_to), limit=limit)
 
+    async def get_funnel(date_from: str | None = None, date_to: str | None = None) -> dict:
+        return await analytics.funnel(db, period_from(date_from, date_to))
+
+    async def get_piece_performance(
+        date_from: str | None = None, date_to: str | None = None
+    ) -> dict:
+        return await analytics.by_product(db, period_from(date_from, date_to))
+
+    async def get_screen_performance(
+        date_from: str | None = None, date_to: str | None = None
+    ) -> dict:
+        return await analytics.by_page(db, period_from(date_from, date_to))
+
+    async def get_unmet_demand(date_from: str | None = None, date_to: str | None = None) -> dict:
+        return await analytics.unmet_demand(db, period_from(date_from, date_to))
+
+    async def forecast_next_week() -> dict:
+        return await forecast.next_seven_days(db)
+
     async def explain_kpi(name: str) -> dict:
         """Teach, do not compute. A number the owner does not understand
         changes no decision."""
@@ -84,6 +103,11 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
         "what_to_make_next": what_to_make_next,
         "get_shelf_state": get_shelf_state,
         "get_best_sellers": get_best_sellers,
+        "get_funnel": get_funnel,
+        "get_piece_performance": get_piece_performance,
+        "get_screen_performance": get_screen_performance,
+        "get_unmet_demand": get_unmet_demand,
+        "forecast_next_week": forecast_next_week,
         "explain_kpi": explain_kpi,
     }
 
@@ -105,6 +129,35 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
             _PERIOD,
         ),
         spec("get_shelf_state", "What is running out and what has not sold in six weeks.", {}),
+        spec(
+            "get_funnel",
+            "Where people stop: came, saw a piece, opened one, read it, carted it, ordered. "
+            "Counts people, so the biggest drop between two steps is the biggest problem.",
+            _PERIOD,
+        ),
+        spec(
+            "get_piece_performance",
+            "Per piece: how many people saw it, opened it, stayed on it, carted it, bought it. "
+            "Use to answer which pieces are working and which are not.",
+            _PERIOD,
+        ),
+        spec(
+            "get_screen_performance",
+            "Per screen: how many people, how far they scrolled, how long they stayed.",
+            _PERIOD,
+        ),
+        spec(
+            "get_unmet_demand",
+            "Searches that came back with nothing, and custom requests grouped by category. "
+            "The most direct evidence of what to make that does not exist yet.",
+            _PERIOD,
+        ),
+        spec(
+            "forecast_next_week",
+            "Expected sales of each piece over the next seven days, with a range, how many to "
+            "make, and why. Say the range and the confidence, never the single number alone.",
+            {},
+        ),
         spec("get_best_sellers", "Pieces ranked by money collected.", {**_PERIOD, "limit": _INT}),
         spec(
             "explain_kpi",
