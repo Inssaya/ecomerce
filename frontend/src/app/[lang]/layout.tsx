@@ -8,6 +8,7 @@ import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
 import { AmbientProvider } from "@/components/ambient";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
+import { siteUrl } from "@/lib/server";
 
 /**
  * One family for both scripts.
@@ -54,10 +55,30 @@ export async function generateMetadata({
   params: Promise<{ lang: string }>;
 }): Promise<Metadata> {
   const { lang } = await params;
-  const t = translator(isLang(lang) ? lang : "en");
+  const language = isLang(lang) ? lang : "en";
+  const t = translator(language);
+  const title = `MoStyle — ${t("tagline")}`;
   return {
-    title: `MoStyle — ${t("tagline")}`,
+    // Everything below, and every page under this layout, may then write
+    // relative URLs — Next makes them absolute against this. Metadata that is
+    // relative is silently ignored by WhatsApp and by Google.
+    metadataBase: new URL(siteUrl),
+    title,
     description: t("taglineSupport"),
+    applicationName: "MoStyle",
+    alternates: {
+      canonical: `/${language}`,
+      languages: { en: "/en", ar: "/ar" },
+    },
+    openGraph: {
+      type: "website",
+      siteName: "MoStyle",
+      locale: language === "ar" ? "ar_MA" : "en_US",
+      url: `${siteUrl}/${language}`,
+      title,
+      description: t("taglineSupport"),
+    },
+    robots: { index: true, follow: true },
   };
 }
 

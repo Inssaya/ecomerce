@@ -149,6 +149,15 @@ export const api = {
   search: (lang: Lang, query: string) =>
     request<{ items: Piece[]; total: number }>(`/products?q=${encodeURIComponent(query)}`, { lang }),
 
+  /** "Tell me when you make another." Phone only — nobody makes an account
+   *  to be told about a hook. */
+  waitForMore: (lang: Lang, slug: string, body: { phone: string; email?: string }) =>
+    request<{ waiting: boolean }>(`/products/${slug}/alert`, {
+      lang,
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   categories: (lang: Lang) =>
     request<{ id: string; slug: string; name: string; children: unknown[] }[]>(`/categories`, {
       lang,
@@ -158,6 +167,10 @@ export const api = {
     request<OrderView>("/orders", { lang, method: "POST", body: JSON.stringify(body) }),
 
   order: (lang: Lang, token: string) => request<OrderView>(`/orders/track/${token}`, { lang }),
+
+  /** Back into an order without the link. Both fields must match. */
+  findOrder: (lang: Lang, body: { reference: string; phone: string }) =>
+    request<OrderView>("/orders/find", { lang, method: "POST", body: JSON.stringify(body) }),
 
   ask: (lang: Lang, body: unknown) =>
     request<RequestView>("/requests", { lang, method: "POST", body: JSON.stringify(body) }),

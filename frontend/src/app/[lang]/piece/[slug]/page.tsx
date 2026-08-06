@@ -1,227 +1,140 @@
-"use client";
+import type { Metadata } from "next";
 
-import Image from "next/image";
-import { useRouter } from "next/navigation";
-import { use, useEffect, useState } from "react";
-
-import { useCart } from "@/components/CartProvider";
-import { api, type PieceDetail } from "@/lib/api";
+import type { PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-import { track, trackDwell } from "@/lib/signals";
+import { fromApi, siteUrl } from "@/lib/server";
+
+import { PieceView } from "./PieceView";
 
 /**
- * One piece.
+ * The piece page, rendered on the server so it can be shared and found.
  *
- * Everything a refusal at the door would have been caused by belongs on this
- * screen: the real photo, how many exist, how it was made, and — for
- * made-to-order work — how many days it takes. One primary action, at the
- * bottom, where a thumb is.
+ * This screen was a client component, which meant the HTML anyone else
+ * received was empty: no title, no photo, no price. Two things broke because
+ * of that, and both of them matter more here than almost anywhere.
+ *
+ * The first is WhatsApp. In Morocco a piece is sold by someone sending the
+ * link to a cousin, and a link that unfurls as a grey box with a domain name
+ * is a link nobody taps. The card below — real photo, real title, real price —
+ * is the shop's cheapest and most-used shop window.
+ *
+ * The second is Google, which will index what it is given and was being given
+ * nothing.
+ *
+ * The interactive half stays in `PieceView`. This file only fetches once,
+ * hands it down as the first paint, and describes it.
  */
-export default function PiecePage({
+async function piece(lang: Lang, slug: string): Promise<PieceDetail | null> {
+  return fromApi<PieceDetail>(`/products/${slug}`, lang);
+}
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lang: string; slug: string }>;
+}): Promise<Metadata> {
+  const { lang: raw, slug } = await params;
+  const lang = (isLang(raw) ? raw : "en") as Lang;
+  const t = translator(lang);
+  const found = await piece(lang, slug);
+
+  if (!found) return { title: t("notFound") };
+
+  // What is actually true about it, in one line: the price, and either how
+  // many are left or how long it takes to make. No adjectives — the photo
+  // does that job, and a claim we cannot keep is worse than no claim.
+  const madeOrLeft =
+    found.kind === "workshop"
+      ? t("readyInDays", { n: found.lead_time_days ?? 0 })
+      : (found.available ?? 0) === 0
+        ? t("allGone")
+        : t("onlyMade", { n: found.pieces.length || (found.available ?? 0), left: found.available ?? 0 });
+
+  const description = `${money(found.price, lang)} · ${madeOrLeft} ${found.description || t("taglineSupport")}`
+    .replace(/\s+/g, " ")
+    .slice(0, 200);
+  const path = `/${lang}/piece/${found.slug}`;
+
+  return {
+    title: `${found.title} — MoStyle`,
+    description,
+    alternates: {
+      canonical: path,
+      // The same piece in both languages, declared to each other. Without this
+      // Google treats them as two competing pages for the same thing.
+      languages: {
+        en: `/en/piece/${found.slug}`,
+        ar: `/ar/piece/${found.slug}`,
+      },
+    },
+    openGraph: {
+      type: "website",
+      siteName: "MoStyle",
+      locale: lang === "ar" ? "ar_MA" : "en_US",
+      url: `${siteUrl}${path}`,
+      title: found.title,
+      description,
+      images: found.images.slice(0, 1).map((image) => ({
+        url: image.url,
+        alt: image.alt || found.title,
+        // WhatsApp will not fetch an image it has no dimensions for on the
+        // first tap, and shows the grey box instead.
+        width: 1200,
+        height: 1200,
+      })),
+    },
+    twitter: { card: "summary_large_image" },
+  };
+}
+
+export default async function PiecePage({
   params,
 }: {
   params: Promise<{ lang: string; slug: string }>;
 }) {
-  const { lang: raw, slug } = use(params);
+  const { lang: raw, slug } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
-  const t = translator(lang);
-  const router = useRouter();
-  const cart = useCart();
-
-  const [piece, setPiece] = useState<PieceDetail | null>(null);
-  const [missing, setMissing] = useState(false);
-  const [chosen, setChosen] = useState<string | null>(null);
-  const [added, setAdded] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .piece(lang, slug)
-      .then((result) => {
-        if (cancelled) return;
-        setPiece(result);
-        setChosen(result.variants[0]?.id ?? null);
-      })
-      .catch(() => !cancelled && setMissing(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [lang, slug]);
-
-  // How long they actually looked, reported on the way out. This is the
-  // strongest passive signal there is — far better than a click.
-  useEffect(() => {
-    if (!piece) return;
-    const startedAt = Date.now();
-    return () => trackDwell(piece.id, startedAt);
-  }, [piece]);
-
-  if (missing) {
-    return <p className="page pt-20 text-center text-ink-soft">{t("notFound")}</p>;
-  }
-  if (!piece) {
-    return (
-      <div className="page pt-6" aria-hidden>
-        <div className="aspect-square rounded-3xl bg-clay-soft/60 animate-pulse" />
-      </div>
-    );
-  }
-
-  const variant = piece.variants.find((option) => option.id === chosen) ?? null;
-  const price = variant?.price ?? piece.price;
-  const left = variant ? variant.available : piece.available;
-  const soldOut = piece.kind === "shelf" && (left ?? 0) === 0;
-
-  function addToCart() {
-    if (!piece) return;
-    cart.add({
-      productId: piece.id,
-      slug: piece.slug,
-      variantId: variant?.id ?? null,
-      title: piece.title,
-      option: variant?.option ?? "",
-      price,
-      image: piece.images[0]?.url ?? null,
-      available: piece.kind === "shelf" ? left : null,
-    });
-    track({ type: "add_to_cart", product_id: piece.id });
-    setAdded(true);
-    setTimeout(() => router.push(`/${lang}/cart`), 600);
-  }
+  const initial = await piece(lang, slug);
 
   return (
-    <div className="pb-32">
-      <div className="relative aspect-square bg-clay-soft">
-        {piece.images[0] ? (
-          <Image
-            src={piece.images[0].url}
-            alt={piece.images[0].alt || piece.title}
-            fill
-            sizes="100vw"
-            className="object-cover"
-            priority
-          />
-        ) : null}
-      </div>
-
-      {piece.images.length > 1 ? (
-        <div className="flex gap-2 overflow-x-auto px-5 pt-3 pb-1 -mx-0">
-          {piece.images.slice(1).map((image) => (
-            <div
-              key={image.id}
-              className="relative h-20 w-20 shrink-0 rounded-2xl overflow-hidden bg-clay-soft"
-            >
-              <Image src={image.url} alt={image.alt || piece.title} fill sizes="80px" className="object-cover" />
-            </div>
-          ))}
-        </div>
+    <>
+      {/*
+        The same facts again, for a machine. This is what puts a price and an
+        in-stock mark under the result in Google rather than a bare blue link,
+        and it is written from the same fetch, so it cannot drift from what the
+        page says.
+      */}
+      {initial ? (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema(initial, lang)) }}
+        />
       ) : null}
-
-      <div className="page pt-6">
-        <h1 className="text-[26px] font-semibold leading-tight tracking-tight">{piece.title}</h1>
-        <p className="stamp mt-2 text-[20px] font-semibold">{money(price, lang)}</p>
-
-        <p className="mt-1.5 text-[14px] text-ink-soft">
-          {piece.kind === "workshop"
-            ? `${t("madeToOrder")} ${t("readyInDays", { n: piece.lead_time_days ?? 0 })}`
-            : soldOut
-              ? t("allGone")
-              : left === 1
-                ? t("lastOne")
-                : t("onlyMade", { n: piece.pieces.length || (left ?? 0), left: left ?? 0 })}
-        </p>
-
-        {piece.description ? (
-          <p className="mt-6 text-[16px] leading-relaxed whitespace-pre-line">{piece.description}</p>
-        ) : null}
-
-        {piece.variants.length > 0 ? (
-          <div className="mt-7">
-            <p className="label">{t("choose")}</p>
-            <div className="flex flex-wrap gap-2">
-              {piece.variants.map((option) => {
-                const gone = piece.kind === "shelf" && option.available === 0;
-                return (
-                  <button
-                    key={option.id}
-                    type="button"
-                    disabled={gone}
-                    onClick={() => setChosen(option.id)}
-                    className={`tap rounded-2xl px-5 text-[15px] font-medium transition-colors duration-gentle ${
-                      chosen === option.id
-                        ? "bg-clay text-white"
-                        : gone
-                          ? "bg-sand/50 text-ink-soft/50 line-through"
-                          : "bg-clay-soft text-ink"
-                    }`}
-                  >
-                    {option.option}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        {piece.story ? (
-          <section className="mt-8 card p-5 shadow-soft">
-            <h2 className="text-[17px] font-semibold">{t("howItWasMade")}</h2>
-            <p className="mt-2 text-[15px] text-ink-soft leading-relaxed whitespace-pre-line">
-              {piece.story}
-            </p>
-          </section>
-        ) : null}
-
-        {/*
-          The batch, drawn as what it is.
-
-          One mark per object we made. Solid means it is still here; struck
-          through means it has gone. Seeing three of four crossed out is
-          scarcity you can check, which is the opposite of a countdown timer —
-          and it is the one claim on this site no reseller can make, because
-          they do not know how many of anything exists.
-        */}
-        {piece.show_piece_numbers && piece.pieces.length > 0 ? (
-          <section className="mt-8">
-            <h2 className="text-[17px] font-semibold">{t("weMadeThese")}</h2>
-            <div className="tally mt-3">
-              {piece.pieces.map((one) => {
-                const here = one.state === "available";
-                return (
-                  <span
-                    key={one.id}
-                    title={one.note || undefined}
-                    className={here ? "tally-here" : "tally-gone"}
-                    aria-label={`${t("piece")} ${one.label} — ${here ? t("stillHere") : t("gone")}`}
-                  >
-                    {String(one.number).padStart(2, "0")}
-                  </span>
-                );
-              })}
-            </div>
-            <p className="mt-2.5 text-[13px] text-ink-soft">
-              {piece.made_on ? `${t("madeIn")} ${piece.made_on}. ` : ""}
-              {t("tallyMeaning")}
-            </p>
-          </section>
-        ) : null}
-      </div>
-
-      <div
-        className="fixed bottom-16 inset-x-0 z-10 bg-cream/90 backdrop-blur-md border-t border-sand"
-        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-      >
-        <div className="page py-3">
-          <button
-            type="button"
-            onClick={addToCart}
-            disabled={soldOut || added}
-            className="btn-primary w-full"
-          >
-            {added ? t("added") : soldOut ? t("allGone") : t("addToCart")}
-          </button>
-        </div>
-      </div>
-    </div>
+      <PieceView lang={lang} slug={slug} initial={initial} />
+    </>
   );
+}
+
+function productSchema(found: PieceDetail, lang: Lang) {
+  const inStock = found.kind === "workshop" || (found.available ?? 0) > 0;
+  return {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    name: found.title,
+    description: found.description || undefined,
+    image: found.images.map((image) => image.url),
+    sku: found.slug,
+    brand: { "@type": "Brand", name: "MoStyle" },
+    offers: {
+      "@type": "Offer",
+      url: `${siteUrl}/${lang}/piece/${found.slug}`,
+      price: found.price,
+      priceCurrency: "MAD",
+      availability: inStock
+        ? "https://schema.org/InStock"
+        : "https://schema.org/OutOfStock",
+      // Cash on delivery, stated where a machine can read it too.
+      acceptedPaymentMethod: "http://purl.org/goodrelations/v1#COD",
+    },
+  };
 }

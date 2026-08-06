@@ -84,19 +84,26 @@ backend/app/
 cd frontend
 npm install
 npm run lint && npm run type-check
-INTERNAL_API_URL=http://127.0.0.1:8000 npm run build
+INTERNAL_API_URL=http://127.0.0.1:8000 NEXT_PUBLIC_SITE_URL=https://mostyle.ma npm run build
 ```
 
 `INTERNAL_API_URL` matters at **build** time, not run time: Next evaluates
 `rewrites()` when it builds and writes the result into the routes manifest. In
 Docker the default already matches the compose service name, so only a local
-build outside Docker needs it set.
+build outside Docker needs it set. The same variable is what server-rendered
+pages read the API through (`lib/server.ts`), because `/api` only resolves in a
+browser.
+
+`NEXT_PUBLIC_SITE_URL` is the public origin, and it has to be right: every
+canonical link, `hreflang`, sitemap entry and share image is absolute against
+it, and WhatsApp and Google both ignore metadata that is not.
 
 ```
 frontend/src/
-  app/[lang]/    landing · store · piece · cart · checkout · track · ask · workshop
-  components/    Chrome · PieceCard · CartProvider · Assistant
-  lib/           api · admin · i18n · signals · fingerprint
+  app/[lang]/    landing · store · piece · cart · checkout · track · ask · orders · workshop
+  app/           robots.ts · sitemap.ts
+  components/    Chrome · PieceCard · CartProvider · Assistant · WaitForMore
+  lib/           api · server · admin · i18n · signals · fingerprint
 ```
 
 Every route lives under `/en` or `/ar`. There is no third language and no

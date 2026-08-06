@@ -1,26 +1,8 @@
 import Link from "next/link";
 
+import type { WorkshopNumbers } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-
-/**
- * The workshop's own count, read on the server so it is in the first paint.
- *
- * Never throws: a landing page that fails because a counter is unavailable is
- * worse than a landing page without a counter.
- */
-async function workshopNumbers(lang: Lang) {
-  const base = process.env.INTERNAL_API_URL ?? "http://api:8000";
-  try {
-    const response = await fetch(`${base}/api/workshop?lang=${lang}`, {
-      // A count that is a minute stale is fine; a slow first paint is not.
-      next: { revalidate: 60 },
-    });
-    if (!response.ok) return null;
-    return (await response.json()) as { pieces_made: number; pieces_here: number };
-  } catch {
-    return null;
-  }
-}
+import { fromApi } from "@/lib/server";
 
 /**
  * The landing page. One idea, one action.
@@ -33,7 +15,10 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
-  const numbers = await workshopNumbers(lang);
+  // A count a minute stale is fine; a slow first paint is not. Never throws —
+  // a landing page that fails because a counter was unavailable is worse than
+  // a landing page without a counter.
+  const numbers = await fromApi<WorkshopNumbers>("/workshop", lang);
 
   return (
     <div className="page pt-14 pb-8">
@@ -97,6 +82,19 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
           <p className="text-ink font-medium">{t("ifWeDontHaveIt")}</p>
         </div>
       </section>
+
+      {/*
+        Quiet, and last, because it is for the small number of people who are
+        already waiting on a package rather than the ones deciding whether to
+        buy. They are the ones most likely to be back on this page, though —
+        the link they were sent is the thing they have lost.
+      */}
+      <p className="mt-10 text-center text-[14px] text-ink-soft">
+        {t("alreadyOrdered")}{" "}
+        <Link href={`/${lang}/orders`} className="font-medium text-clay underline-offset-4 underline">
+          {t("findYourOrder")}
+        </Link>
+      </p>
     </div>
   );
 }

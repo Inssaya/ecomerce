@@ -59,6 +59,28 @@ const copy = {
   addToCart: ["Add to cart", "أضف إلى السلة"],
   added: ["In your cart", "في سلتك"],
 
+  // Looking for something.
+  search: ["Search", "بحث"],
+  searchPlaceholder: ["Search for a piece", "ابحث عن قطعة"],
+  searchNothing: [
+    "Nothing here matches that — but we can make it.",
+    "لا شيء هنا يطابق ذلك — لكن يمكننا صنعه.",
+  ],
+  searchClear: ["Clear", "مسح"],
+  searchFound: ["{n} pieces", "{n} قطعة"],
+
+  // Waiting on a piece that has gone.
+  tellMeWhenMade: ["Tell me when you make another", "أخبرني حين نصنع أخرى"],
+  tellMeWhy: [
+    "One message on this number when it is back on the shelf. Nothing else, ever.",
+    "رسالة واحدة على هذا الرقم حين تعود إلى الرف. لا شيء غير ذلك، أبداً.",
+  ],
+  tellMeDone: [
+    "We'll tell you. You are the reason we make another.",
+    "سنخبرك. أنت سبب صنعنا لأخرى.",
+  ],
+  tellMeSend: ["Tell me", "أخبرني"],
+
   // Cart and checkout.
   yourCart: ["Your cart", "سلتك"],
   cartEmpty: ["Nothing in here yet.", "لا شيء هنا بعد."],
@@ -85,6 +107,15 @@ const copy = {
   orderPlaced: ["We have your order", "وصلنا طلبك"],
   yourReference: ["Your reference", "رقمك"],
   trackIt: ["Follow your order", "تابع طلبك"],
+  alreadyOrdered: ["Already ordered?", "طلبت من قبل؟"],
+  findYourOrder: ["Find your order", "ابحث عن طلبك"],
+  findYourOrderLead: [
+    "Lost the link? Your reference and the number you gave us is enough.",
+    "ضاع منك الرابط؟ رقم الطلب والهاتف الذي أعطيتنا يكفيان.",
+  ],
+  referenceHint: ["The eight characters we sent you, like 7KQ4M2XP.", "الرموز الثمانية التي أرسلناها، مثل 7KQ4M2XP."],
+  findIt: ["Show me my order", "أرني طلبي"],
+  findingIt: ["Looking…", "جارٍ البحث…"],
   orderStatus: {
     placed: ["We have it", "وصلنا"],
     confirmed: ["Confirmed", "مؤكَّد"],
