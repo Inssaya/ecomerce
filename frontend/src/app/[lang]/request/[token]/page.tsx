@@ -64,7 +64,7 @@ export default function RequestPage({
   return (
     <div className="page pt-8 pb-10">
       <p className="text-[15px] text-ink-soft">{t("yourReference")}</p>
-      <h1 className="text-[30px] font-semibold tracking-tight tabular-nums">{request.reference}</h1>
+      <h1 className="stamp text-[30px] font-semibold">{request.reference}</h1>
 
       <p className="mt-6 text-[19px] font-semibold">
         {statusLabel(lang, "requestStatus", request.status)}
@@ -78,7 +78,7 @@ export default function RequestPage({
         <section className="mt-4 card p-5 shadow-soft">
           <div className="flex justify-between text-[17px] font-semibold">
             <span>{t("theQuote")}</span>
-            <span>{money(request.quote_price, lang)}</span>
+            <span className="stamp">{money(request.quote_price, lang)}</span>
           </div>
           {request.promised_for ? (
             <p className="mt-1.5 text-[15px] text-ink-soft">

@@ -155,7 +155,7 @@ function Figure({ label, value, note }: { label: string; value: string; note?: s
   return (
     <div className="card p-4 shadow-soft">
       <p className="text-[13px] text-ink-soft">{label}</p>
-      <p className="mt-1 text-[24px] font-semibold tabular-nums">{value}</p>
+      <p className="stamp mt-1 text-[24px] font-semibold">{value}</p>
       {note ? <p className="mt-0.5 text-[12px] text-ink-soft">{note}</p> : null}
     </div>
   );
@@ -299,7 +299,7 @@ function TheMoney({ lang, onExpire }: { lang: Lang; onExpire: () => void }) {
           {lang === "ar" ? "طرود مرفوضة" : "Packages refused"}
         </p>
         <p
-          className={`mt-1 text-[32px] font-semibold tabular-nums ${overTarget ? "text-warn" : "text-good"}`}
+          className={`stamp mt-1 text-[32px] font-semibold ${overTarget ? "text-warn" : "text-good"}`}
         >
           {missed}%
         </p>

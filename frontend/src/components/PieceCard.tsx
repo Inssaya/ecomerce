@@ -66,7 +66,7 @@ export function PieceCard({ piece, lang, priority }: { piece: Piece; lang: Lang;
 
       <div className="p-3.5">
         <h3 className="text-[15px] font-medium leading-snug line-clamp-2">{piece.title}</h3>
-        <p className="mt-1.5 text-[15px] font-semibold">
+        <p className="stamp mt-1.5 text-[15px] font-semibold">
           {money(piece.price, lang)}
           {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
         </p>

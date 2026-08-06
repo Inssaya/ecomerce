@@ -119,7 +119,7 @@ export default function PiecePage({
 
       <div className="page pt-6">
         <h1 className="text-[26px] font-semibold leading-tight tracking-tight">{piece.title}</h1>
-        <p className="mt-2 text-[20px] font-semibold">{money(price, lang)}</p>
+        <p className="stamp mt-2 text-[20px] font-semibold">{money(price, lang)}</p>
 
         <p className="mt-1.5 text-[14px] text-ink-soft">
           {piece.kind === "workshop"
@@ -172,22 +172,37 @@ export default function PiecePage({
           </section>
         ) : null}
 
-        {/* Honest scarcity: these are the actual objects, numbered, because we
-            made exactly this many. Never a countdown. */}
+        {/*
+          The batch, drawn as what it is.
+
+          One mark per object we made. Solid means it is still here; struck
+          through means it has gone. Seeing three of four crossed out is
+          scarcity you can check, which is the opposite of a countdown timer —
+          and it is the one claim on this site no reseller can make, because
+          they do not know how many of anything exists.
+        */}
         {piece.show_piece_numbers && piece.pieces.length > 0 ? (
-          <section className="mt-6">
-            <h2 className="text-[17px] font-semibold">{t("piece")}</h2>
-            <div className="mt-3 flex flex-wrap gap-2">
-              {piece.pieces.map((one) => (
-                <span
-                  key={one.id}
-                  title={one.note || undefined}
-                  className="rounded-xl bg-clay-soft px-3 py-1.5 text-[13px] font-medium tabular-nums"
-                >
-                  {one.label}
-                </span>
-              ))}
+          <section className="mt-8">
+            <h2 className="text-[17px] font-semibold">{t("weMadeThese")}</h2>
+            <div className="tally mt-3">
+              {piece.pieces.map((one) => {
+                const here = one.state === "available";
+                return (
+                  <span
+                    key={one.id}
+                    title={one.note || undefined}
+                    className={here ? "tally-here" : "tally-gone"}
+                    aria-label={`${t("piece")} ${one.label} — ${here ? t("stillHere") : t("gone")}`}
+                  >
+                    {String(one.number).padStart(2, "0")}
+                  </span>
+                );
+              })}
             </div>
+            <p className="mt-2.5 text-[13px] text-ink-soft">
+              {piece.made_on ? `${t("madeIn")} ${piece.made_on}. ` : ""}
+              {t("tallyMeaning")}
+            </p>
           </section>
         ) : null}
       </div>

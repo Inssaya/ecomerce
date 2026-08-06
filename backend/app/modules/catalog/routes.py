@@ -133,10 +133,12 @@ async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
 
     left = await service.availability(db, [product.id])
     per_variant = await service.variant_availability(db, product.id)
+    # The whole batch, not only what is left: the page shows what was made and
+    # strikes through what has gone. `kept` pieces are ours, never offered.
     pieces = list(
         await db.scalars(
             select(Piece)
-            .where(Piece.product_id == product.id, Piece.state == PieceState.available)
+            .where(Piece.product_id == product.id, Piece.state != PieceState.kept)
             .order_by(Piece.number)
         )
     )
@@ -469,3 +471,37 @@ async def delete_photo(media_id: str, db: DbSession, owner: Owner) -> None:
             remaining.is_primary = True
     await db.commit()
     await delete_object(url)
+
+
+@router.get("/workshop")
+async def workshop_numbers(db: DbSession) -> dict:
+    """What the workshop has actually made.
+
+    Real counts, straight from the pieces table. This is the most
+    characteristic thing we can say and the one thing a reseller cannot say at
+    all: they do not know how many of anything exists, because they did not
+    make it.
+    """
+    made = await db.scalar(select(func.count()).select_from(Piece)) or 0
+    here = (
+        await db.scalar(
+            select(func.count()).select_from(Piece).where(Piece.state == PieceState.available)
+        )
+        or 0
+    )
+    kinds = (
+        await db.execute(
+            select(Product.kind, func.count())
+            .where(Product.status == ProductStatus.active)
+            .group_by(Product.kind)
+        )
+    ).all()
+    latest = await db.scalar(select(func.max(Piece.made_on)))
+    counts = {kind.value if hasattr(kind, "value") else str(kind): n for kind, n in kinds}
+    return {
+        "pieces_made": made,
+        "pieces_here": here,
+        "on_the_shelf": counts.get("shelf", 0),
+        "made_to_order": counts.get("workshop", 0),
+        "last_made_on": latest.isoformat() if latest else None,
+    }

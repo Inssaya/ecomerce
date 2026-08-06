@@ -132,7 +132,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
       <div className="mt-7 card p-5 shadow-soft">
         <div className="flex justify-between text-[17px] font-semibold">
           <span>{t("total")}</span>
-          <span>{money(total + (total >= 500 ? 0 : 30), lang)}</span>
+          <span className="stamp">{money(total + (total >= 500 ? 0 : 30), lang)}</span>
         </div>
         <p className="mt-2 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>
       </div>

@@ -154,9 +154,12 @@ def to_detail(
                     number=piece.number,
                     batch_size=piece.batch_size,
                     label=piece.label,
+                    state=piece.state.value,
                     made_on=piece.made_on,
                     photo=piece.photo_url,
-                    note=piece.note(lang),
+                    # A note belongs to one object and only matters while it is
+                    # still buyable.
+                    note=piece.note(lang) if piece.state is PieceState.available else "",
                 )
                 for piece in pieces
             ]

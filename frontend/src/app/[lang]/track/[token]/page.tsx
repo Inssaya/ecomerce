@@ -35,7 +35,7 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
   return (
     <div className="page pt-8 pb-10">
       <p className="text-[15px] text-ink-soft">{t("yourReference")}</p>
-      <h1 className="text-[30px] font-semibold tracking-tight tabular-nums">{order.reference}</h1>
+      <h1 className="stamp text-[30px] font-semibold">{order.reference}</h1>
 
       <p className="mt-6 text-[19px] font-semibold">
         {statusLabel(lang, "orderStatus", order.status)}
@@ -85,7 +85,7 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
       <div className="mt-5 card p-5 shadow-soft">
         <div className="flex justify-between text-[17px] font-semibold">
           <span>{t("total")}</span>
-          <span>{money(order.total, lang)}</span>
+          <span className="stamp">{money(order.total, lang)}</span>
         </div>
         <p className="mt-2 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>
       </div>

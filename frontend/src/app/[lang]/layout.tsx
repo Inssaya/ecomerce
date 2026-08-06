@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Noto_Naskh_Arabic } from "next/font/google";
+import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -8,10 +8,38 @@ import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
 
-const latin = Inter({ subsets: ["latin"], variable: "--font-latin", display: "swap" });
-const arabic = Noto_Naskh_Arabic({
-  subsets: ["arabic"],
-  variable: "--font-arabic",
+/**
+ * One family for both scripts.
+ *
+ * The first draft paired Inter with a separate Arabic face, which is two
+ * mistakes at once. Inter is the single most recognisable tell of a generated
+ * design — it is what every AI-built site defaults to — and pairing a Latin
+ * webfont with an unrelated Arabic one almost never matches optically, because
+ * the two were drawn by different hands for different proportions.
+ *
+ * IBM Plex Sans Arabic carries Latin and Arabic drawn together, for interfaces.
+ * Neither script dominates and there is nothing to keep in sync.
+ */
+const text = IBM_Plex_Sans_Arabic({
+  subsets: ["arabic", "latin"],
+  weight: ["300", "400", "500", "600"],
+  variable: "--font-text",
+  display: "swap",
+});
+
+/**
+ * The workshop's own hand.
+ *
+ * A workshop numbers what it makes. Every number on this site — a piece's
+ * 04/12, an order reference, a price, a count — is set in the mono cut of the
+ * same superfamily, so the numerals read as stamped rather than typed. This is
+ * the one place the design is allowed to be loud; everything around it stays
+ * quiet.
+ */
+const stamp = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-stamp",
   display: "swap",
 });
 
@@ -54,8 +82,8 @@ export default async function LangLayout({
   const language = lang as Lang;
 
   return (
-    <html lang={language} dir={dir(language)} className={`${latin.variable} ${arabic.variable}`}>
-      <body className={language === "ar" ? "font-[var(--font-arabic)]" : latin.className}>
+    <html lang={language} dir={dir(language)} className={`${text.variable} ${stamp.variable}`}>
+      <body className={text.className}>
         <CartProvider>
           <Chrome lang={language}>{children}</Chrome>
         </CartProvider>

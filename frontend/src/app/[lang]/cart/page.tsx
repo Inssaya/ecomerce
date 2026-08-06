@@ -52,14 +52,14 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
             <div className="flex-1 min-w-0">
               <p className="text-[15px] font-medium leading-snug line-clamp-2">{line.title}</p>
               {line.option ? <p className="text-[13px] text-ink-soft">{line.option}</p> : null}
-              <p className="mt-0.5 text-[15px] font-semibold">{money(line.price, lang)}</p>
+              <p className="stamp mt-0.5 text-[15px] font-semibold">{money(line.price, lang)}</p>
 
               <div className="mt-2 flex items-center gap-1">
                 <Stepper
                   label="−"
                   onClick={() => setQuantity(line.productId, line.variantId, line.quantity - 1)}
                 />
-                <span className="w-9 text-center text-[15px] tabular-nums">{line.quantity}</span>
+                <span className="stamp w-9 text-center text-[15px]">{line.quantity}</span>
                 <Stepper
                   label="+"
                   disabled={line.available !== null && line.quantity >= line.available}
@@ -125,7 +125,7 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
   return (
     <div className={`flex justify-between ${strong ? "text-[17px] font-semibold pt-2 border-t border-sand" : ""}`}>
       <dt className={strong ? "" : "text-ink-soft"}>{label}</dt>
-      <dd>{value}</dd>
+      <dd className="stamp">{value}</dd>
     </div>
   );
 }

@@ -455,3 +455,32 @@ async def test_the_phone_number_is_normalised_to_something_dialable(
         },
     )
     assert order.json()["customer_phone"] == "0612345678"
+
+
+async def test_the_page_shows_what_was_made_not_only_what_is_left(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    """Three of four struck through is honest scarcity you can see. A bare
+    "1 left" is a claim the visitor has to take on trust — and it is exactly
+    what every reseller's fake countdown looks like."""
+    piece = await shelf_piece(client, owner_headers, made=4, numbered=True)
+    await client.post(
+        "/api/orders",
+        json={
+            "full_name": "Omar T.",
+            "phone": "0611111111",
+            "address": CASABLANCA,
+            "items": [{"product_id": piece["id"], "quantity": 3}],
+        },
+    )
+
+    page = (await client.get(f"/api/products/{piece['slug']}")).json()
+    assert page["available"] == 1
+    # The whole batch is still on the page, with what happened to each.
+    assert [item["label"] for item in page["pieces"]] == ["01/04", "02/04", "03/04", "04/04"]
+    assert [item["state"] for item in page["pieces"]] == [
+        "reserved",
+        "reserved",
+        "reserved",
+        "available",
+    ]

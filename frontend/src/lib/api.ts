@@ -26,11 +26,27 @@ export interface PieceDetail extends Piece {
   story: string;
   images: { id: string; url: string; alt: string; is_primary: boolean }[];
   variants: { id: string; sku: string; option: string; price: number; available: number | null }[];
-  pieces: { id: string; number: number; batch_size: number; label: string; note: string }[];
+  pieces: {
+    id: string;
+    number: number;
+    batch_size: number;
+    label: string;
+    state: "available" | "reserved" | "sold" | "kept";
+    note: string;
+  }[];
   show_piece_numbers: boolean;
   batch_closed: boolean;
   made_on: string | null;
   created_at: string;
+}
+
+/** What the workshop has actually made. Real counts, no rounding up. */
+export interface WorkshopNumbers {
+  pieces_made: number;
+  pieces_here: number;
+  on_the_shelf: number;
+  made_to_order: number;
+  last_made_on: string | null;
 }
 
 export interface OrderView {
@@ -127,6 +143,8 @@ export const api = {
     request<{ items: Piece[]; page: number; has_more: boolean }>(`/feed?page=${page}`, { lang }),
 
   piece: (lang: Lang, slug: string) => request<PieceDetail>(`/products/${slug}`, { lang }),
+
+  workshop: (lang: Lang) => request<WorkshopNumbers>("/workshop", { lang }),
 
   search: (lang: Lang, query: string) =>
     request<{ items: Piece[]; total: number }>(`/products?q=${encodeURIComponent(query)}`, { lang }),

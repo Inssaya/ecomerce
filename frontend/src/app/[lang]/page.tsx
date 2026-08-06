@@ -3,6 +3,26 @@ import Link from "next/link";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 
 /**
+ * The workshop's own count, read on the server so it is in the first paint.
+ *
+ * Never throws: a landing page that fails because a counter is unavailable is
+ * worse than a landing page without a counter.
+ */
+async function workshopNumbers(lang: Lang) {
+  const base = process.env.INTERNAL_API_URL ?? "http://api:8000";
+  try {
+    const response = await fetch(`${base}/api/workshop?lang=${lang}`, {
+      // A count that is a minute stale is fine; a slow first paint is not.
+      next: { revalidate: 60 },
+    });
+    if (!response.ok) return null;
+    return (await response.json()) as { pieces_made: number; pieces_here: number };
+  } catch {
+    return null;
+  }
+}
+
+/**
  * The landing page. One idea, one action.
  *
  * The old homepage dumped four storefronts and every product at once, which is
@@ -13,6 +33,7 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
+  const numbers = await workshopNumbers(lang);
 
   return (
     <div className="page pt-14 pb-8">
@@ -20,6 +41,29 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
         <h1 className="text-[34px] leading-[1.15] font-semibold tracking-tight">{t("tagline")}</h1>
         <p className="mt-4 text-[17px] text-ink-soft leading-relaxed">{t("taglineSupport")}</p>
       </section>
+
+      {/*
+        Open with the most characteristic thing in the subject's world.
+
+        For a workshop that is the count of what it has made — a real number,
+        read from the pieces table, not a marketing figure. It is also the one
+        sentence a reseller cannot write: they have no idea how many of
+        anything exists, because they did not make any of it.
+      */}
+      {numbers && numbers.pieces_made > 0 ? (
+        <section className="mt-10 flex items-baseline gap-6 border-y border-sand py-5">
+          <div>
+            <p className="stamp text-[38px] font-semibold leading-none">{numbers.pieces_made}</p>
+            <p className="mt-1.5 text-[13px] text-ink-soft">{t("piecesMade")}</p>
+          </div>
+          <div>
+            <p className="stamp text-[38px] font-semibold leading-none text-clay">
+              {numbers.pieces_here}
+            </p>
+            <p className="mt-1.5 text-[13px] text-ink-soft">{t("stillOnTheShelf")}</p>
+          </div>
+        </section>
+      ) : null}
 
       <section className="mt-12 space-y-4">
         <Door

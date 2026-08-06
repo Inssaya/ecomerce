@@ -27,12 +27,19 @@ class CategoryNode(BaseModel):
 
 
 class PieceOut(BaseModel):
-    """One physical object, offered by name."""
+    """One physical object, offered by name.
+
+    The whole batch is returned, sold ones included, so the page can show what
+    was made rather than only what is left. Seeing three of four struck through
+    is honest scarcity; a bare "1 left" is a claim you have to take on trust.
+    """
 
     id: str
     number: int
     batch_size: int
     label: str
+    #: available | reserved | sold | kept
+    state: str
     made_on: date | None = None
     photo: str | None = None
     note: str = ""
