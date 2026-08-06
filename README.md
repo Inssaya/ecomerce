@@ -96,7 +96,33 @@ browser.
 
 `NEXT_PUBLIC_SITE_URL` is the public origin, and it has to be right: every
 canonical link, `hreflang`, sitemap entry and share image is absolute against
-it, and WhatsApp and Google both ignore metadata that is not.
+it, and WhatsApp and Google both ignore metadata that is not. Set it wrong and
+the site tells Google the real version of every page lives somewhere else.
+
+`MEDIA_HOSTNAMES` is a comma-separated list of hosts photographs may be loaded
+from — the object storage domain, which is usually *not* the site's own. Next
+refuses images from unlisted hosts, so an empty value in production means every
+product photo is silently broken. MinIO on `localhost:9000` and `minio:9000` is
+always allowed, so local development needs nothing set.
+
+### Going live on a domain
+
+Four values have to change together, and they are in three different places:
+
+| Where | Value | Set it to |
+|---|---|---|
+| Frontend build | `NEXT_PUBLIC_SITE_URL` | `https://yourdomain` |
+| Frontend build | `MEDIA_HOSTNAMES` | your object storage host |
+| Frontend build | `INTERNAL_API_URL` | where the API answers |
+| Backend | `APP_URL` | `https://yourdomain` |
+
+`APP_URL` is the one people forget. The backend builds tracking links, quote
+links and password-reset links from it and puts them in emails — if it still
+says `localhost:3000`, every link the shop sends a customer is dead.
+
+Pick one hostname and redirect the other. Serving both `example.ma` and
+`www.example.ma` splits the ranking of every page between two URLs, and the
+canonical tags will name only one of them.
 
 ```
 frontend/src/

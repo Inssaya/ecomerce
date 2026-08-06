@@ -12,10 +12,20 @@
  */
 import type { Lang } from "./i18n";
 
-/** Where the browser thinks the site is. Metadata has to be absolute — a
- *  relative og:image is not fetched by WhatsApp or by Google. */
+/**
+ * Where the browser thinks the site is.
+ *
+ * Metadata has to be absolute — a relative og:image is not fetched by WhatsApp
+ * or by Google — so every canonical link, hreflang pair, sitemap entry and
+ * share card in the site is built from this one value.
+ *
+ * Which makes it the single most consequential environment variable here: set
+ * it wrong and the site politely tells Google that the real version of every
+ * page lives on a domain you do not own. Set at **build** time, because most
+ * of these pages are prerendered.
+ */
 export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "https://mostyle.ma"
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 
 function apiBase(): string {
