@@ -10,6 +10,10 @@ front because a design tool will not know them: **no stock photography, ever**,
 and **no invented scarcity** — no countdown, no "only 3 left!" unless three
 physically exist.
 
+The brief deliberately asks for far more than will be used. Generating options
+is cheap; the expensive thing is never seeing the one that would have been
+right. Ask for everything, keep a fraction.
+
 ---
 
 ## The prompt
@@ -54,21 +58,50 @@ WHAT ALREADY EXISTS — please keep it
   letterforms.
 
 WHAT I WANT FROM YOU
-1. A wordmark for "MoStyle". It is currently just text in the body font. It
-   should feel made rather than branded — closer to something stamped into a
-   finished piece than to a startup logo. Works at 20px in a header and on a
-   sticker on a box. One colour.
-2. The product page, laid out with a real photograph in it. I have designed it
-   against empty grey squares and I cannot tell whether the proportions hold
-   when a real object is in the frame. Show it both ways: a shelf piece with
-   its batch of numbers, and a made-to-order piece with its lead time.
-3. The moment after someone orders. Right now it is a reference number and a
-   list of steps. In a market where people pay cash at the door, this screen is
-   where trust is either built or lost, and I think it is the weakest thing we
-   have.
-4. One idea I have not thought of. Ground it in the workshop — the bench, the
-   machines, the way a maker marks and numbers things — not in generic
-   e-commerce.
+Do all of it. Do not ration yourself, do not give me one option per screen when
+you could give me three, and do not stop early to be economical. I would rather
+throw away half of what you make than never see it.
+
+THE IDENTITY
+1. A wordmark for "MoStyle". Currently just text in the body font. It should
+   feel made rather than branded — closer to something stamped into a finished
+   piece than to a startup logo. Works at 20px in a header, on a sticker on a
+   box, and embossed on a card. Give me at least four directions, then push the
+   strongest one furthest.
+2. The mark applied: the header, a shipping sticker, the handwritten card that
+   goes in every box, a WhatsApp profile picture, a favicon.
+
+EVERY SCREEN, AT PHONE WIDTH
+3. Landing. It currently opens on the position and a real count of what we have
+   made. Show me two other ways to open that are still grounded in a workshop.
+4. The store feed. A grid of pieces that reshapes per visitor. Show it with 4
+   pieces and with 40 — we launch with a handful and it must not look broken.
+5. The product page, with a real photograph in the frame. I have only ever seen
+   it against grey squares. Both kinds: a shelf piece with its batch of
+   numbers, and a made-to-order piece with its lead time.
+6. Cart and checkout. Five fields, cash on delivery, no account.
+7. The moment after someone orders. Right now it is a reference and a list of
+   steps. In a market where people pay cash at their own door this screen is
+   where trust is built or lost, and I think it is the weakest thing we have.
+8. The custom-request flow: asking, receiving a price, agreeing to it.
+9. Empty states, error states, and the offline state. These are where a shop
+   feels cheap and nobody ever designs them.
+10. The owner's panel, on a phone. One person checking it between other jobs.
+
+THE THINGS THAT CARRY THE BRAND
+11. The piece number. We show a batch as marks — solid for what is still here,
+    struck through for what has gone. It is our signature and I want to see
+    five other ways to draw it.
+12. The transactional emails, both languages, RTL for Arabic.
+13. Instagram and WhatsApp posts for a new batch, and for "we made three, one
+    is left".
+
+THEN GO FURTHER
+14. Three ideas I have not asked for. Ground them in the workshop — the bench,
+    the machines, the way a maker marks and numbers things — not in generic
+    e-commerce.
+15. One version that takes a real risk. Something I might reject. Show me the
+    edge so I know where it is.
 
 RULES YOU MUST NOT BREAK
 - Never a stock photo, never a supplier image, never an AI-generated photo of a
