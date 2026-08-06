@@ -24,6 +24,7 @@ from app.modules.catalog.routes import router as catalog_router
 from app.modules.feed.routes import router as feed_router
 from app.modules.notify.routes import router as notify_router
 from app.modules.orders.routes import router as orders_router
+from app.modules.requests.routes import router as requests_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mostyle")
@@ -62,6 +63,7 @@ api = APIRouter(prefix="/api")
 api.include_router(auth_router)
 api.include_router(catalog_router)
 api.include_router(orders_router)
+api.include_router(requests_router)
 api.include_router(feed_router)
 api.include_router(notify_router)
 app.include_router(api)

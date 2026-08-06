@@ -21,6 +21,12 @@ from app.models.orders import (
     OrderItem,
     OrderStatus,
 )
+from app.models.requests import (
+    REQUEST_TRANSITIONS,
+    CustomRequest,
+    RequestEvent,
+    RequestStatus,
+)
 from app.models.signals import (
     AFFINITY_HALF_LIFE_DAYS,
     DEFAULT_FEED_WEIGHTS,
@@ -35,6 +41,10 @@ from app.models.user import RefreshToken, User, UserRole
 
 __all__ = [
     "AFFINITY_HALF_LIFE_DAYS",
+    "REQUEST_TRANSITIONS",
+    "CustomRequest",
+    "RequestEvent",
+    "RequestStatus",
     "DEFAULT_FEED_WEIGHTS",
     "FEED_WEIGHT_COPY",
     "ALLOWED_TRANSITIONS",

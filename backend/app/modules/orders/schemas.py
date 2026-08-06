@@ -7,6 +7,24 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from app.models import OrderStatus
 
 
+def normalise_moroccan_phone(value: str) -> str:
+    """Cash on delivery runs on the phone number — a wrong one is a refused
+    package, and a refused package is the largest silent cost in this market.
+    Normalised to the form the workshop can actually dial.
+
+    Shared by checkout and by custom requests: both reach the same person by
+    the same means, so the rule is written once.
+    """
+    digits = "".join(character for character in value if character.isdigit() or character == "+")
+    if digits.startswith("+212"):
+        digits = "0" + digits[4:]
+    elif digits.startswith("212"):
+        digits = "0" + digits[3:]
+    if not (digits.startswith("0") and len(digits) == 10 and digits.isdigit()):
+        raise ValueError("Enter a Moroccan phone number, for example 0612345678")
+    return digits
+
+
 class CartLine(BaseModel):
     """What the customer wants, and how many.
 
@@ -35,19 +53,7 @@ class CheckoutRequest(BaseModel):
     lang: str = "en"
     items: list[CartLine] = Field(min_length=1)
 
-    @field_validator("phone")
-    @classmethod
-    def moroccan_phone(cls, value: str) -> str:
-        """Cash on delivery runs on the phone number — a wrong one is a
-        refused package. Normalised so the workshop can always dial it."""
-        digits = "".join(character for character in value if character.isdigit() or character == "+")
-        if digits.startswith("+212"):
-            digits = "0" + digits[4:]
-        elif digits.startswith("212"):
-            digits = "0" + digits[3:]
-        if not (digits.startswith("0") and len(digits) == 10 and digits.isdigit()):
-            raise ValueError("Enter a Moroccan phone number, for example 0612345678")
-        return digits
+    _phone = field_validator("phone")(normalise_moroccan_phone)
 
     @field_validator("lang")
     @classmethod

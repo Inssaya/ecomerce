@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
 from app.models import Notification, Order, OrderStatus
+from app.models.requests import CustomRequest, RequestStatus
 from app.modules.notify.email import send_order_update
 
 logger = logging.getLogger(__name__)
@@ -122,59 +123,185 @@ ORDER_COPY: dict[OrderStatus, Copy] = {
 }
 
 
-def track_url(order: Order) -> str:
+REQUEST_COPY: dict[RequestStatus, Copy] = {
+    RequestStatus.requested: Copy(
+        "We have your request",
+        "وصلنا طلبك",
+        [
+            "Request {reference}. We read every one of these ourselves.",
+            "We'll come back with a price and a real date. Nothing is owed until you say yes.",
+        ],
+        [
+            "الطلب {reference}. نقرأ كل طلب بأنفسنا.",
+            "سنعود إليك بالثمن وبتاريخ حقيقي. لا شيء عليك حتى توافق.",
+        ],
+    ),
+    RequestStatus.quoted: Copy(
+        "Here is what it would cost",
+        "هذا ما سيكلّفه",
+        [
+            "For request {reference}: {price} MAD, ready in {days} days once you approve.",
+            "If that works, tell us and we'll start. If not, no hard feelings.",
+        ],
+        [
+            "بخصوص الطلب {reference}: {price} درهم، وجاهز خلال {days} يوماً بعد موافقتك.",
+            "إن ناسبك، أخبرنا ونبدأ. وإن لم يناسبك، فلا بأس.",
+        ],
+    ),
+    RequestStatus.approved: Copy(
+        "Agreed — we start now",
+        "اتّفقنا — نبدأ الآن",
+        ["Request {reference} is approved. It goes on the bench today."],
+        ["تمت الموافقة على الطلب {reference}. سيوضع على طاولة العمل اليوم."],
+    ),
+    RequestStatus.in_production: Copy(
+        "We're making it",
+        "نحن نصنعه الآن",
+        ["Request {reference} is being made. We'll tell you the moment it's finished."],
+        ["الطلب {reference} قيد الصنع. سنخبرك حالما ينتهي."],
+    ),
+    RequestStatus.ready: Copy(
+        "It's finished",
+        "القطعة جاهزة",
+        [
+            "Request {reference} is made. You pay {price} MAD in cash when it reaches you.",
+        ],
+        [
+            "الطلب {reference} جاهز. تخلّص نقداً {price} درهم عند التسليم.",
+        ],
+    ),
+    RequestStatus.delivered: Copy(
+        "Delivered — thank you",
+        "تم التسليم — شكراً لك",
+        [
+            "Request {reference} is with you. We made it for you specifically, so if "
+            "anything is wrong with it, tell us.",
+        ],
+        [
+            "الطلب {reference} وصل إليك. صنعناه لك خصّيصاً، فإن كان فيه أي خلل أخبرنا.",
+        ],
+    ),
+    RequestStatus.declined: Copy(
+        "We can't make this one",
+        "لا يمكننا صنع هذه",
+        [
+            "We looked at request {reference} and it is not something we can make properly.",
+            "We would rather say so than make you something we are not proud of.",
+        ],
+        [
+            "نظرنا في الطلب {reference} وليس مما نستطيع صنعه كما ينبغي.",
+            "نفضّل أن نقول ذلك على أن نصنع لك شيئاً لا نفخر به.",
+        ],
+    ),
+    RequestStatus.withdrawn: Copy(
+        "Your request is closed",
+        "أُغلق طلبك",
+        ["Request {reference} is closed. You owe nothing. Come back any time."],
+        ["أُغلق الطلب {reference}. لا شيء عليك. عد إلينا متى شئت."],
+    ),
+}
+
+
+def order_track_url(order: Order) -> str:
     return f"{settings.app_url}/{order.lang}/track/{order.tracking_token}"
 
 
-def whatsapp_url(order: Order) -> str:
-    """Click-to-chat handoff. Always available; the Business API is not
-    required for the customer to be able to reach a person."""
+def request_track_url(request: CustomRequest) -> str:
+    return f"{settings.app_url}/{request.lang}/request/{request.tracking_token}"
+
+
+def whatsapp_url(subject: Order | CustomRequest) -> str:
+    """Click-to-chat handoff. Always available: the Business API is not
+    required for a customer to be able to reach a person."""
     if not settings.whatsapp_number:
         return ""
     text = (
-        f"مرحبا، بخصوص الطلب {order.reference}"
-        if order.lang == "ar"
-        else f"Hello, about order {order.reference}"
+        f"مرحبا، بخصوص {subject.reference}"
+        if subject.lang == "ar"
+        else f"Hello, about {subject.reference}"
     )
     return f"https://wa.me/{settings.whatsapp_number}?text={quote(text)}"
 
 
-async def notify_order_status(db: AsyncSession, order: Order) -> None:
+async def _deliver(
+    db: AsyncSession,
+    *,
+    copy: Copy,
+    kind: str,
+    lang: str,
+    reference: str,
+    fields: dict[str, str],
+    customer_id: str | None,
+    email: str | None,
+    track_url: str,
+) -> None:
     """In-app for signed-in customers, email for anyone who left an address.
 
     Never raises: a notification failure must not roll back the state change it
-    was reporting on.
+    was reporting on. Shared by orders and custom requests — the two differ in
+    their copy, not in how they are delivered.
     """
-    copy = ORDER_COPY.get(order.status)
-    if copy is None:
-        return
-
-    fields = {"reference": order.reference, "total": f"{order.total:.0f}"}
-    lang = order.lang
-
-    if order.customer_id:
+    if customer_id:
         db.add(
             Notification(
-                user_id=order.customer_id,
-                kind=f"order.{order.status.value}",
+                user_id=customer_id,
+                kind=kind,
                 title=copy.heading(lang),
                 body=copy.body(lang).format(**fields),
-                payload={"order_id": order.id, "reference": order.reference},
+                payload={"reference": reference},
             )
         )
         await db.commit()
 
-    if order.customer_email:
+    if email:
         try:
             await send_order_update(
-                to=order.customer_email,
+                to=email,
                 lang=lang,
-                reference=order.reference,
+                reference=reference,
                 heading_en=copy.heading_en,
                 heading_ar=copy.heading_ar,
                 lines_en=[line.format(**fields) for line in copy.lines_en],
                 lines_ar=[line.format(**fields) for line in copy.lines_ar],
-                track_url=track_url(order),
+                track_url=track_url,
             )
         except Exception as exc:
-            logger.error("Order %s: could not email %s: %s", order.reference, order.customer_email, exc)
+            logger.error("%s: could not email %s: %s", reference, email, exc)
+
+
+async def notify_order_status(db: AsyncSession, order: Order) -> None:
+    copy = ORDER_COPY.get(order.status)
+    if copy is None:
+        return
+    await _deliver(
+        db,
+        copy=copy,
+        kind=f"order.{order.status.value}",
+        lang=order.lang,
+        reference=order.reference,
+        fields={"reference": order.reference, "total": f"{order.total:.0f}"},
+        customer_id=order.customer_id,
+        email=order.customer_email,
+        track_url=order_track_url(order),
+    )
+
+
+async def notify_request_status(db: AsyncSession, request: CustomRequest) -> None:
+    copy = REQUEST_COPY.get(request.status)
+    if copy is None:
+        return
+    await _deliver(
+        db,
+        copy=copy,
+        kind=f"request.{request.status.value}",
+        lang=request.lang,
+        reference=request.reference,
+        fields={
+            "reference": request.reference,
+            "price": f"{request.quote_price:.0f}" if request.quote_price is not None else "—",
+            "days": str(request.lead_time_days or "—"),
+        },
+        customer_id=request.customer_id,
+        email=request.customer_email,
+        track_url=request_track_url(request),
+    )
