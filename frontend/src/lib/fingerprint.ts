@@ -47,7 +47,7 @@ function collect(): string {
 
 let _cached: Promise<string> | null = null;
 
-export function getVisitorId(): Promise<string> {
+export function visitorId(): Promise<string> {
   if (_cached) return _cached;
   _cached = (async () => {
     const stored = localStorage.getItem(KEY);
@@ -57,4 +57,12 @@ export function getVisitorId(): Promise<string> {
     return id;
   })();
   return _cached;
+}
+
+/** The cookie the server also reads, so a server-rendered page sees the same
+ *  visitor as the browser does. Set once, alongside the stored id. */
+export async function ensureVisitorCookie(): Promise<string> {
+  const id = await visitorId();
+  document.cookie = `_vid=${id}; path=/; max-age=31536000; samesite=lax`;
+  return id;
 }

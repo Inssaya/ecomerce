@@ -73,9 +73,53 @@ backend/app/
   db.py          engine, session, declarative base
   deps.py        identity, language and paging dependencies
   cli.py         seed-owner
-  core/          security, storage, cache, slugs, shared errors
+  core/          security, storage, cache, slugs, errors, llm, agent loop
   models/        the whole schema, one package
-  modules/       auth · catalog · orders · notify
+  modules/       auth · catalog · orders · requests · feed · notify · admin · ai
+```
+
+## Working on the storefront
+
+```bash
+cd frontend
+npm install
+npm run lint && npm run type-check
+INTERNAL_API_URL=http://127.0.0.1:8000 npm run build
+```
+
+`INTERNAL_API_URL` matters at **build** time, not run time: Next evaluates
+`rewrites()` when it builds and writes the result into the routes manifest. In
+Docker the default already matches the compose service name, so only a local
+build outside Docker needs it set.
+
+```
+frontend/src/
+  app/[lang]/    landing · store · piece · cart · checkout · track · ask · workshop
+  components/    Chrome · PieceCard · CartProvider · Assistant
+  lib/           api · admin · i18n · signals · fingerprint
+```
+
+Every route lives under `/en` or `/ar`. There is no third language and no
+translation layer: both are authored, and the Arabic is written as Arabic.
+
+## The AI
+
+Both assistants need an OpenAI-compatible key. Without one they report
+themselves unavailable and the storefront simply does not show the assistant —
+nothing degrades into a guess.
+
+```
+LLM_API_KEY=sk-...
+LLM_BASE_URL=https://api.openai.com/v1     # or Groq, or a local model
+LLM_MODEL=gpt-4o-mini
+EMBEDDING_MODEL=text-embedding-3-small
+```
+
+After adding pieces, embed them so semantic search and the feed can reach past
+the category tree — it skips anything whose words have not changed:
+
+```bash
+curl -X POST localhost:8000/api/admin/feed/embeddings -H "authorization: Bearer $TOKEN"
 ```
 
 ## The rules this codebase is held to

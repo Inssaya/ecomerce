@@ -2,69 +2,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Warm sand, cream, soft clay, warm charcoal — REBUILD-PLAN §8.
+ *
+ * Away from the black-and-orange this replaces, which was cold and read as
+ * urgency. Nothing here is urgent. The palette is a room you would sit down in.
+ */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
+    --cream: 38 40% 96%;      /* the page */
+    --surface: 40 45% 99%;    /* cards, sheets */
+    --sand: 34 28% 89%;       /* dividers, resting states */
+    --clay: 18 34% 53%;       /* the one accent */
+    --clay-soft: 20 45% 94%;  /* the accent, at rest */
+    --ink: 24 12% 17%;        /* text */
+    --ink-soft: 24 8% 46%;    /* secondary text */
+    --good: 150 30% 38%;
+    --warn: 8 55% 48%;
+
+    --radius: 1.25rem;
   }
 
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-  }
-}
-
-@layer base {
   * {
-    @apply border-border;
+    border-color: hsl(var(--sand));
   }
+
+  html {
+    /* Nothing snaps. */
+    scroll-behavior: smooth;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
-    @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    background: hsl(var(--cream));
+    color: hsl(var(--ink));
+    /* Large and high line-height: this is read one-handed, on a phone. */
+    font-size: 16px;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+    /* Room for the bottom bar plus the home indicator. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Arabic is first-class, not a layer bolted on. */
+  [dir="rtl"] body {
+    font-family: var(--font-arabic), system-ui, sans-serif;
+    line-height: 1.85;
+  }
+
+  h1, h2, h3 {
+    line-height: 1.25;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+  }
+
+  /* Focus must stay visible — some people navigate with a keyboard, and the
+     ring is the only thing telling them where they are. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--clay));
+    outline-offset: 3px;
+    border-radius: 6px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }
 
-@layer utilities {
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
+@layer components {
+  /* Thumb-reachable: 44px is the floor, and every tappable thing meets it. */
+  .tap {
+    @apply min-h-[44px] min-w-[44px] inline-flex items-center justify-center;
   }
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
+
+  .card {
+    @apply bg-surface rounded-3xl overflow-hidden;
+  }
+
+  .btn {
+    @apply tap rounded-2xl px-6 text-[15px] font-semibold transition-all duration-300 ease-out;
+  }
+
+  .btn-primary {
+    @apply btn bg-clay text-white active:scale-[0.98] disabled:opacity-40;
+  }
+
+  .btn-quiet {
+    @apply btn bg-clay-soft text-ink active:scale-[0.98] disabled:opacity-40;
+  }
+
+  .field {
+    @apply w-full rounded-2xl bg-surface px-4 py-3.5 text-[16px] text-ink
+           placeholder:text-ink-soft/60 border border-sand
+           focus:border-clay focus:outline-none transition-colors duration-200;
+    /* 16px exactly: anything smaller makes iOS Safari zoom on focus. */
+  }
+
+  .label {
+    @apply block text-[13px] font-medium text-ink-soft mb-1.5;
+  }
+
+  /* Whitespace signals confidence. */
+  .page {
+    @apply mx-auto w-full max-w-[560px] px-5;
   }
 }

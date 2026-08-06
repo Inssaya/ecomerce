@@ -1,118 +1,177 @@
-import type { Category, Label, LabelGroup, Product, ProductListResponse, SearchResponse, TokenResponse, User, Store } from "@/types";
+/**
+ * One place that talks to the API.
+ *
+ * Every request carries the language and the visitor fingerprint, because
+ * essentially every endpoint cares about both: what language to answer in, and
+ * whose feed this is.
+ */
+import { visitorId } from "./fingerprint";
+import type { Lang } from "./i18n";
 
-// Server-side: use internal Docker network URL
-// Client-side: use relative path (rewritten by next.config.ts → gateway)
-const BASE =
-  typeof window === "undefined"
-    ? (process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://gateway:8000")
-    : "";
+export interface Piece {
+  id: string;
+  slug: string;
+  kind: "shelf" | "workshop";
+  title: string;
+  price: number;
+  price_max: number | null;
+  image: string | null;
+  category_slug: string | null;
+  available: number | null;
+  lead_time_days: number | null;
+}
 
-async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const url = `${BASE}${path}`;
-  const res = await fetch(url, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    throw new Error(body?.detail ?? `HTTP ${res.status}`);
+export interface PieceDetail extends Piece {
+  description: string;
+  story: string;
+  images: { id: string; url: string; alt: string; is_primary: boolean }[];
+  variants: { id: string; sku: string; option: string; price: number; available: number | null }[];
+  pieces: { id: string; number: number; batch_size: number; label: string; note: string }[];
+  show_piece_numbers: boolean;
+  batch_closed: boolean;
+  made_on: string | null;
+  created_at: string;
+}
+
+export interface OrderView {
+  reference: string;
+  tracking_token: string;
+  customer_name: string;
+  city: string;
+  items: {
+    title: string;
+    variant_label: string;
+    piece_label: string;
+    lead_time_days: number | null;
+    unit_price: number;
+    quantity: number;
+    subtotal: number;
+    image_url: string | null;
+  }[];
+  events: { status: string; created_at: string }[];
+  subtotal: number;
+  delivery_fee: number;
+  total: number;
+  status: string;
+  created_at: string;
+  whatsapp_url: string;
+}
+
+export interface RequestView {
+  reference: string;
+  tracking_token: string;
+  description: string;
+  status: string;
+  quote_price: number | null;
+  quote_note: string;
+  lead_time_days: number | null;
+  promised_for: string | null;
+  order_reference: string | null;
+  events: { status: string; created_at: string }[];
+  created_at: string;
+  whatsapp_url: string;
+}
+
+/** Something the assistant asked the browser to do. The server has already
+ *  validated it; the client only carries it out. */
+export interface AssistantAction {
+  type: "add_to_cart" | "open_product" | "go_to_checkout" | "open_whatsapp";
+  slug?: string;
+  product_id?: string;
+  variant_id?: string | null;
+  quantity?: number;
+}
+
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+  ) {
+    super(message);
   }
-  return res.json() as Promise<T>;
 }
 
-// ── Stores ────────────────────────────────────────────────────────────────────
+async function request<T>(
+  path: string,
+  { lang, ...init }: RequestInit & { lang: Lang },
+): Promise<T> {
+  const separator = path.includes("?") ? "&" : "?";
+  const headers = new Headers(init.headers);
+  headers.set("accept-language", lang);
+  if (init.body && !headers.has("content-type")) {
+    headers.set("content-type", "application/json");
+  }
+  // Server-rendered requests have no browser to fingerprint.
+  if (typeof window !== "undefined") {
+    headers.set("x-visitor-id", await visitorId());
+  }
 
-export function getStores(): Promise<Store[]> {
-  return apiFetch("/api/v1/catalog/stores");
+  const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
+  if (!response.ok) {
+    let detail = "";
+    try {
+      const body = await response.json();
+      // FastAPI returns validation errors as a list of objects; the first
+      // message is the useful one for a person.
+      detail = Array.isArray(body?.detail) ? body.detail[0]?.msg : body?.detail;
+    } catch {
+      /* the body was not JSON, which the status alone already tells us */
+    }
+    throw new ApiError(response.status, detail || `Request failed (${response.status})`);
+  }
+  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
 
-export function getStore(slug: string): Promise<Store> {
-  return apiFetch(`/api/v1/catalog/stores/${slug}`);
-}
+export const api = {
+  feed: (lang: Lang, page = 1) =>
+    request<{ items: Piece[]; page: number; has_more: boolean }>(`/feed?page=${page}`, { lang }),
 
-// ── Categories ────────────────────────────────────────────────────────────────
+  piece: (lang: Lang, slug: string) => request<PieceDetail>(`/products/${slug}`, { lang }),
 
-export function getCategories(): Promise<Category[]> {
-  return apiFetch("/api/v1/catalog/categories/tree");
-}
+  search: (lang: Lang, query: string) =>
+    request<{ items: Piece[]; total: number }>(`/products?q=${encodeURIComponent(query)}`, { lang }),
 
-export function getCategory(slug: string): Promise<Category> {
-  return apiFetch(`/api/v1/catalog/categories/${slug}`);
-}
+  categories: (lang: Lang) =>
+    request<{ id: string; slug: string; name: string; children: unknown[] }[]>(`/categories`, {
+      lang,
+    }),
 
-// ── Labels ────────────────────────────────────────────────────────────────────
+  checkout: (lang: Lang, body: unknown) =>
+    request<OrderView>("/orders", { lang, method: "POST", body: JSON.stringify(body) }),
 
-export function getLabels(group?: LabelGroup): Promise<Label[]> {
-  const qs = group ? `?group=${group}` : "";
-  return apiFetch(`/api/v1/catalog/labels${qs}`);
-}
+  order: (lang: Lang, token: string) => request<OrderView>(`/orders/track/${token}`, { lang }),
 
-// ── Products ──────────────────────────────────────────────────────────────────
+  ask: (lang: Lang, body: unknown) =>
+    request<RequestView>("/requests", { lang, method: "POST", body: JSON.stringify(body) }),
 
-export interface ProductFilters {
-  category_id?: string;
-  label_ids?: string[];
-  seller_id?: string;
-  status?: string;
-  page?: number;
-  size?: number;
-  sort_by?: string;
-}
+  customRequest: (lang: Lang, token: string) =>
+    request<RequestView>(`/requests/track/${token}`, { lang }),
 
-export function getProducts(filters: ProductFilters = {}): Promise<ProductListResponse> {
-  const params = new URLSearchParams();
-  if (filters.category_id) params.set("category_id", filters.category_id);
-  if (filters.seller_id) params.set("seller_id", filters.seller_id);
-  if (filters.status) params.set("status", filters.status);
-  if (filters.page) params.set("page", String(filters.page));
-  if (filters.size) params.set("size", String(filters.size));
-  if (filters.sort_by) params.set("sort_by", filters.sort_by);
-  if (filters.label_ids) filters.label_ids.forEach((id) => params.append("label_ids", id));
-  return apiFetch(`/api/v1/catalog/products?${params}`);
-}
+  approveQuote: (lang: Lang, token: string, body: unknown) =>
+    request<RequestView>(`/requests/track/${token}/approve`, {
+      lang,
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
-export function getProduct(id: string): Promise<Product> {
-  return apiFetch(`/api/v1/catalog/products/${id}`);
-}
+  withdrawRequest: (lang: Lang, token: string) =>
+    request<RequestView>(`/requests/track/${token}/withdraw`, { lang, method: "POST" }),
 
-export function searchProducts(
-  q: string,
-  opts: { category_id?: string; label_ids?: string[]; page?: number; size?: number } = {}
-): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q });
-  if (opts.category_id) params.set("category_id", opts.category_id);
-  if (opts.page) params.set("page", String(opts.page));
-  if (opts.size) params.set("size", String(opts.size));
-  if (opts.label_ids) opts.label_ids.forEach((id) => params.append("label_ids", id));
-  return apiFetch(`/api/v1/catalog/products/search?${params}`);
-}
+  assistantStatus: (lang: Lang) =>
+    request<{ available: boolean; whatsapp: boolean }>("/assistant/status", { lang }),
 
-// ── Auth ──────────────────────────────────────────────────────────────────────
+  assistant: (lang: Lang, messages: readonly { role: string; content: string }[]) =>
+    request<{ reply: string; actions: AssistantAction[] }>("/assistant", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ messages }),
+    }),
 
-export function register(data: {
-  email: string;
-  password: string;
-  role: string;
-  full_name?: string;
-}): Promise<TokenResponse> {
-  return apiFetch("/api/v1/auth/register", {
-    method: "POST",
-    body: JSON.stringify(data),
-  });
-}
-
-export function login(email: string, password: string): Promise<TokenResponse> {
-  return apiFetch("/api/v1/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export function getMe(token: string): Promise<User> {
-  return apiFetch("/api/v1/auth/me", {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-}
+  signals: (lang: Lang, signals: readonly object[]) =>
+    request<{ recorded: number }>("/signals", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ signals }),
+      keepalive: true,
+    }),
+};

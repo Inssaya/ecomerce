@@ -35,7 +35,13 @@ logger = logging.getLogger("mostyle")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await ensure_bucket()
+    try:
+        await ensure_bucket()
+    except Exception as exc:
+        # Not fatal. Photographs are served to the browser straight from object
+        # storage, so the storefront keeps working and orders keep being taken
+        # while it is unreachable; only uploads fail, and they fail loudly.
+        logger.warning("Object storage is not reachable yet: %s", exc)
     logger.info("%s API ready", settings.app_name)
     yield
     await close_redis()
