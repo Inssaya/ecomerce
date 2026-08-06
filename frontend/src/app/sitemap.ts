@@ -33,7 +33,10 @@ async function catalogue(): Promise<Piece[]> {
 }
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const fixed = ["", "/store", "/ask", "/workshop", "/orders"];
+  // Public doors only. `/workshop` is the owner's control room and `/ambient`
+  // is a workbench — neither is a page a buyer should ever land on from a
+  // search result.
+  const fixed = ["", "/store", "/ask", "/orders"];
   const entries: MetadataRoute.Sitemap = [];
 
   for (const lang of LANGS) {
