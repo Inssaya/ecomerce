@@ -9,6 +9,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
+from app.core.limits import SignalLimit
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import FEED_WEIGHT_COPY, FeedWeight, SignalType
 from app.modules.catalog.schemas import ProductCard
@@ -35,7 +36,7 @@ class SignalBatch(BaseModel):
 
 @router.post("/signals", status_code=status.HTTP_202_ACCEPTED)
 async def record_signals(
-    body: SignalBatch, db: DbSession, user: OptionalUser, visitor: Visitor
+    body: SignalBatch, db: DbSession, user: OptionalUser, visitor: Visitor, _: SignalLimit
 ) -> dict:
     """Anonymous by default — most buyers never sign in, so the fingerprint is
     the identity that matters. When there is an account too, both are stored,

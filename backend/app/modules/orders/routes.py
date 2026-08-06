@@ -6,15 +6,21 @@ cash.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy import func, select
 
 from app.core.errors import get_or_404
+from app.core.limits import CheckoutLimit, LookupLimit
 from app.deps import CurrentUser, DbSession, OptionalUser, Owner, Paging
 from app.models import Order, OrderStatus
 from app.modules.notify.service import whatsapp_url
 from app.modules.orders import service
-from app.modules.orders.schemas import CheckoutRequest, OrderResponse, StatusChange
+from app.modules.orders.schemas import (
+    CheckoutRequest,
+    FindOrder,
+    OrderResponse,
+    StatusChange,
+)
 
 router = APIRouter(tags=["orders"])
 
@@ -26,7 +32,9 @@ def _out(order: Order) -> OrderResponse:
 
 
 @router.post("/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
-async def checkout(body: CheckoutRequest, db: DbSession, user: OptionalUser) -> OrderResponse:
+async def checkout(
+    body: CheckoutRequest, db: DbSession, user: OptionalUser, _: CheckoutLimit
+) -> OrderResponse:
     """No account required. In a market where trust is the scarce thing, an
     account gate before the first purchase is a lost purchase."""
     order = await service.place_order(db, body, user)
@@ -40,6 +48,34 @@ async def track(tracking_token: str, db: DbSession) -> OrderResponse:
     order = await get_or_404(
         db, Order, tracking_token, field="tracking_token", detail="We can't find that order"
     )
+    return _out(order)
+
+
+@router.post("/orders/find", response_model=OrderResponse)
+async def find_order(body: FindOrder, db: DbSession, _: LookupLimit) -> OrderResponse:
+    """Find an order from the reference and the phone number.
+
+    People lose the tracking link. They close the tab, they clear WhatsApp,
+    they ordered from a friend's phone — and then the only way back in was a
+    link they no longer have. Every shop needs this, and a shop where the
+    customer is waiting for a courier to knock needs it more than most.
+
+    Both must match. The reference alone is short enough to be guessed at
+    eventually; the reference *and* the number belonging to it is not, and this
+    endpoint is rate-limited on top.
+    """
+    order = await db.scalar(
+        select(Order).where(
+            Order.reference == body.reference.strip().upper(),
+            Order.customer_phone == body.phone,
+        )
+    )
+    if order is None:
+        # One message for both failures, so this cannot be used to find out
+        # which references exist.
+        raise HTTPException(
+            status_code=404, detail="No order with that reference and phone number"
+        )
     return _out(order)
 
 

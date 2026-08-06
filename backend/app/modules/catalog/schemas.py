@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
 
 from app.models import ProductKind, ProductStatus
+from app.modules.orders.schemas import normalise_moroccan_phone
 
 
 class MediaResponse(BaseModel):
@@ -83,6 +84,19 @@ class ProductDetail(ProductCard):
     batch_closed: bool = False
     made_on: date | None = None
     created_at: datetime
+
+
+class AlertRequest(BaseModel):
+    """Waiting on a piece. One field that matters, and an optional second.
+
+    The phone goes through the same normaliser as checkout — this is the same
+    person, reached the same way.
+    """
+
+    phone: str = Field(min_length=8, max_length=30)
+    email: EmailStr | None = None
+
+    _phone = field_validator("phone")(normalise_moroccan_phone)
 
 
 class ProductPage(BaseModel):

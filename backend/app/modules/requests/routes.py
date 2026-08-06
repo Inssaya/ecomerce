@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.core.errors import get_or_404
+from app.core.limits import RequestLimit
 from app.deps import CurrentUser, DbSession, Lang, OptionalUser, Owner, Paging
 from app.models import Order
 from app.models.requests import CustomRequest, RequestStatus
@@ -45,7 +46,7 @@ async def _out(db: DbSession, request: CustomRequest, lang: str) -> RequestOut:
 
 @router.post("/requests", response_model=RequestOut, status_code=status.HTTP_201_CREATED)
 async def create_request(
-    body: RequestCreate, db: DbSession, user: OptionalUser, lang: Lang
+    body: RequestCreate, db: DbSession, user: OptionalUser, lang: Lang, _: RequestLimit
 ) -> RequestOut:
     """"If we cannot find it, we make it."
 

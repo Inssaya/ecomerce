@@ -61,6 +61,19 @@ class CheckoutRequest(BaseModel):
         return value if value in ("en", "ar") else "en"
 
 
+class FindOrder(BaseModel):
+    """Getting back to an order without the link.
+
+    The phone goes through the same normaliser as checkout, so a number typed
+    as "+212 612 345 678" still matches the "0612345678" that was stored.
+    """
+
+    reference: str = Field(min_length=4, max_length=12)
+    phone: str = Field(min_length=8, max_length=30)
+
+    _phone = field_validator("phone")(normalise_moroccan_phone)
+
+
 class OrderItemResponse(BaseModel):
     product_id: str
     variant_id: str | None = None

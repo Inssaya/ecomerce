@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from sqlalchemy import text
@@ -35,6 +35,7 @@ logger = logging.getLogger("mostyle")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.check()
     try:
         await ensure_bucket()
     except Exception as exc:
@@ -68,6 +69,33 @@ app.add_middleware(
 )
 # 99% of buyers are on a phone, often on mobile data: compress everything.
 app.add_middleware(GZipMiddleware, minimum_size=512)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Headers the browser enforces for us.
+
+    This API answers a storefront and nothing else, so the policy can be far
+    tighter than a general-purpose one: it never renders HTML, never needs to
+    be framed, and never needs to be reachable from another origin's page.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    )
+    # JSON only: nothing this API returns should ever be executed or framed.
+    response.headers.setdefault(
+        "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
+    )
+    # An order reference or a tracking token must never travel in the clear.
+    if settings.is_production:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 api = APIRouter(prefix="/api")
 api.include_router(auth_router)

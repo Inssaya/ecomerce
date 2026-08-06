@@ -6,8 +6,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
+from app.core.limits import RequestLimit
 from app.core.slug import unique_slug
-from app.core.storage import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, delete_object, upload_image
+from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
 from app.deps import DbSession, Lang, Owner, Paging
 from app.models import (
     Category,
@@ -19,8 +20,9 @@ from app.models import (
     ProductStatus,
     ProductVariant,
 )
-from app.modules.catalog import service
+from app.modules.catalog import alerts, service
 from app.modules.catalog.schemas import (
+    AlertRequest,
     CategoryAdmin,
     CategoryNode,
     CategoryWrite,
@@ -358,6 +360,10 @@ async def add_pieces(
     ]
     db.add_all(created)
     await db.commit()
+
+    # Everyone who asked to be told is told, without anyone having to remember.
+    await alerts.announce(db, product)
+
     return [
         PieceAdmin(
             id=piece.id,
@@ -385,6 +391,38 @@ async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
     await db.commit()
 
 
+# ── Waiting on a piece ────────────────────────────────────────────────────────
+
+
+@router.post("/products/{slug}/alert", status_code=status.HTTP_202_ACCEPTED)
+async def wait_for_more(
+    slug: str, body: AlertRequest, db: DbSession, lang: Lang, _: RequestLimit
+) -> dict:
+    """"Tell me when you make another."
+
+    A sold-out page is otherwise a dead end, and a dead end is a visitor we
+    paid to attract and then sent away. No account, one field.
+    """
+    product = await get_or_404(db, Product, slug, field="slug", detail="Product not found")
+    if product.status is not ProductStatus.active:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.kind is not ProductKind.shelf:
+        raise bad_request("This one is made to order — you can ask for it any time")
+
+    await alerts.add(db, product=product, phone=body.phone, email=body.email, lang=lang)
+    return {"waiting": True}
+
+
+@router.get("/admin/products/{product_id}/waiting")
+async def who_is_waiting(product_id: str, db: DbSession, owner: Owner) -> dict:
+    """How many people want this one back.
+
+    The sharpest answer to "what should I make next" the workshop gets: unlike
+    a search, it is attached to a real piece at a price they already saw.
+    """
+    return {"waiting": await alerts.waiting_for(db, product_id)}
+
+
 # ── Photography ───────────────────────────────────────────────────────────────
 
 
@@ -405,15 +443,17 @@ async def upload_product_photo(
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=(selectinload(Product.media),)
     )
-    content_type = (file.content_type or "").lower()
-    if content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
-
+    # Read first, then decide what it is from its own bytes. The declared
+    # Content-Type is whatever the client typed and is never used.
     data = await file.read()
     if not data:
         raise bad_request("That file is empty")
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="That photo is larger than 12 MB")
+
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
 
     url = await upload_image(data, content_type, prefix=f"products/{product_id}")
     media = ProductMedia(

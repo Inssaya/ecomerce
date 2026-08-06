@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 
 from app.config import settings
 from app.core import agent, llm
+from app.core.limits import AssistantLimit
 from app.deps import DbSession, Lang, Owner, Visitor
 from app.modules.ai import copilot, shopper
 
@@ -73,7 +74,9 @@ async def assistant_status() -> dict:
 
 
 @router.post("/assistant", response_model=Answer)
-async def ask_assistant(body: Ask, db: DbSession, lang: Lang, visitor: Visitor) -> Answer:
+async def ask_assistant(
+    body: Ask, db: DbSession, lang: Lang, visitor: Visitor, _: AssistantLimit
+) -> Answer:
     """The shopping concierge. No account needed — it is the storefront."""
     return await _run(shopper.build(db, lang=lang, visitor_id=visitor), body, lang)
 

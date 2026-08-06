@@ -20,6 +20,26 @@ logger = logging.getLogger(__name__)
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
 
+#: What the file actually starts with. `Content-Type` on an upload is a string
+#: the client chose, so believing it means an attacker can label anything
+#: `image/jpeg` — an SVG carrying script, or an HTML page — and have us serve
+#: it back from our own storage domain. The bytes cannot be talked into lying.
+_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+)
+
+
+def sniff_image(data: bytes) -> str | None:
+    """The real type of an upload, or None if it is not an image we accept."""
+    for signature, mime in _MAGIC:
+        if data.startswith(signature):
+            return mime
+    # WebP is a RIFF container: "RIFF" then four length bytes then "WEBP".
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
+
 _client: Minio | None = None
 
 

@@ -15,6 +15,14 @@ from sqlalchemy import select
 from app.config import settings
 from app.core.cache import get_redis
 from app.core.errors import bad_request
+from app.core.limits import (
+    RegisterLimit,
+    ResetLimit,
+    ResetPerAccount,
+    SignInLimit,
+    SignInPerAccount,
+    clear,
+)
 from app.core.security import (
     TokenError,
     decode_token,
@@ -44,7 +52,7 @@ RESET_TOKEN_TTL_SECONDS = 3600
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: DbSession) -> TokenResponse:
+async def register(body: RegisterRequest, db: DbSession, _: RegisterLimit) -> TokenResponse:
     exists = await db.scalar(select(User.id).where(User.email == body.email))
     if exists:
         raise bad_request("That email is already registered")
@@ -63,7 +71,9 @@ async def register(body: RegisterRequest, db: DbSession) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(body: LoginRequest, db: DbSession) -> TokenResponse:
+async def login(
+    body: LoginRequest, db: DbSession, _ip: SignInLimit, _account: SignInPerAccount
+) -> TokenResponse:
     user = await db.scalar(select(User).where(User.email == body.email))
     # Same message and roughly the same work either way, so the response does
     # not reveal which addresses have accounts.
@@ -71,6 +81,9 @@ async def login(body: LoginRequest, db: DbSession) -> TokenResponse:
         raise HTTPException(status_code=401, detail="Email or password is incorrect")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="This account is disabled")
+    # Signed in successfully: forget the failed attempts, so someone who
+    # mistyped twice this morning is not still being counted this afternoon.
+    await clear("signin-acct", "body:email", body.email)
     return await issue_session(db, user)
 
 
@@ -135,7 +148,9 @@ async def change_password(body: ChangePasswordRequest, user: CurrentUser, db: Db
 
 
 @router.post("/forgot-password", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def forgot_password(body: ForgotPasswordRequest, db: DbSession) -> None:
+async def forgot_password(
+    body: ForgotPasswordRequest, db: DbSession, _ip: ResetLimit, _account: ResetPerAccount
+) -> None:
     user = await db.scalar(select(User).where(User.email == body.email))
     # Always 204 — the response must not reveal whether the address is known.
     if user is None:
@@ -151,7 +166,7 @@ async def forgot_password(body: ForgotPasswordRequest, db: DbSession) -> None:
 
 
 @router.post("/reset-password", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def reset_password(body: ResetPasswordRequest, db: DbSession) -> None:
+async def reset_password(body: ResetPasswordRequest, db: DbSession, _: ResetLimit) -> None:
     redis = get_redis()
     user_id = await redis.get(f"reset:{body.token}")
     if not user_id:

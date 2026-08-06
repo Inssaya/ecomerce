@@ -6,9 +6,13 @@ there is one place to configure it.
 """
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Short enough to type, long enough that guessing it is not a strategy.
+MIN_SECRET_LENGTH = 32
 
 
 class Settings(BaseSettings):
@@ -61,6 +65,23 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.environment == "production"
+
+    def check(self) -> None:
+        """Refuse to start with a configuration that only looks like security.
+
+        An empty `JWT_SECRET` signs every token with the empty string, which
+        means anyone can mint an owner token in one line. It defaults to empty
+        so tests and local runs work; production must not inherit that.
+        """
+        if self.jwt_secret and len(self.jwt_secret) >= MIN_SECRET_LENGTH:
+            return
+        message = (
+            f"JWT_SECRET must be set and at least {MIN_SECRET_LENGTH} characters "
+            "(openssl rand -hex 64)"
+        )
+        if self.is_production:
+            raise RuntimeError(message)
+        logging.getLogger(__name__).warning("%s — running anyway outside production", message)
 
 
 @lru_cache
