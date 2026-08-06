@@ -27,6 +27,43 @@
     border-color: hsl(var(--sand));
   }
 
+  /*
+   * Ambient backgrounds.
+   *
+   * The canvas is fixed behind everything, so the page itself has to stop
+   * painting over it. Cards keep their own surface — text must never sit
+   * directly on a moving background, at any hour.
+   */
+  [data-ambient]:not([data-ambient="none"]) body {
+    background: transparent;
+  }
+
+  /*
+   * Night is a real theme, not a dark picture behind dark text.
+   *
+   * Putting the warm palette over a night sky would leave charcoal text on a
+   * near-black background, which is unreadable — so the tokens invert and
+   * every component follows without knowing anything about it. The clay accent
+   * lifts, because the same clay that reads warm on cream reads muddy on ink.
+   */
+  [data-ambient="night"] {
+    --cream: 227 25% 11%;
+    --surface: 227 20% 15%;
+    --sand: 227 14% 26%;
+    --clay: 24 55% 66%;
+    --clay-soft: 227 18% 21%;
+    --ink: 38 30% 93%;
+    --ink-soft: 225 12% 68%;
+    --good: 150 35% 62%;
+    --warn: 8 70% 70%;
+  }
+
+  /* On a dark theme a photograph is the brightest thing on screen; taking the
+     glare off it stops it burning a hole in the page. */
+  [data-ambient="night"] img {
+    filter: brightness(0.94);
+  }
+
   html {
     /* Nothing snaps. */
     scroll-behavior: smooth;
