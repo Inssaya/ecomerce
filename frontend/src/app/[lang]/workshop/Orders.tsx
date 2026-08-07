@@ -87,6 +87,12 @@ export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void })
             type="button"
             onClick={() => setFilter(value)}
             aria-pressed={filter === value}
+            // The chips and the action buttons share their labels — "Confirmed"
+            // is both a state to filter by and a move to make. On screen the
+            // two are obviously different things; read aloud they are the same
+            // word twice, and one of them changes a customer's order. The
+            // accessible name says which is which.
+            aria-label={ar ? `أظهر: ${arabic}` : `Show ${en.toLowerCase()} orders`}
             className={`tap shrink-0 rounded-2xl px-4 text-[13px] font-medium transition-colors duration-gentle ${
               filter === value ? "bg-clay text-white" : "bg-clay-soft text-ink"
             }`}
@@ -196,6 +202,15 @@ export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void })
                           type="button"
                           disabled={busy === order.reference}
                           onClick={() => void move(order.reference, next)}
+                          // Named for what it does to which order, so it is
+                          // never confused with the filter chip of the same
+                          // word — and so the confirmation a screen reader
+                          // announces is the order, not just a state.
+                          aria-label={
+                            ar
+                              ? `${order.reference}: ${statusLabel(lang, "orderStatus", next)}`
+                              : `Move ${order.reference} to ${statusLabel(lang, "orderStatus", next)}`
+                          }
                           className={undoing ? "btn-quiet" : "btn-primary"}
                         >
                           {statusLabel(lang, "orderStatus", next)}

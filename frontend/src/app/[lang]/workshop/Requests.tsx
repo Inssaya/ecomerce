@@ -220,7 +220,14 @@ function QuoteForm({
             name="price"
             type="number"
             min={1}
-            step={10}
+            // Whole dirhams, and every one of them valid.
+            //
+            // This was `step={10}`, which sounds harmless and is not: the step
+            // is counted from `min`, so the only acceptable prices became 1,
+            // 11, 21, 31… A price of 140 made the field invalid, the browser
+            // silently refused to submit the form, and the owner pressed send
+            // and watched nothing happen.
+            step={1}
             inputMode="numeric"
             required
             className="field"
