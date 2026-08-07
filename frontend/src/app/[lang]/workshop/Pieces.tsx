@@ -627,6 +627,10 @@ function PieceDetail({
         </div>
       ) : null}
 
+      {/* The words. Everything above this puts a piece in the shop; this is
+          how it is corrected once it is there. */}
+      <EditWords lang={lang} product={product} disabled={busy} onSave={guarded} />
+
       {problem ? <p className="text-[13px] text-warn">{problem}</p> : null}
 
       <div className="flex flex-wrap gap-2">
@@ -836,6 +840,195 @@ function NewPiece({
           ? "لن يراها أحد حتى تضيف صورة حقيقية وتنشرها."
           : "Nobody sees it until you add a real photo and publish it."}
       </p>
+    </form>
+  );
+}
+
+
+/**
+ * Fixing a piece after it exists.
+ *
+ * Until this, a piece could be created, photographed, counted and published —
+ * and then nothing about it could be changed. A typo in a title, a price that
+ * turned out too low, a story worth telling better: all of them meant
+ * archiving the piece and building it again, which throws away its batch, its
+ * URL and everything the feed had learned about it.
+ *
+ * Folded shut, because most visits to this screen are about photographs and
+ * counts. Only what actually changed is sent, so opening this and closing it
+ * again writes nothing — and rewriting the copy re-embeds the piece, which is
+ * why sending fields that did not change would not be free.
+ */
+function EditWords({
+  lang,
+  product,
+  disabled,
+  onSave,
+}: {
+  lang: Lang;
+  product: AdminProduct;
+  disabled?: boolean;
+  onSave: (work: () => Promise<unknown>, failure: string) => Promise<void>;
+}) {
+  const ar = lang === "ar";
+  const [open, setOpen] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+
+    const text = (name: string) => String(form.get(name) ?? "");
+    const changes: Record<string, unknown> = {};
+    for (const field of [
+      "title_en",
+      "title_ar",
+      "description_en",
+      "description_ar",
+      "story_en",
+      "story_ar",
+    ] as const) {
+      if (text(field) !== (product[field] ?? "")) changes[field] = text(field);
+    }
+
+    const price = Number(form.get("price"));
+    if (price > 0 && price !== product.price) changes.price = price;
+
+    if (product.kind === "workshop") {
+      const days = Number(form.get("lead_time_days"));
+      if (days >= 1 && days !== product.lead_time_days) changes.lead_time_days = days;
+    }
+
+    const numbered = form.get("show_piece_numbers") === "on";
+    if (numbered !== product.show_piece_numbers) changes.show_piece_numbers = numbered;
+
+    if (Object.keys(changes).length === 0) {
+      setOpen(false);
+      return;
+    }
+    await onSave(
+      () => admin.updateProduct(lang, product.id, changes),
+      ar ? "تعذّر الحفظ" : "That would not save",
+    );
+    setOpen(false);
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="tap self-start text-[13px] text-ink-soft underline underline-offset-4"
+      >
+        {ar ? "عدّل الكلمات والثمن" : "Edit the words and the price"}
+      </button>
+    );
+  }
+
+  const field = (
+    name: keyof AdminProduct,
+    label: string,
+    { rows, rtl }: { rows?: number; rtl?: boolean } = {},
+  ) => (
+    <div>
+      <label className="label" htmlFor={`${name}-${product.id}`}>
+        {label}
+      </label>
+      {rows ? (
+        <textarea
+          id={`${name}-${product.id}`}
+          name={name}
+          rows={rows}
+          dir={rtl ? "rtl" : undefined}
+          defaultValue={String(product[name] ?? "")}
+          className="field resize-none"
+        />
+      ) : (
+        <input
+          id={`${name}-${product.id}`}
+          name={name}
+          maxLength={300}
+          dir={rtl ? "rtl" : undefined}
+          defaultValue={String(product[name] ?? "")}
+          className="field"
+        />
+      )}
+    </div>
+  );
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3 rounded-2xl bg-clay-soft/40 p-4">
+      {field("title_en", ar ? "الاسم بالإنجليزية" : "Name in English")}
+      {field("title_ar", ar ? "الاسم بالعربية" : "Name in Arabic", { rtl: true })}
+      {field("description_en", ar ? "الوصف بالإنجليزية" : "Description in English", { rows: 2 })}
+      {field("description_ar", ar ? "الوصف بالعربية" : "Description in Arabic", {
+        rows: 2,
+        rtl: true,
+      })}
+      {/* The story is what makes this a workshop rather than a shop, and it is
+          also what the search embedding reads. Worth the two boxes. */}
+      {field("story_en", ar ? "كيف صُنعت — بالإنجليزية" : "How it was made, in English", {
+        rows: 2,
+      })}
+      {field("story_ar", ar ? "كيف صُنعت — بالعربية" : "How it was made, in Arabic", {
+        rows: 2,
+        rtl: true,
+      })}
+
+      <div className="flex gap-2">
+        <div className="flex-1">
+          <label className="label" htmlFor={`price-${product.id}`}>
+            {ar ? "الثمن" : "Price"}
+          </label>
+          <input
+            id={`price-${product.id}`}
+            name="price"
+            type="number"
+            min={1}
+            step={1}
+            inputMode="numeric"
+            defaultValue={product.price}
+            className="field"
+          />
+        </div>
+        {product.kind === "workshop" ? (
+          <div className="flex-1">
+            <label className="label" htmlFor={`lead-${product.id}`}>
+              {ar ? "خلال كم يوماً" : "In how many days"}
+            </label>
+            <input
+              id={`lead-${product.id}`}
+              name="lead_time_days"
+              type="number"
+              min={1}
+              max={365}
+              inputMode="numeric"
+              defaultValue={product.lead_time_days ?? undefined}
+              className="field"
+            />
+          </div>
+        ) : null}
+      </div>
+
+      {product.kind === "shelf" ? (
+        <label className="flex items-center gap-2 text-[14px]">
+          <input
+            type="checkbox"
+            name="show_piece_numbers"
+            defaultChecked={product.show_piece_numbers}
+            className="h-4 w-4"
+          />
+          {ar ? "أظهر أرقام القطع (04/01)" : "Show the piece numbers (01/04)"}
+        </label>
+      ) : null}
+
+      <div className="flex gap-2">
+        <button type="submit" disabled={disabled} className="btn-primary">
+          {ar ? "احفظ" : "Save"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="btn-quiet">
+          {ar ? "إلغاء" : "Cancel"}
+        </button>
+      </div>
     </form>
   );
 }

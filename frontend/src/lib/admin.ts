@@ -274,6 +274,12 @@ export interface AdminProduct {
   title_en: string;
   title_ar: string;
   description_en: string;
+  description_ar: string;
+  //: How it was made. The part that does the selling, and the part the
+  //: embedding reads — "hand-finished", "matte", "filed by hand" find their way
+  //: to the right pieces from here, not from the category tree.
+  story_en: string;
+  story_ar: string;
   price: number;
   category_id: string | null;
   status: "draft" | "active" | "archived";

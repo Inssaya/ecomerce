@@ -42,6 +42,9 @@ const product = (over: Partial<AdminProduct> = {}): AdminProduct => ({
   title_en: "Oak wall shelf",
   title_ar: "رف بلوط",
   description_en: "Cut and oiled by hand.",
+  description_ar: "مقصوص ومزيّت يدوياً.",
+  story_en: "Cut from a single board, then oiled.",
+  story_ar: "قُصّ من لوح واحد، ثم زُيّت.",
   price: 320,
   category_id: null,
   status: "draft",
@@ -319,5 +322,83 @@ describe("the shelf screen", () => {
     await userEvent.click(await screen.findByText("Oak wall shelf"));
 
     expect(screen.queryByRole("button", { name: /remove piece number/i })).not.toBeInTheDocument();
+  });
+
+  // ── Fixing it afterwards ───────────────────────────────────────────────────
+
+  it("sends only what actually changed", async () => {
+    // Rewriting the copy re-embeds the piece, so a save that ships six
+    // unchanged fields is not free — and it would overwrite anything edited
+    // elsewhere in the meantime.
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    await userEvent.click(screen.getByRole("button", { name: /edit the words/i }));
+
+    const title = screen.getByLabelText(/name in english/i);
+    await userEvent.clear(title);
+    await userEvent.type(title, "Oak wall shelf, oiled");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(admin.updateProduct).toHaveBeenCalledWith("en", "p1", {
+        title_en: "Oak wall shelf, oiled",
+      }),
+    );
+  });
+
+  it("writes nothing when nothing was touched", async () => {
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    await userEvent.click(screen.getByRole("button", { name: /edit the words/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    expect(admin.updateProduct).not.toHaveBeenCalled();
+  });
+
+  it("can correct a price that turned out too low", async () => {
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    await userEvent.click(screen.getByRole("button", { name: /edit the words/i }));
+
+    const price = screen.getByLabelText("Price");
+    await userEvent.clear(price);
+    await userEvent.type(price, "380");
+    await userEvent.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(admin.updateProduct).toHaveBeenCalledWith("en", "p1", { price: 380 }),
+    );
+  });
+
+  it("offers both languages for every piece of writing", async () => {
+    // Both are authored. A piece with an English story and an empty Arabic one
+    // is half a page on half the site.
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    await userEvent.click(screen.getByRole("button", { name: /edit the words/i }));
+
+    for (const label of [
+      /name in english/i,
+      /name in arabic/i,
+      /description in english/i,
+      /description in arabic/i,
+      /how it was made, in english/i,
+      /how it was made, in arabic/i,
+    ]) {
+      expect(screen.getByLabelText(label)).toBeInTheDocument();
+    }
+  });
+
+  it("does not ask a made-to-order piece whether to show piece numbers", async () => {
+    // It has no batch, so there is nothing to number.
+    vi.mocked(admin.products).mockResolvedValue([
+      product({ kind: "workshop", lead_time_days: 6, available: null }),
+    ]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    await userEvent.click(screen.getByRole("button", { name: /edit the words/i }));
+
+    expect(screen.queryByLabelText(/show the piece numbers/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/in how many days/i)).toBeInTheDocument();
   });
 });
