@@ -315,6 +315,72 @@ function CategoryField({
   );
 }
 
+/**
+ * A delete that takes two taps.
+ *
+ * Both things this screen can destroy — a photograph and a piece off the shelf
+ * — are gone for good, and both live in dense grids of small targets on a
+ * phone. One misplaced thumb should not cost the photograph the shop leads
+ * with. The first tap arms it and says what it is about to do; the second does
+ * it; anything else disarms.
+ *
+ * Deliberately not `window.confirm`: it is unstyleable, it reads as a browser
+ * error, and on a phone it takes over the screen for a decision this small.
+ */
+function ArmedRemove({
+  lang,
+  label,
+  onConfirm,
+  disabled,
+}: {
+  lang: Lang;
+  label: string;
+  onConfirm: () => Promise<void>;
+  disabled?: boolean;
+}) {
+  const ar = lang === "ar";
+  const [armed, setArmed] = useState(false);
+
+  if (armed) {
+    return (
+      // Stacked, not side by side: the tile is 64px wide and two buttons in a
+      // row there are two buttons nobody can hit with a thumb.
+      <span className="absolute inset-0 flex flex-col items-stretch justify-center gap-1 bg-ink/80 p-1">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => {
+            setArmed(false);
+            void onConfirm();
+          }}
+          className="rounded-lg bg-warn py-1 text-[11px] font-medium leading-none text-white"
+        >
+          {ar ? "احذف" : "Remove"}
+        </button>
+        <button
+          type="button"
+          onClick={() => setArmed(false)}
+          className="rounded-lg bg-white/90 py-1 text-[11px] font-medium leading-none text-ink"
+        >
+          {ar ? "لا" : "No"}
+        </button>
+      </span>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      aria-label={label}
+      onClick={() => setArmed(true)}
+      className="absolute end-0 top-0 h-5 w-5 rounded-bl-lg bg-ink/60 text-[12px] leading-none text-white"
+    >
+      ×
+    </button>
+  );
+}
+
 /** Photograph it, make some, publish it — and see who is waiting. */
 function PieceDetail({
   lang,
@@ -371,6 +437,9 @@ function PieceDetail({
   }
 
   const published = product.status === "active";
+  // Only the ones still here. A reserved or sold piece belongs to somebody's
+  // order, and the server refuses to delete it — so it is not offered.
+  const removable = pieces.filter((piece) => piece.state === "available");
 
   return (
     <div className="mt-4 flex flex-col gap-4 border-t border-sand pt-4">
@@ -381,9 +450,45 @@ function PieceDetail({
           {product.images.map((photo) => (
             <span
               key={photo.id}
-              className="relative h-16 w-16 rounded-xl overflow-hidden bg-clay-soft"
+              className={`relative h-16 w-16 rounded-xl overflow-hidden bg-clay-soft ${
+                photo.is_primary ? "ring-2 ring-clay ring-offset-2 ring-offset-surface" : ""
+              }`}
             >
               <Image src={photo.url} alt="" fill sizes="64px" className="object-cover" />
+              {/* The whole tile is the control: tapping a photograph makes it
+                  the one the shelf leads with. There is nowhere else on the
+                  screen where that choice could live and still be obvious. */}
+              {photo.is_primary ? (
+                <span className="absolute inset-x-0 bottom-0 bg-clay/85 text-center text-[10px] font-medium text-white">
+                  {ar ? "الغلاف" : "cover"}
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  aria-label={ar ? "اجعلها صورة الغلاف" : "Make this the cover photo"}
+                  onClick={() =>
+                    void guarded(
+                      () => admin.setCoverPhoto(lang, photo.id),
+                      ar ? "تعذّر التغيير" : "Could not change the cover",
+                    )
+                  }
+                  className="absolute inset-0"
+                />
+              )}
+              {/* Two taps to delete, never one. A photograph is the piece
+                  itself and there is no undo behind this. */}
+              <ArmedRemove
+                lang={lang}
+                disabled={busy}
+                label={ar ? "احذف هذه الصورة" : "Remove this photo"}
+                onConfirm={() =>
+                  guarded(
+                    () => admin.removePhoto(lang, photo.id),
+                    ar ? "تعذّر الحذف" : "Could not remove it",
+                  )
+                }
+              />
             </span>
           ))}
           <label className="tap h-16 w-16 rounded-xl border border-dashed border-sand flex items-center justify-center text-[22px] text-ink-soft cursor-pointer">
@@ -437,17 +542,52 @@ function PieceDetail({
         <div>
           <p className="label">{ar ? "كم صنعت" : "How many you made"}</p>
           {pieces.length > 0 ? (
-            <div className="tally mb-2.5">
-              {pieces.map((piece) => (
-                <span
-                  key={piece.id}
-                  className={piece.state === "available" ? "tally-here" : "tally-gone"}
-                  title={piece.state}
-                >
-                  {String(piece.number).padStart(2, "0")}
-                </span>
-              ))}
-            </div>
+            <>
+              <div className="tally mb-2.5">
+                {pieces.map((piece) => (
+                  <span
+                    key={piece.id}
+                    className={piece.state === "available" ? "tally-here" : "tally-gone"}
+                    title={piece.state}
+                  >
+                    {String(piece.number).padStart(2, "0")}
+                  </span>
+                ))}
+              </div>
+              {/* Counted six, made five. The tally could only ever grow, and a
+                  count that cannot be corrected stops being true — which is the
+                  one thing the whole piece-numbering idea depends on. Only the
+                  ones still here can go; the server refuses the rest, because a
+                  sold piece belongs to somebody's order. */}
+              {removable.length > 0 ? (
+                <div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+                  <span className="text-[12.5px] text-ink-soft">
+                    {ar ? "عدّ خاطئ؟ احذف" : "Miscounted? Remove"}
+                  </span>
+                  {removable.map((piece) => (
+                    <button
+                      key={piece.id}
+                      type="button"
+                      disabled={busy}
+                      aria-label={
+                        ar
+                          ? `احذف القطعة رقم ${piece.number}`
+                          : `Remove piece number ${piece.number}`
+                      }
+                      onClick={() =>
+                        void guarded(
+                          () => admin.removePiece(lang, piece.id),
+                          ar ? "تعذّر الحذف" : "Could not remove it",
+                        )
+                      }
+                      className="tap rounded-lg bg-clay-soft px-2 text-[12px] font-medium text-ink"
+                    >
+                      {String(piece.number).padStart(2, "0")} ×
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </>
           ) : null}
           <form
             className="flex gap-2"

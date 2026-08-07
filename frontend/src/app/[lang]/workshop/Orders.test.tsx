@@ -117,7 +117,7 @@ describe("the orders screen", () => {
     await screen.findByText("7KQ4M2XP");
     await userEvent.click(screen.getByRole("button", { name: "Show on its way orders" }));
     await waitFor(() => {
-      expect(admin.orders).toHaveBeenLastCalledWith("en", "out_for_delivery");
+      expect(admin.orders).toHaveBeenLastCalledWith("en", "out_for_delivery", undefined);
     });
   });
 
@@ -125,5 +125,31 @@ describe("the orders screen", () => {
     render(<Orders lang="ar" onExpire={vi.fn()} />);
     await userEvent.click(await screen.findByText("7KQ4M2XP"));
     expect(screen.getByRole("button", { name: "7KQ4M2XP: مؤكَّد" })).toBeInTheDocument();
+  });
+
+  it("finds an order by the phone number the customer reads out", async () => {
+    // Every order here is cash on delivery, so every order involves a phone
+    // call. The person calling knows their number and their name; the
+    // reference is on a page they closed three days ago. The list is capped at
+    // sixty, so without this an older order simply cannot be reached.
+    render(<Orders lang="en" onExpire={vi.fn()} />);
+    await screen.findByText("7KQ4M2XP");
+
+    await userEvent.type(screen.getByLabelText(/search by reference/i), "0612345678");
+    await waitFor(
+      () => expect(admin.orders).toHaveBeenLastCalledWith("en", undefined, "0612345678"),
+      { timeout: 2000 },
+    );
+  });
+
+  it("says a search found nothing differently from an empty list", async () => {
+    // "Nothing here" under a search box reads as "this shop has no orders",
+    // which is alarming and wrong.
+    render(<Orders lang="en" onExpire={vi.fn()} />);
+    await screen.findByText("7KQ4M2XP");
+
+    vi.mocked(admin.orders).mockResolvedValue([]);
+    await userEvent.type(screen.getByLabelText(/search by reference/i), "nobody");
+    expect(await screen.findByText(/no order matches that/i, {}, { timeout: 2000 })).toBeInTheDocument();
   });
 });

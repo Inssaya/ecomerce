@@ -154,6 +154,33 @@ async def test_an_unsold_piece_can_be_removed(
     assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
 
 
+async def test_removing_a_piece_shrinks_the_run_it_was_part_of(
+    client: AsyncClient, owner_headers: dict[str, str], db_session
+) -> None:
+    """Counted six, made five.
+
+    Adding pieces already rewrites every sibling's batch size — 04/08 becomes
+    04/12 when the run grows — and taking one away has to do the same in
+    reverse. Left alone, the shop keeps saying "01 of 4" over three objects,
+    which is a claim about a specific physical thing that is simply not true.
+    """
+    product = await shelf_piece(client, owner_headers, made=4)
+    last = await db_session.scalar(
+        select(Piece)
+        .where(Piece.product_id == product["id"], Piece.state == PieceState.available)
+        .order_by(Piece.number.desc())
+    )
+
+    assert (
+        await client.delete(f"/api/admin/pieces/{last.id}", headers=owner_headers)
+    ).status_code == 204
+
+    rows = (
+        await client.get(f"/api/admin/products/{product['id']}/pieces", headers=owner_headers)
+    ).json()
+    assert [row["label"] for row in rows] == ["01/03", "02/03", "03/03"]
+
+
 # ── Taking things down ────────────────────────────────────────────────────────
 
 

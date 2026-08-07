@@ -46,7 +46,9 @@ answers questions about a piece over the same catalogue the pages read.
 
 **For the owner.** Today at a glance; the orders screen that moves each one
 along and tells the customer; quoting for custom requests; the shelf, where a
-piece is created, photographed, made and published. Then the reading: a live
+piece is created, photographed, given a kind, made and published — and where
+the photograph the shop leads with is chosen and a miscounted run corrected.
+Then the reading: a live
 funnel counting people rather than events, a per-piece and per-screen table, a
 seven-day forecast with a range and its reasoning, the money and the refusal
 rate, and a copilot that answers from the same functions the screens read.

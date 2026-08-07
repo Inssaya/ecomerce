@@ -40,6 +40,7 @@ const FILTERS = [
 export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void }) {
   const ar = lang === "ar";
   const [filter, setFilter] = useState<string>("");
+  const [query, setQuery] = useState("");
   const [orders, setOrders] = useState<AdminOrder[] | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -47,7 +48,7 @@ export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void })
 
   const load = useCallback(async () => {
     try {
-      setOrders(await admin.orders(lang, filter || undefined));
+      setOrders(await admin.orders(lang, filter || undefined, query.trim() || undefined));
     } catch (error) {
       if (error instanceof NotSignedIn) onExpire();
       else setProblem(ar ? "تعذّر التحميل" : "Could not load");
@@ -55,12 +56,16 @@ export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void })
     // `onExpire` is a fresh function each render; depending on it would reload
     // the list constantly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lang, filter]);
+  }, [lang, filter, query]);
 
   useEffect(() => {
     setOrders(null);
-    void load();
-  }, [load]);
+    // Long enough that a search fires once per word rather than once per
+    // letter, short enough that it never feels like waiting. Matches the
+    // storefront's search for the same reason.
+    const timer = setTimeout(() => void load(), query ? 350 : 0);
+    return () => clearTimeout(timer);
+  }, [load, query]);
 
   async function move(reference: string, status: string) {
     setBusy(reference);
@@ -102,12 +107,33 @@ export function Orders({ lang, onExpire }: { lang: Lang; onExpire: () => void })
         ))}
       </div>
 
+      {/* Someone is on the phone right now. They know their name and their
+          number; the reference is on a screen they have closed. */}
+      <input
+        type="search"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        aria-label={
+          ar ? "ابحث بالمرجع أو الهاتف أو الاسم" : "Search by reference, phone or name"
+        }
+        placeholder={ar ? "مرجع، هاتف، أو اسم" : "Reference, phone, or name"}
+        className="field"
+      />
+
       {problem ? <p className="text-[13px] text-warn">{problem}</p> : null}
 
       {orders === null ? (
         <div className="h-32" aria-hidden />
       ) : orders.length === 0 ? (
-        <p className="text-[14px] text-ink-soft">{ar ? "لا شيء هنا." : "Nothing here."}</p>
+        <p className="text-[14px] text-ink-soft">
+          {query.trim()
+            ? ar
+              ? "لا طلب يطابق ذلك."
+              : "No order matches that."
+            : ar
+              ? "لا شيء هنا."
+              : "Nothing here."}
+        </p>
       ) : (
         <ul className="flex flex-col gap-3">
           {orders.map((order) => (

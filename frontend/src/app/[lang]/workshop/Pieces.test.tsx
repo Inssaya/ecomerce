@@ -28,6 +28,9 @@ vi.mock("@/lib/admin", async () => {
       waiting: vi.fn(),
       categories: vi.fn(),
       createCategory: vi.fn(),
+      setCoverPhoto: vi.fn(),
+      removePhoto: vi.fn(),
+      removePiece: vi.fn(),
     },
   };
 });
@@ -240,5 +243,81 @@ describe("the shelf screen", () => {
         expect.objectContaining({ category_id: "c1" }),
       ),
     );
+  });
+
+  // ── The photographs, and the count ─────────────────────────────────────────
+
+  const photo = (id: string, primary = false) => ({
+    id,
+    url: `https://media.example/${id}.jpg`,
+    alt: "",
+    is_primary: primary,
+  });
+
+  it("chooses which photograph the shelf leads with", async () => {
+    // The primary photo is the whole of a card in the shelf, and the shelf is
+    // where a piece is either tapped or scrolled past. It used to be whichever
+    // one happened to be uploaded first, permanently.
+    vi.mocked(admin.products).mockResolvedValue([
+      product({ images: [photo("m1", true), photo("m2")] }),
+    ]);
+    vi.mocked(admin.setCoverPhoto).mockResolvedValue({ id: "m2" });
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.click(screen.getByRole("button", { name: /make this the cover/i }));
+    await waitFor(() => expect(admin.setCoverPhoto).toHaveBeenCalledWith("en", "m2"));
+  });
+
+  it("does not offer to promote the photograph that is already the cover", async () => {
+    vi.mocked(admin.products).mockResolvedValue([
+      product({ images: [photo("m1", true), photo("m2")] }),
+    ]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    expect(screen.getAllByRole("button", { name: /make this the cover/i })).toHaveLength(1);
+  });
+
+  it("takes two taps to delete a photograph, and one to change your mind", async () => {
+    // Small targets in a dense grid on a phone, and nothing behind it to undo
+    // with. One misplaced thumb should not cost the shop its cover photo.
+    vi.mocked(admin.products).mockResolvedValue([product({ images: [photo("m1", true)] })]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.click(screen.getByRole("button", { name: /remove this photo/i }));
+    expect(admin.removePhoto).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /^no$/i }));
+    expect(admin.removePhoto).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByRole("button", { name: /remove this photo/i }));
+    await userEvent.click(screen.getByRole("button", { name: /^remove$/i }));
+    await waitFor(() => expect(admin.removePhoto).toHaveBeenCalledWith("en", "m1"));
+  });
+
+  it("lets the owner correct a miscount", async () => {
+    vi.mocked(admin.pieces).mockResolvedValue([
+      { id: "pc1", number: 1, batch_size: 2, label: "01/02", state: "available" },
+      { id: "pc2", number: 2, batch_size: 2, label: "02/02", state: "available" },
+    ]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.click(await screen.findByRole("button", { name: /remove piece number 2/i }));
+    await waitFor(() => expect(admin.removePiece).toHaveBeenCalledWith("en", "pc2"));
+  });
+
+  it("never offers to remove a piece somebody has bought", async () => {
+    // It belongs to an order. The server refuses it, and a button that always
+    // fails is worse than no button.
+    vi.mocked(admin.pieces).mockResolvedValue([
+      { id: "pc1", number: 1, batch_size: 2, label: "01/02", state: "sold" },
+      { id: "pc2", number: 2, batch_size: 2, label: "02/02", state: "reserved" },
+    ]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    expect(screen.queryByRole("button", { name: /remove piece number/i })).not.toBeInTheDocument();
   });
 });

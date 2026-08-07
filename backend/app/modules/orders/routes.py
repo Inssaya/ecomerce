@@ -7,7 +7,7 @@ cash.
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.core.errors import get_or_404
 from app.core.limits import CheckoutLimit, LookupLimit
@@ -127,23 +127,3 @@ async def set_status(
     return _out(order)
 
 
-@router.get("/admin/orders/stats/today")
-async def today_stats(db: DbSession, owner: Owner) -> dict:
-    today = func.date_trunc("day", func.now())
-    placed_today = await db.scalar(
-        select(func.count()).select_from(Order).where(Order.created_at >= today)
-    )
-    revenue = await db.scalar(
-        select(func.coalesce(func.sum(Order.total), 0)).where(Order.status == OrderStatus.delivered)
-    )
-    open_orders = await db.scalar(
-        select(func.count())
-        .select_from(Order)
-        .where(Order.status.notin_([OrderStatus.delivered, OrderStatus.cancelled, OrderStatus.returned]))
-    )
-    return {
-        "orders_today": placed_today or 0,
-        "open_orders": open_orders or 0,
-        "revenue_collected": float(revenue or 0),
-        "currency": "MAD",
-    }

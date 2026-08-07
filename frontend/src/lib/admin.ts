@@ -396,8 +396,21 @@ export const admin = {
   forecast: (lang: Lang) => call<Forecast>("/admin/forecast", lang),
   explain: (lang: Lang) => call<{ name: string; explanation: string }[]>("/admin/explain", lang),
 
-  orders: (lang: Lang, status?: string) =>
-    call<AdminOrder[]>(`/admin/orders?size=60${status ? `&status=${status}` : ""}`, lang),
+  /**
+   * The orders, filtered and searched.
+   *
+   * `query` matches the reference, the phone number or the name. It is not a
+   * nicety: the list is capped at sixty, cash on delivery means the phone rings
+   * before a courier is paid, and the person calling says "it's Youssef" or
+   * reads out their number — never "it's 7KQ4M2XP, currently in state ready".
+   */
+  orders: (lang: Lang, status?: string, query?: string) =>
+    call<AdminOrder[]>(
+      `/admin/orders?size=60${status ? `&status=${status}` : ""}${
+        query ? `&q=${encodeURIComponent(query)}` : ""
+      }`,
+      lang,
+    ),
   moveOrder: (lang: Lang, reference: string, status: string, note?: string) =>
     call<AdminOrder>(`/admin/orders/${reference}/status`, lang, {
       method: "POST",
@@ -457,6 +470,21 @@ export const admin = {
     }
   },
 
+  /**
+   * Which photo the shop leads with.
+   *
+   * The most commercially loaded decision on this screen: the primary photo is
+   * the whole of a card in the shelf, and the shelf is where a piece is either
+   * tapped or scrolled past. Before this the cover was whichever photograph
+   * happened to be uploaded first.
+   */
+  setCoverPhoto: (lang: Lang, mediaId: string) =>
+    call<{ id: string }>(`/admin/media/${mediaId}/primary`, lang, { method: "POST" }),
+
+  /** The server refuses to leave a published piece with no photograph. */
+  removePhoto: (lang: Lang, mediaId: string) =>
+    call<void>(`/admin/media/${mediaId}`, lang, { method: "DELETE" }),
+
   pieces: (lang: Lang, productId: string) =>
     call<AdminPiece[]>(`/admin/products/${productId}/pieces`, lang),
 
@@ -466,16 +494,21 @@ export const admin = {
       body: JSON.stringify({ quantity }),
     }),
 
+  /** Miscounted. Only a piece nobody has bought — the server refuses the rest,
+   *  because a sold piece is part of somebody's order. */
+  removePiece: (lang: Lang, pieceId: string) =>
+    call<void>(`/admin/pieces/${pieceId}`, lang, { method: "DELETE" }),
+
   waiting: (lang: Lang, productId: string) =>
     call<{ waiting: number }>(`/admin/products/${productId}/waiting`, lang),
 
-  weights: (lang: Lang) =>
-    call<{ key: string; value: number; explains: string }[]>("/admin/feed/weights", lang),
-  setWeights: (lang: Lang, weights: { key: string; value: number }[]) =>
-    call<{ key: string; value: number; explains: string }[]>("/admin/feed/weights", lang, {
-      method: "PUT",
-      body: JSON.stringify(weights),
-    }),
+  // There is deliberately no client for `/admin/feed/weights`.
+  //
+  // Six sliders that reweight the ranking, in the hands of one person with no
+  // way to measure the effect of moving one, is a control that can only be made
+  // worse with — and the feed already learns. The endpoints stay: they are
+  // tested, they explain each lever in both languages, and a developer can
+  // reach them with curl when there is a reason to. A screen is not that.
 
   copilot: (lang: Lang, messages: { role: string; content: string }[]) =>
     call<{ reply: string }>("/admin/copilot", lang, {

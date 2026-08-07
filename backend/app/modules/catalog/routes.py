@@ -426,7 +426,27 @@ async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
     piece = await get_or_404(db, Piece, piece_id, detail="Piece not found")
     if piece.state is not PieceState.available:
         raise conflict(f"That piece is {piece.state.value} — it cannot be removed")
+
+    product_id = piece.product_id
     await db.delete(piece)
+    await db.flush()
+
+    # The run got smaller, so say so. Adding pieces already rewrites every
+    # sibling's `batch_size` for exactly this reason — 04/08 becomes 04/12 when
+    # the batch grows — and taking one away has to do the same in reverse.
+    # Without this the shop keeps announcing "01 of 4" over three objects,
+    # which is the invented scarcity BRAND.md §10 rules out, pointing the other
+    # way. The highest surviving number is the size of the run: correcting a
+    # miscount at the end heals the labels, and removing from the middle leaves
+    # the numbers people were already shown alone.
+    remaining = await db.scalar(
+        select(func.coalesce(func.max(Piece.number), 0)).where(Piece.product_id == product_id)
+    )
+    await db.execute(
+        Piece.__table__.update()
+        .where(Piece.product_id == product_id)
+        .values(batch_size=remaining)
+    )
     await db.commit()
 
 
