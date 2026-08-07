@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import type { PieceDetail } from "@/lib/api";
+import Link from "next/link";
+
+import { PieceCard } from "@/components/PieceCard";
+import type { Piece, PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, jsonLd, resource, siteUrl } from "@/lib/server";
+import { alternates, fromApi, jsonLd, resource, siteUrl } from "@/lib/server";
 
 import { PieceView } from "./PieceView";
 
@@ -29,6 +32,23 @@ async function piece(lang: Lang, slug: string): Promise<PieceDetail | null> {
   // `resource`, not `fromApi`: a slug with nothing behind it has to be a real
   // 404, and an API we merely could not reach must not be mistaken for one.
   return resource<PieceDetail>(`/products/${slug}`, lang);
+}
+
+/** Up to five other pieces in the same line of work — one drops when the
+ *  current one shows up, leaving four. */
+const RELATED = 5;
+
+async function related(
+  lang: Lang,
+  categorySlug: string,
+  exceptId: string,
+): Promise<Piece[]> {
+  const page = await fromApi<{ items: Piece[] }>(
+    `/products?category=${encodeURIComponent(categorySlug)}&size=${RELATED}`,
+    lang,
+    { revalidate: 300 },
+  );
+  return (page?.items ?? []).filter((item) => item.id !== exceptId).slice(0, 4);
 }
 
 export async function generateMetadata({
@@ -99,6 +119,14 @@ export default async function PiecePage({
   // competing with the live ones and tells a person nothing they can act on.
   if (!initial) notFound();
 
+  // Other pieces from the same line, fetched here on the server so they are on
+  // the page for a crawler and a share preview, not painted on afterwards.
+  // Skipped entirely when the piece has no category — a page saying "more of
+  // this kind" that then shows nothing is worse than not asking.
+  const more = initial.category_slug
+    ? await related(lang, initial.category_slug, initial.id)
+    : [];
+
   return (
     <>
       {/*
@@ -112,7 +140,53 @@ export default async function PiecePage({
         dangerouslySetInnerHTML={{ __html: jsonLd(productSchema(initial, lang)) }}
       />
       <PieceView lang={lang} slug={slug} initial={initial} />
+      {more.length > 0 && initial.category_slug ? (
+        <MorePieces lang={lang} pieces={more} categorySlug={initial.category_slug} />
+      ) : null}
     </>
+  );
+}
+
+/**
+ * A handful of other pieces in the same line, at the foot of the page.
+ *
+ * This is the real internal linking a shop should have — every piece page
+ * points at three or four others, plus the category itself. It is what turns a
+ * link shared to WhatsApp into a browsing session rather than one impression
+ * and a bounce. Ordered newest first, matching the shop's own default; the
+ * personalised ordering is the feed's job, and this is not the feed.
+ */
+function MorePieces({
+  lang,
+  pieces,
+  categorySlug,
+}: {
+  lang: Lang;
+  pieces: Piece[];
+  categorySlug: string;
+}) {
+  const ar = lang === "ar";
+  return (
+    <section className="page mt-4 pb-14 border-t border-sand pt-8">
+      <div className="flex items-baseline justify-between gap-3">
+        <h2 className="text-[19px] font-semibold tracking-tight">
+          {ar ? "من النوع نفسه" : "More of this kind"}
+        </h2>
+        <Link
+          href={`/${lang}/store/${categorySlug}`}
+          className="text-[13px] text-ink-soft underline underline-offset-4"
+        >
+          {ar ? "شاهد الكل" : "See all"}
+        </Link>
+      </div>
+      <ul className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        {pieces.map((piece) => (
+          <li key={piece.id}>
+            <PieceCard lang={lang} piece={piece} />
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

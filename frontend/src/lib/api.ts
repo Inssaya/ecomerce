@@ -129,7 +129,12 @@ export interface RequestView {
 /** Something the assistant asked the browser to do. The server has already
  *  validated it; the client only carries it out. */
 export interface AssistantAction {
-  type: "add_to_cart" | "open_product" | "go_to_checkout" | "open_whatsapp";
+  type:
+    | "add_to_cart"
+    | "open_product"
+    | "open_category"
+    | "go_to_checkout"
+    | "open_whatsapp";
   slug?: string;
   product_id?: string;
   variant_id?: string | null;

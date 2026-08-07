@@ -92,6 +92,10 @@ export function Assistant({ lang }: { lang: Lang }) {
             setOpen(false);
             router.push(`/${lang}/piece/${action.slug}`);
             break;
+          case "open_category":
+            setOpen(false);
+            router.push(`/${lang}/store/${action.slug}`);
+            break;
           case "go_to_checkout":
             setOpen(false);
             router.push(`/${lang}/cart`);

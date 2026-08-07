@@ -506,3 +506,51 @@ async def test_the_tracking_token_stands_on_its_own(
     order = await _an_order(client, owner_headers)
     result = await _tracked(client, model, {"reference_or_token": order["tracking_token"]})
     assert order["reference"] in result
+
+
+# ── Categories: opening a line of work ────────────────────────────────────────
+
+
+async def test_open_category_sends_the_browser_to_that_line(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    """A whole category is a better landing than one piece from it when the
+    question is "what kinds of things do you make". The panel already added
+    /store/<slug> pages; the assistant should be able to reach them."""
+    line = await client.post(
+        "/api/admin/categories",
+        headers=owner_headers,
+        json={"name_en": "Hooks", "name_ar": "خطّافات"},
+    )
+    slug = line.json()["slug"]
+
+    model.says(
+        {"content": None, "tool_calls": [as_tool_call("open_category", {"slug": slug})]},
+        {"content": "Here are the hooks."},
+    )
+    response = await client.post(
+        "/api/assistant",
+        headers=VISITOR,
+        json={"messages": [{"role": "user", "content": "what hooks do you make"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["actions"] == [{"type": "open_category", "slug": slug}]
+
+
+async def test_open_category_refuses_a_line_that_does_not_exist(
+    client: AsyncClient, model
+) -> None:
+    """The assistant cannot invite the browser to open something we do not have.
+    The check is on the server: the model could otherwise send anyone anywhere
+    just by guessing a slug."""
+    model.says(
+        {"content": None, "tool_calls": [as_tool_call("open_category", {"slug": "invented"})]},
+        {"content": "We do not have that line."},
+    )
+    response = await client.post(
+        "/api/assistant",
+        headers=VISITOR,
+        json={"messages": [{"role": "user", "content": "show me your gadgets"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["actions"] == []

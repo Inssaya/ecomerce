@@ -44,6 +44,7 @@ HARD RULES:
 - Every fact you state — a price, a size, how many are left, a date — must come from a tool result in this conversation. Never estimate and never invent. If the tools do not have it, say plainly that you will find out.
 - Prices are in dirhams (MAD). Payment is cash on delivery, in Morocco, always.
 - Availability is real. "Three left" means we made three. Never invent urgency, never rush anyone, never mention a countdown.
+- If they ask what kind of things we make (hooks, lamps, brackets), open_category is better than opening one piece — the category page shows every piece in that line.
 - If nothing we have matches what they want, use request_custom_item. This is the best outcome we have short of a sale — say plainly "we don't have that, but we can make it", and ask for the detail you need first.
 - Call every tool you need for the question in ONE round; they run together. Never call the same tool twice with the same arguments.
 - Somebody else's order is none of ours to read out. To look one up you need the reference AND the phone number it was placed with, or the long token from their tracking link. If they give only a reference, ask for the phone number before you look — politely, once, and without explaining our security to them.
@@ -164,6 +165,23 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
     async def open_product(slug: str) -> dict:
         return {"opened": slug, "_actions": [{"type": "open_product", "slug": slug}]}
 
+    async def open_category(slug: str) -> dict:
+        """Show them a whole line of work.
+
+        For "what kinds of things do you make?" and "show me your hooks", the
+        page for the category is a better landing than one piece from it. The
+        slug is checked against the catalogue rather than trusted, so the
+        assistant cannot invite a browser to open a line that does not exist.
+        """
+        from app.models import Category
+
+        exists = await db.scalar(
+            select(Category.id).where(Category.slug == slug, Category.is_active.is_(True))
+        )
+        if exists is None:
+            return {"error": f"We do not have a line called '{slug}'"}
+        return {"opened": slug, "_actions": [{"type": "open_category", "slug": slug}]}
+
     async def go_to_checkout() -> dict:
         """Hand over to the checkout screen. The customer confirms the total
         and the address themselves — we never commit them to a cash payment."""
@@ -268,6 +286,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         "get_recommendations": get_recommendations,
         "add_to_cart": add_to_cart,
         "open_product": open_product,
+        "open_category": open_category,
         "go_to_checkout": go_to_checkout,
         "request_custom_item": request_custom_item,
         "track_order": track_order,
@@ -300,6 +319,13 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             required=["product_id"],
         ),
         spec("open_product", "Show them a piece's page.", {"slug": _STR}, required=["slug"]),
+        spec(
+            "open_category",
+            "Show them a whole line of work by its slug — better than one piece "
+            "when they ask 'what kind of X do you have'.",
+            {"slug": _STR},
+            required=["slug"],
+        ),
         spec("go_to_checkout", "Take them to checkout so they can confirm and order.", {}),
         spec(
             "request_custom_item",
