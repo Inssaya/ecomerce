@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
 import {
@@ -164,6 +165,16 @@ function SignIn({ lang, onDone }: { lang: Lang; onDone: () => void }) {
       <button type="submit" disabled={busy} className="btn-primary w-full mt-6">
         {lang === "ar" ? "دخول" : "Sign in"}
       </button>
+      {/* The only way back in if the password is lost, and the reset email has
+          been pointing at this page since long before the page existed. */}
+      <p className="mt-5 text-center text-[13px]">
+        <Link
+          href={`/${lang}/account/reset`}
+          className="text-ink-soft underline underline-offset-4"
+        >
+          {lang === "ar" ? "نسيت كلمة السر؟" : "Forgotten your password?"}
+        </Link>
+      </p>
     </form>
   );
 }

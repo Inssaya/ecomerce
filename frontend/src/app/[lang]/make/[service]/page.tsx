@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place, ServicePage } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, siteUrl } from "@/lib/server";
 
 /**
  * "Can you make me one of these?"
@@ -68,10 +68,7 @@ export async function generateMetadata({
   return {
     title,
     description: found.summary,
-    alternates: {
-      canonical: `/${lang}/make/${found.slug}`,
-      languages: { en: `/en/make/${found.slug}`, ar: `/ar/make/${found.slug}` },
-    },
+    alternates: alternates(lang, `/make/${found.slug}`),
     openGraph: {
       type: "website",
       siteName: "MoStyle",

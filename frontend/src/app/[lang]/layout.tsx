@@ -8,7 +8,7 @@ import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
 import { AmbientProvider } from "@/components/ambient";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
-import { siteUrl } from "@/lib/server";
+import { alternates, siteUrl } from "@/lib/server";
 
 /**
  * One family for both scripts.
@@ -66,10 +66,7 @@ export async function generateMetadata({
     title,
     description: t("taglineSupport"),
     applicationName: "MoStyle",
-    alternates: {
-      canonical: `/${language}`,
-      languages: { en: "/en", ar: "/ar" },
-    },
+    alternates: alternates(language),
     openGraph: {
       type: "website",
       siteName: "MoStyle",

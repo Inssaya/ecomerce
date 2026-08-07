@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type { Place, ServiceSummary, WorkshopNumbers } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { fromApi, siteUrl } from "@/lib/server";
+import { fromApi, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * The landing page. One idea, one action.
@@ -175,6 +175,11 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
           {t("findYourOrder")}
         </Link>
       </p>
+      <p className="mt-2 text-center text-[13px] text-ink-soft">
+        <Link href={`/${lang}/delivery`} className="underline underline-offset-4">
+          {lang === "ar" ? "التوصيل والإرجاع" : "Delivery and returns"}
+        </Link>
+      </p>
     </div>
   );
 }
@@ -223,6 +228,10 @@ function workshopSchema(lang: Lang, t: ReturnType<typeof translator>) {
         address: { "@type": "PostalAddress", addressCountry: "MA" },
         currenciesAccepted: "MAD",
         paymentAccepted: "Cash on delivery",
+        // Omitted entirely when unset. A wrong number here is worse than none,
+        // because it is the one a search result puts a "call" button on.
+        ...(workshopPhone ? { telephone: workshopPhone } : {}),
+        areaServed: { "@type": "Country", name: "Morocco" },
         // The position, in the one vocabulary a crawler reads: we make the
         // things we sell.
         makesOffer: {

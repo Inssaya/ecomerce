@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { siteUrl } from "@/lib/server";
+import { alternates, siteUrl } from "@/lib/server";
 
 /**
  * The Workshop door, which is the half of the shop no reseller can copy —
@@ -23,7 +23,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: { canonical: `/${lang}/ask`, languages: { en: "/en/ask", ar: "/ar/ask" } },
+    alternates: alternates(lang, "/ask"),
     openGraph: {
       type: "website",
       siteName: "MoStyle",

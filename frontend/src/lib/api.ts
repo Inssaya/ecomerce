@@ -216,6 +216,22 @@ export const api = {
   withdrawRequest: (lang: Lang, token: string) =>
     request<RequestView>(`/requests/track/${token}/withdraw`, { lang, method: "POST" }),
 
+  /** Ask for a reset link. Always succeeds, even for an unknown address —
+   *  the server refuses to reveal which addresses exist. */
+  forgotPassword: (lang: Lang, email: string) =>
+    request<void>("/auth/forgot-password", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  resetPassword: (lang: Lang, token: string, newPassword: string) =>
+    request<void>("/auth/reset-password", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    }),
+
   assistantStatus: (lang: Lang) =>
     request<{ available: boolean; whatsapp: boolean }>("/assistant/status", { lang }),
 

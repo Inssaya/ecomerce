@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { type Lang, isLang, translator } from "@/lib/i18n";
+import { alternates } from "@/lib/server";
 
 /**
  * The form is indexable — someone searching "mostyle track my order" should
@@ -20,10 +21,7 @@ export async function generateMetadata({
   return {
     title: `${t("findYourOrder")} — MoStyle`,
     description: t("findYourOrderLead"),
-    alternates: {
-      canonical: `/${lang}/orders`,
-      languages: { en: "/en/orders", ar: "/ar/orders" },
-    },
+    alternates: alternates(lang, "/orders"),
   };
 }
 

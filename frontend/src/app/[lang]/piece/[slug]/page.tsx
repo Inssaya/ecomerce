@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import type { PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-import { fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, siteUrl } from "@/lib/server";
 
 import { PieceView } from "./PieceView";
 
@@ -58,15 +58,10 @@ export async function generateMetadata({
   return {
     title: `${found.title} — MoStyle`,
     description,
-    alternates: {
-      canonical: path,
-      // The same piece in both languages, declared to each other. Without this
-      // Google treats them as two competing pages for the same thing.
-      languages: {
-        en: `/en/piece/${found.slug}`,
-        ar: `/ar/piece/${found.slug}`,
-      },
-    },
+    // The same piece in both languages, declared to each other and with an
+    // x-default. Without this Google treats them as two competing pages for
+    // the same thing.
+    alternates: alternates(lang, `/piece/${found.slug}`),
     openGraph: {
       type: "website",
       siteName: "MoStyle",

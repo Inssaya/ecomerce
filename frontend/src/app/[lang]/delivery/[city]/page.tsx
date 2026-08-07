@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * "Do you deliver to Fez, and how long does it take?"
@@ -65,10 +65,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: {
-      canonical: `/${lang}/delivery/${place.slug}`,
-      languages: { en: `/en/delivery/${place.slug}`, ar: `/ar/delivery/${place.slug}` },
-    },
+    alternates: alternates(lang, `/delivery/${place.slug}`),
     openGraph: {
       type: "website",
       siteName: "MoStyle",
@@ -237,6 +234,9 @@ function citySchema(place: Place, lang: Lang) {
     },
     currenciesAccepted: "MAD",
     paymentAccepted: "Cash on delivery",
+    // The same number as the Organization on the landing page. Local search
+    // rewards one business saying one number everywhere and punishes drift.
+    ...(workshopPhone ? { telephone: workshopPhone } : {}),
     // The delivery promise, in the vocabulary that can be shown under a
     // result rather than only read by a person.
     makesOffer: {

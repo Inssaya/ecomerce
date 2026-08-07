@@ -22,7 +22,17 @@ import { LANGS } from "@/lib/i18n";
  * protecting is authenticated or holds an unguessable token; this only keeps
  * them out of an index.
  */
-const PRIVATE = ["/cart", "/checkout", "/track/", "/request/", "/workshop", "/ambient"];
+const PRIVATE = [
+  "/cart",
+  "/checkout",
+  "/track/",
+  "/request/",
+  "/workshop",
+  "/ambient",
+  // The reset page carries a working token in its query string. An indexed
+  // URL here is a credential in a search result.
+  "/account",
+];
 
 export default function robots(): MetadataRoute.Robots {
   return {

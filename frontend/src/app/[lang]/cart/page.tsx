@@ -85,6 +85,15 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
       </dl>
 
       <p className="mt-4 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>
+      {/* Where the doubt actually is. A buyer deciding whether to commit to
+          cash at the door wants to know what happens if they say no — and
+          answering it here prevents the refusal, which costs far more than the
+          sale it might lose. */}
+      <p className="mt-2 text-[13px]">
+        <Link href={`/${lang}/delivery`} className="text-ink-soft underline underline-offset-4">
+          {lang === "ar" ? "ماذا لو لم تعجبني؟" : "What if I don't want it?"}
+        </Link>
+      </p>
 
       <div
         className="fixed bottom-16 inset-x-0 z-10 bg-cream/90 backdrop-blur-md border-t border-sand"

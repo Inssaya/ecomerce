@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import type { Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, siteUrl } from "@/lib/server";
 
 import { StoreFeed } from "./StoreFeed";
 
@@ -37,10 +37,7 @@ export async function generateMetadata({
   return {
     title,
     description,
-    alternates: {
-      canonical: `/${lang}/store`,
-      languages: { en: "/en/store", ar: "/ar/store" },
-    },
+    alternates: alternates(lang, "/store"),
     openGraph: {
       type: "website",
       siteName: "MoStyle",

@@ -28,6 +28,47 @@ export const siteUrl = (
   process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
 ).replace(/\/$/, "");
 
+/**
+ * The canonical URL and the language alternates for one page.
+ *
+ * Written once because it was written eight times, and all eight were missing
+ * the same thing: `x-default`. Without it a search engine that cannot match
+ * the reader's language — most of the world arriving at a bilingual Moroccan
+ * site — has no instruction about which version to show, and picks. With it,
+ * the pair is a complete set: English, Arabic, and what to do otherwise.
+ *
+ * The paths are relative; Next makes them absolute against `metadataBase`.
+ *
+ * @param path the route below the language, e.g. `/store` or `/piece/x`.
+ *             Empty for the landing page.
+ */
+export function alternates(lang: Lang, path = "") {
+  return {
+    canonical: `/${lang}${path}`,
+    languages: {
+      en: `/en${path}`,
+      ar: `/ar${path}`,
+      // English is the default landing — `/` already redirects there.
+      "x-default": `/en${path}`,
+    },
+  };
+}
+
+/**
+ * The workshop's phone, in international form, or nothing.
+ *
+ * Local search leans on a business having a consistent name, address and phone
+ * wherever it appears — the same number on the site, in the structured data and
+ * on a Google Business Profile. This is the site's half of that. It is the
+ * WhatsApp number because in this market that *is* the business number.
+ *
+ * Absent rather than invented when unset: a wrong phone number in structured
+ * data is worse than none, because it is the one a search result will show.
+ */
+export const workshopPhone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
+  ? `+${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER.replace(/\D/g, "")}`
+  : null;
+
 function apiBase(): string {
   return process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000";
 }

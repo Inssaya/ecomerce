@@ -168,6 +168,28 @@ const copy = {
   assistantPlaceholder: ["Type your question", "اكتب سؤالك"],
   talkToAPerson: ["Talk to a person", "تحدّث إلى شخص"],
 
+  // Getting back into the workshop.
+  forgotPassword: ["Forgotten password", "نسيت كلمة السر"],
+  forgotPasswordLead: [
+    "Give us the address on the account and we will send a link to set a new password.",
+    "أعطنا البريد المسجّل وسنرسل رابطاً لتعيين كلمة سر جديدة.",
+  ],
+  sendResetLink: ["Send the link", "أرسل الرابط"],
+  resetSent: [
+    "If that address has an account, a link is on its way. It works for one hour.",
+    "إن كان لذلك البريد حساب، فالرابط في طريقه. يعمل لمدة ساعة.",
+  ],
+  setNewPassword: ["Set a new password", "عيّن كلمة سر جديدة"],
+  newPassword: ["New password", "كلمة السر الجديدة"],
+  newPasswordAgain: ["Type it again", "اكتبها مرة أخرى"],
+  passwordRule: ["At least 8 characters.", "٨ أحرف على الأقل."],
+  savePassword: ["Save it", "احفظها"],
+  passwordChanged: ["Done. You can sign in with it now.", "تم. يمكنك الدخول بها الآن."],
+  otherSessionsEnded: [
+    "Every other session has been signed out.",
+    "تم إنهاء كل الجلسات الأخرى.",
+  ],
+
   // Everything else.
   loading: ["A moment…", "لحظة…"],
   somethingWentWrong: ["Something went wrong.", "حدث خطأ ما."],
