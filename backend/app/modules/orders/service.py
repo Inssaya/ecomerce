@@ -221,7 +221,7 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
     await db.commit()
     await db.refresh(order)
 
-    await notify_order_status(db, order)
+    await notify_order_status(order)
     return order
 
 
@@ -250,5 +250,5 @@ async def change_status(
     await db.commit()
     await db.refresh(order)
 
-    await notify_order_status(db, order)
+    await notify_order_status(order)
     return order

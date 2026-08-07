@@ -1,13 +1,17 @@
 /**
  * The owner's side of the API.
  *
- * The access token is kept in memory and in sessionStorage, not a cookie: this
- * is one person on their own phone, and a token that dies with the tab is one
- * less thing to leak.
+ * The access token is kept in sessionStorage, not a cookie: this is one person
+ * on their own phone, and a token that dies with the tab is one less thing to
+ * leak. It expires after an hour, so the refresh token is kept beside it and
+ * spent automatically — otherwise the panel throws the owner back to the sign-in
+ * form in the middle of the working day, mid-quote, and the day is long.
  */
+import { problemFrom } from "./detail";
 import type { Lang } from "./i18n";
 
 const TOKEN_KEY = "mostyle_owner_token";
+const REFRESH_KEY = "mostyle_owner_refresh";
 
 export function ownerToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -19,9 +23,52 @@ export function setOwnerToken(token: string | null): void {
   else sessionStorage.removeItem(TOKEN_KEY);
 }
 
+/** Both halves of a session, from a login or a renewal. */
+function keepSession(body: { access_token: string; refresh_token?: string }): void {
+  setOwnerToken(body.access_token);
+  if (body.refresh_token) sessionStorage.setItem(REFRESH_KEY, body.refresh_token);
+}
+
+function forgetSession(): void {
+  setOwnerToken(null);
+  if (typeof window !== "undefined") sessionStorage.removeItem(REFRESH_KEY);
+}
+
+/** One renewal at a time. The panel fires several requests at once when a tab
+ *  opens, and without this they would each spend a refresh token — which the
+ *  server rotates, so all but one of them would be spending a dead one. */
+let renewing: Promise<boolean> | null = null;
+
+function renew(): Promise<boolean> {
+  renewing ??= (async () => {
+    const token = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
+    if (!token) return false;
+    try {
+      const response = await fetch("/api/auth/refresh", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ refresh_token: token }),
+      });
+      if (!response.ok) return false;
+      keepSession(await response.json());
+      return true;
+    } catch {
+      return false;
+    }
+  })().finally(() => {
+    renewing = null;
+  });
+  return renewing;
+}
+
 export class NotSignedIn extends Error {}
 
-async function call<T>(path: string, lang: Lang, init: RequestInit = {}): Promise<T> {
+async function call<T>(
+  path: string,
+  lang: Lang,
+  init: RequestInit = {},
+  mayRenew = true,
+): Promise<T> {
   const token = ownerToken();
   if (!token) throw new NotSignedIn();
 
@@ -33,7 +80,13 @@ async function call<T>(path: string, lang: Lang, init: RequestInit = {}): Promis
   const separator = path.includes("?") ? "&" : "?";
   const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
   if (response.status === 401 || response.status === 403) {
-    setOwnerToken(null);
+    // 401 is an expired hour, not a refusal — try the refresh token once and
+    // replay. 403 is the server saying no to *this* account, and no amount of
+    // fresh tokens changes that.
+    if (mayRenew && response.status === 401 && (await renew())) {
+      return call<T>(path, lang, init, false);
+    }
+    forgetSession();
     throw new NotSignedIn();
   }
   if (!response.ok) {
@@ -41,14 +94,7 @@ async function call<T>(path: string, lang: Lang, init: RequestInit = {}): Promis
     // reasons the owner needs to read — "Add at least one photo of the piece
     // before publishing it" is an instruction; "Request failed (400)" is a
     // dead end on the one screen that puts things in the shop.
-    let detail = "";
-    try {
-      const body = await response.json();
-      detail = Array.isArray(body?.detail) ? body.detail[0]?.msg : body?.detail;
-    } catch {
-      /* not JSON — the status is all there is */
-    }
-    throw new Error(detail || `Request failed (${response.status})`);
+    throw new Error(await problemFrom(response));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }
@@ -279,7 +325,47 @@ export const admin = {
     if (!response.ok) throw new Error("Email or password is incorrect");
     const body = await response.json();
     if (body.user?.role !== "owner") throw new Error("That account is not the workshop's");
-    setOwnerToken(body.access_token);
+    keepSession(body);
+  },
+
+  /**
+   * Leave properly.
+   *
+   * Clearing sessionStorage only removes the tokens from this browser; the
+   * refresh token stays valid on the server for thirty days, so anything that
+   * got a copy of it could still mint access tokens long after the owner
+   * thought they had signed out. `/auth/logout` revokes it.
+   *
+   * The local clear happens first and unconditionally: whatever the network
+   * says, pressing sign out signs you out of this phone.
+   */
+  async signOut(lang: Lang): Promise<void> {
+    const token = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
+    forgetSession();
+    if (!token) return;
+    await fetch(`/api/auth/logout?lang=${lang}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ refresh_token: token }),
+      keepalive: true,
+    }).catch(() => undefined);
+  },
+
+  /**
+   * Change the password without going through email.
+   *
+   * The reset link is the recovery path and it depends on SMTP being right; this
+   * is the ordinary one, and it is the only way to change a password that was
+   * chosen for you by whoever ran `seed-owner`. The server revokes every session
+   * on success — including this one — so the panel drops back to sign-in rather
+   * than pretending it is still holding a live session.
+   */
+  async changePassword(lang: Lang, current: string, next: string): Promise<void> {
+    await call<void>("/auth/change-password", lang, {
+      method: "POST",
+      body: JSON.stringify({ current_password: current, new_password: next }),
+    });
+    forgetSession();
   },
 
   pulse: (lang: Lang) => call<Pulse>("/admin/pulse", lang),

@@ -182,10 +182,14 @@ placed → confirmed → preparing → ready → out_for_delivery → delivered
                   ↘ cancelled          ↘ failed → returned
 ```
 
-### Every transition notifies on three channels
-- **In-app** — notification bell (already built)
-- **Email** — templated, EN/AR
-- **WhatsApp** — click-to-chat link minimum; Business API if credentials exist
+### Every transition notifies on two channels
+- **Email** — written per language, EN/AR, plain text beside the HTML
+- **WhatsApp** — click-to-chat link, which in this market *is* the phone number
+
+There was a third — an in-app notification bell, ported from
+notification-service. It was removed: it wrote to a table keyed on `user_id`,
+and nobody here is ever a signed-in customer. Buying never requires an account,
+so `customer_id` was null on every order and the bell never rang.
 
 The customer is **never** left wondering where their order is. Admin can change state manually from the panel and the customer is notified automatically.
 
@@ -246,7 +250,7 @@ Guiding feeling: *simple enough to never think, warm enough to stay.*
 | 1 | **Data model** | category tree, facets, variants, signals table, embeddings |
 | 2 | **Feed engine** | affinity, scoring, ε explore/exploit, fatigue |
 | 3 | **Redesign** | landing, store feed, product, cart, checkout — warm system |
-| 4 | **Orders** | state machine + email/WhatsApp/in-app notification |
+| 4 | **Orders** | state machine + email and WhatsApp notification |
 | 5 | **AI concierge** | buyer-facing assistant with tools |
 | 6 | **Custom requests** | request → quote → production → delivery |
 | 7 | **Admin** | pulse, decide, feed control, AI copilot |

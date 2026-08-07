@@ -1,12 +1,6 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { passThrough, privatePage } from "../private-layout";
 
 /** Someone's own request and the price we sent them. */
-export const metadata: Metadata = {
-  title: "Your request",
-  robots: { index: false, follow: false },
-};
+export const metadata = privatePage("Your request");
 
-export default function Layout({ children }: { children: ReactNode }) {
-  return children;
-}
+export default passThrough;

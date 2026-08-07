@@ -3,15 +3,7 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
-import {
-  admin,
-  NotSignedIn,
-  ownerToken,
-  setOwnerToken,
-  type Decide,
-  type Money,
-  type Pulse,
-} from "@/lib/admin";
+import { admin, NotSignedIn, ownerToken, type Decide, type Money, type Pulse } from "@/lib/admin";
 import { type Lang, isLang, money as formatMoney } from "@/lib/i18n";
 
 import { Live } from "./Live";
@@ -68,8 +60,11 @@ export default function Workshop({ params }: { params: Promise<{ lang: string }>
         <button
           type="button"
           onClick={() => {
-            setOwnerToken(null);
+            // Sign out of this phone immediately, and revoke the session on the
+            // server on the way — clearing storage alone leaves a refresh token
+            // that stays good for a month.
             setSignedIn(false);
+            void admin.signOut(lang);
           }}
           className="tap text-[13px] text-ink-soft px-2"
         >
@@ -210,6 +205,15 @@ function Today({ lang, onExpire }: { lang: Lang; onExpire: () => void }) {
   if (!data) return <div className="h-40 rounded-3xl bg-clay-soft/50 animate-pulse" aria-hidden />;
 
   return (
+    <div className="space-y-6">
+      <TodayFigures lang={lang} data={data} />
+      <ChangePassword lang={lang} onDone={onExpire} />
+    </div>
+  );
+}
+
+function TodayFigures({ lang, data }: { lang: Lang; data: Pulse }) {
+  return (
     <div className="grid grid-cols-2 gap-3">
       <Figure label={lang === "ar" ? "طلبات اليوم" : "Orders today"} value={String(data.orders_today)} />
       <Figure
@@ -229,6 +233,108 @@ function Today({ lang, onExpire }: { lang: Lang; onExpire: () => void }) {
         }
       />
     </div>
+  );
+}
+
+/**
+ * Changing the password from inside the panel.
+ *
+ * The reset email is the recovery path and it only works if SMTP is configured
+ * and delivering; this is the ordinary one. It matters more than it looks:
+ * the first password this account ever has is typed into `seed-owner` on the
+ * server by whoever deployed the site, and until now there was no way for the
+ * owner to make it theirs.
+ *
+ * Folded away, because it is not a thing anybody does daily and the top of this
+ * screen belongs to today's orders.
+ */
+function ChangePassword({ lang, onDone }: { lang: Lang; onDone: () => void }) {
+  const ar = lang === "ar";
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    setBusy(true);
+    setProblem(null);
+    try {
+      await admin.changePassword(
+        lang,
+        String(form.get("current")),
+        String(form.get("next")),
+      );
+      // Every session is revoked on the server, including this one. Signing in
+      // again with the new password is the honest next step.
+      onDone();
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : ar ? "تعذّر التغيير" : "That would not change");
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="tap text-[13px] text-ink-soft underline underline-offset-4"
+      >
+        {ar ? "تغيير كلمة السر" : "Change password"}
+      </button>
+    );
+  }
+
+  return (
+    <form onSubmit={submit} className="card p-5 shadow-soft space-y-3">
+      <h2 className="text-[16px] font-semibold">{ar ? "تغيير كلمة السر" : "Change password"}</h2>
+      <div>
+        <label className="label" htmlFor="current-password">
+          {ar ? "كلمة السر الحالية" : "Current password"}
+        </label>
+        <input
+          id="current-password"
+          name="current"
+          type="password"
+          required
+          autoComplete="current-password"
+          className="field"
+        />
+      </div>
+      <div>
+        <label className="label" htmlFor="next-password">
+          {ar ? "كلمة السر الجديدة" : "New password"}
+        </label>
+        <input
+          id="next-password"
+          name="next"
+          type="password"
+          required
+          minLength={8}
+          autoComplete="new-password"
+          className="field"
+        />
+      </div>
+      {problem ? (
+        <p role="alert" className="text-[13px] text-warn">
+          {problem}
+        </p>
+      ) : null}
+      <p className="text-[12px] text-ink-soft">
+        {ar
+          ? "سيُغلق كل جهاز مسجَّل، بما في ذلك هذا — ستدخل من جديد."
+          : "Every signed-in device is signed out, including this one — you'll sign in again."}
+      </p>
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="btn-primary">
+          {ar ? "غيّرها" : "Change it"}
+        </button>
+        <button type="button" onClick={() => setOpen(false)} className="btn-quiet">
+          {ar ? "إلغاء" : "Cancel"}
+        </button>
+      </div>
+    </form>
   );
 }
 

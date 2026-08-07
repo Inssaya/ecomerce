@@ -1,12 +1,6 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { passThrough, privatePage } from "../private-layout";
 
-/** A form with a name, a phone number and an address in it. */
-export const metadata: Metadata = {
-  title: "Checkout",
-  robots: { index: false, follow: false },
-};
+/** A form carrying a name, a phone number and an address. */
+export const metadata = privatePage("Checkout");
 
-export default function Layout({ children }: { children: ReactNode }) {
-  return children;
-}
+export default passThrough;

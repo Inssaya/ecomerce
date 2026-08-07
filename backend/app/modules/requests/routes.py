@@ -7,7 +7,7 @@ from sqlalchemy import select
 
 from app.core.errors import get_or_404
 from app.core.limits import RequestLimit
-from app.deps import CurrentUser, DbSession, Lang, OptionalUser, Owner, Paging
+from app.deps import DbSession, Lang, OptionalUser, Owner, Paging
 from app.models import Order
 from app.models.requests import CustomRequest, RequestStatus
 from app.modules.notify.service import whatsapp_url
@@ -102,20 +102,6 @@ async def withdraw(tracking_token: str, db: DbSession, lang: Lang) -> RequestOut
         db, request, RequestStatus.withdrawn, None, actor="customer"
     )
     return await _out(db, request, lang)
-
-
-@router.get("/requests/mine", response_model=list[RequestOut])
-async def my_requests(
-    user: CurrentUser, db: DbSession, lang: Lang, paging: Paging
-) -> list[RequestOut]:
-    rows = await db.scalars(
-        select(CustomRequest)
-        .where(CustomRequest.customer_id == user.id)
-        .order_by(CustomRequest.created_at.desc())
-        .offset(paging.offset)
-        .limit(paging.size)
-    )
-    return [await _out(db, request, lang) for request in rows.unique()]
 
 
 # ── Owner ─────────────────────────────────────────────────────────────────────

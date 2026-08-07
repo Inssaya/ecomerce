@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 
 from app.core.errors import get_or_404
 from app.core.limits import CheckoutLimit, LookupLimit
-from app.deps import CurrentUser, DbSession, OptionalUser, Owner, Paging
+from app.deps import DbSession, OptionalUser, Owner, Paging
 from app.models import Order, OrderStatus
 from app.modules.notify.service import whatsapp_url
 from app.modules.orders import service
@@ -77,18 +77,6 @@ async def find_order(body: FindOrder, db: DbSession, _: LookupLimit) -> OrderRes
             status_code=404, detail="No order with that reference and phone number"
         )
     return _out(order)
-
-
-@router.get("/orders/mine", response_model=list[OrderResponse])
-async def my_orders(user: CurrentUser, db: DbSession, paging: Paging) -> list[OrderResponse]:
-    rows = await db.scalars(
-        select(Order)
-        .where(Order.customer_id == user.id)
-        .order_by(Order.created_at.desc())
-        .offset(paging.offset)
-        .limit(paging.size)
-    )
-    return [_out(order) for order in rows.unique()]
 
 
 # ── Owner ─────────────────────────────────────────────────────────────────────

@@ -14,7 +14,6 @@ from app.models.catalog import (
     ProductVariant,
 )
 from app.models.local import City, Service
-from app.models.notify import Notification
 from app.models.orders import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATUSES,
@@ -60,7 +59,6 @@ __all__ = [
     "TERMINAL_STATUSES",
     "BilingualMixin",
     "Category",
-    "Notification",
     "Order",
     "OrderEvent",
     "OrderItem",

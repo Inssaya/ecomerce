@@ -55,7 +55,7 @@ async def raise_request(
     db.add(request)
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
     return request
 
 
@@ -88,7 +88,7 @@ async def quote(db: AsyncSession, request: CustomRequest, body: Quote) -> Custom
     )
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
     return request
 
 
@@ -148,8 +148,8 @@ async def approve(
     await db.refresh(request)
     await db.refresh(order)
 
-    await notify_request_status(db, request)
-    await notify_order_status(db, order)
+    await notify_request_status(request)
+    await notify_order_status(order)
     return request
 
 
@@ -171,5 +171,5 @@ async def change_status(
     db.add(RequestEvent(request_id=request.id, status=target, actor=actor, note=note))
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
     return request

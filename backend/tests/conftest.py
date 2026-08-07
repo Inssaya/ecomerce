@@ -82,7 +82,7 @@ async def clean_db() -> AsyncGenerator[None, None]:
                 "piece_alerts, pieces, product_variants, "
                 "product_embeddings, product_media, products, signals, feed_weights, categories, "
                 "cities, services, "
-                "notifications, refresh_tokens, users RESTART IDENTITY CASCADE"
+                "refresh_tokens, users RESTART IDENTITY CASCADE"
             )
         )
     # Counters are per-test: a limit tripped in one test must not spill into

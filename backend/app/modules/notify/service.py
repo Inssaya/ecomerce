@@ -14,10 +14,8 @@ from __future__ import annotations
 import logging
 from urllib.parse import quote
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from app.config import settings
-from app.models import Notification, Order, OrderStatus
+from app.models import Order, OrderStatus
 from app.models.requests import CustomRequest, RequestStatus
 from app.modules.notify.email import send_order_update
 
@@ -224,35 +222,26 @@ def whatsapp_url(subject: Order | CustomRequest) -> str:
 
 
 async def _deliver(
-    db: AsyncSession,
     *,
     copy: Copy,
-    kind: str,
     lang: str,
     reference: str,
     fields: dict[str, str],
-    customer_id: str | None,
     email: str | None,
     track_url: str,
 ) -> None:
-    """In-app for signed-in customers, email for anyone who left an address.
+    """Email, to whoever left an address.
+
+    There used to be a second channel here, writing an in-app notification for
+    a signed-in customer. Nobody was ever signed in: buying never requires an
+    account and the storefront offers no way to make one, so `customer_id` was
+    null on every order this shop has taken and the branch never ran. Email is
+    the only channel that reaches a customer, and this is now only that.
 
     Never raises: a notification failure must not roll back the state change it
     was reporting on. Shared by orders and custom requests — the two differ in
     their copy, not in how they are delivered.
     """
-    if customer_id:
-        db.add(
-            Notification(
-                user_id=customer_id,
-                kind=kind,
-                title=copy.heading(lang),
-                body=copy.body(lang).format(**fields),
-                payload={"reference": reference},
-            )
-        )
-        await db.commit()
-
     if email:
         try:
             await send_order_update(
@@ -269,31 +258,26 @@ async def _deliver(
             logger.error("%s: could not email %s: %s", reference, email, exc)
 
 
-async def notify_order_status(db: AsyncSession, order: Order) -> None:
+async def notify_order_status(order: Order) -> None:
     copy = ORDER_COPY.get(order.status)
     if copy is None:
         return
     await _deliver(
-        db,
         copy=copy,
-        kind=f"order.{order.status.value}",
         lang=order.lang,
         reference=order.reference,
         fields={"reference": order.reference, "total": f"{order.total:.0f}"},
-        customer_id=order.customer_id,
         email=order.customer_email,
         track_url=order_track_url(order),
     )
 
 
-async def notify_request_status(db: AsyncSession, request: CustomRequest) -> None:
+async def notify_request_status(request: CustomRequest) -> None:
     copy = REQUEST_COPY.get(request.status)
     if copy is None:
         return
     await _deliver(
-        db,
         copy=copy,
-        kind=f"request.{request.status.value}",
         lang=request.lang,
         reference=request.reference,
         fields={
@@ -301,7 +285,6 @@ async def notify_request_status(db: AsyncSession, request: CustomRequest) -> Non
             "price": f"{request.quote_price:.0f}" if request.quote_price is not None else "—",
             "days": str(request.lead_time_days or "—"),
         },
-        customer_id=request.customer_id,
         email=request.customer_email,
         track_url=request_track_url(request),
     )

@@ -15,22 +15,45 @@ and [`docs/REBUILD-PLAN.md`](docs/REBUILD-PLAN.md) for how it is built.
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────┐
-│  Next.js 14  (storefront + workshop panel)   │
-└───────────────────┬──────────────────────────┘
-                    │  /api/*
-┌───────────────────▼──────────────────────────┐
-│  FastAPI — one app                           │
-│  auth · catalog · orders · notify            │
-└───────────────────┬──────────────────────────┘
-                    │
-     PostgreSQL 16 + pgvector · Redis · MinIO
+┌────────────────────────────────────────────────────────┐
+│  Next.js 15  storefront · owner panel · local pages    │
+└──────────────────────────┬─────────────────────────────┘
+                           │  /api/*
+┌──────────────────────────▼─────────────────────────────┐
+│  FastAPI — one app                                     │
+│  auth · catalog · orders · requests · feed             │
+│  notify · admin · ai · local                           │
+└──────────────────────────┬─────────────────────────────┘
+                           │
+        PostgreSQL 16 + pgvector · Redis · MinIO
 ```
 
-Six containers. It used to be sixteen: eight services, a gateway, RabbitMQ and
-Meilisearch, for a shop with one owner. Cross-service joins were HTTP calls and
-nothing could hold a foreign key. Phase 0 collapsed all of it into one process
-on one database.
+Six containers in production — Postgres, Redis, MinIO, the API, the storefront
+and nginx, plus certbot and a nightly backup alongside them. It used to be
+sixteen: eight services, a gateway, RabbitMQ and Meilisearch, for a shop with
+one owner. Cross-service joins were HTTP calls and nothing could hold a foreign
+key. Phase 0 collapsed all of it into one process on one database.
+
+## What it does
+
+**For a buyer.** One shelf that reorders itself around what you look at, a
+search, a piece page carrying the whole batch drawn as marks, a cart, a
+cash-on-delivery checkout, and a tracking page — plus a way back into an order
+from the reference and your phone when the link is lost, and a way to be told
+when a sold-out piece is made again. If the shelf has nothing, describe what
+you want and we come back with a price and a real date. A shopping assistant
+answers questions about a piece over the same catalogue the pages read.
+
+**For the owner.** Today at a glance; the orders screen that moves each one
+along and tells the customer; quoting for custom requests; the shelf, where a
+piece is created, photographed, made and published. Then the reading: a live
+funnel counting people rather than events, a per-piece and per-screen table, a
+seven-day forecast with a range and its reasoning, the money and the refusal
+rate, and a copilot that answers from the same functions the screens read.
+
+**For being found.** Both languages throughout, real metadata and structured
+data on every public page, five written service pages, twenty-nine Moroccan
+cities with honest delivery windows, and a sitemap built from the catalogue.
 
 ## Running it
 
@@ -73,10 +96,21 @@ backend/app/
   db.py          engine, session, declarative base
   deps.py        identity, language and paging dependencies
   cli.py         seed-owner
-  core/          security, storage, cache, slugs, errors, llm, agent loop
+  core/          security, storage, cache, slugs, errors, limits, llm, agent
   models/        the whole schema, one package
-  modules/       auth · catalog · orders · requests · feed · notify · admin · ai
+  modules/       auth · catalog · orders · requests · feed
+                 notify · admin · ai · local
 ```
+
+`admin/` is three files worth knowing about: `metrics.py` answers the business
+questions, `analytics.py` answers *what happens on the site* and counts people
+rather than events, and `forecast.py` says what the next seven days look like
+and why. All three are read by the copilot as well as by the panel, so the
+assistant and the screen cannot disagree.
+
+Coverage is measured with `concurrency = greenlet` — see `.coveragerc`. Without
+it SQLAlchemy's async layer hides most of what the tests actually run, and the
+report understates by more than ten points.
 
 ## Working on the storefront
 
@@ -126,11 +160,22 @@ canonical tags will name only one of them.
 
 ```
 frontend/src/
-  app/[lang]/    landing · store · piece · cart · checkout · track · ask · orders · workshop
+  app/[lang]/    landing · store · piece · cart · checkout · track
+                 ask · request · orders · account/reset
+                 make/[service] · delivery · delivery/[city] · workshop
   app/           robots.ts · sitemap.ts
-  components/    Chrome · PieceCard · CartProvider · Assistant · WaitForMore
-  lib/           api · server · admin · i18n · signals · fingerprint
+  components/    Chrome · PieceCard · CartProvider · Assistant
+                 WaitForMore · charts · ambient
+  lib/           api · server · admin · detail · i18n · signals · fingerprint
 ```
+
+```bash
+npm test          # vitest, the owner screens and the admin client
+```
+
+The tests are aimed at behaviour with a consequence — that a button calls what
+it claims to, that only legal moves are offered — not at markup. They found two
+real defects on their first run, which is the argument for them.
 
 Every route lives under `/en` or `/ar`. There is no third language and no
 translation layer: both are authored, and the Arabic is written as Arabic.

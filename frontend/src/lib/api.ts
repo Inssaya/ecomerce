@@ -5,6 +5,7 @@
  * essentially every endpoint cares about both: what language to answer in, and
  * whose feed this is.
  */
+import { problemFrom } from "./detail";
 import { visitorId } from "./fingerprint";
 import type { Lang } from "./i18n";
 
@@ -152,16 +153,7 @@ async function request<T>(
 
   const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
   if (!response.ok) {
-    let detail = "";
-    try {
-      const body = await response.json();
-      // FastAPI returns validation errors as a list of objects; the first
-      // message is the useful one for a person.
-      detail = Array.isArray(body?.detail) ? body.detail[0]?.msg : body?.detail;
-    } catch {
-      /* the body was not JSON, which the status alone already tells us */
-    }
-    throw new ApiError(response.status, detail || `Request failed (${response.status})`);
+    throw new ApiError(response.status, await problemFrom(response));
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }

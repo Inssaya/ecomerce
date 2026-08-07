@@ -27,7 +27,6 @@ from app.modules.catalog.routes import router as catalog_router
 from app.modules.feed.routes import router as feed_router
 from app.modules.local.routes import router as local_router
 from app.modules.local.seed import seed as seed_local
-from app.modules.notify.routes import router as notify_router
 from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
 
@@ -121,7 +120,6 @@ api.include_router(orders_router)
 api.include_router(requests_router)
 api.include_router(feed_router)
 api.include_router(local_router)
-api.include_router(notify_router)
 api.include_router(admin_router)
 api.include_router(ai_router)
 app.include_router(api)

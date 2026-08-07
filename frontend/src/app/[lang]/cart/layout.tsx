@@ -1,12 +1,6 @@
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
+import { passThrough, privatePage } from "../private-layout";
 
-/** Someone's own cart. Nothing here belongs in an index. */
-export const metadata: Metadata = {
-  title: "Your cart",
-  robots: { index: false, follow: false },
-};
+/** Someone's own cart. */
+export const metadata = privatePage("Your cart");
 
-export default function Layout({ children }: { children: ReactNode }) {
-  return children;
-}
+export default passThrough;

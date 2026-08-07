@@ -132,3 +132,144 @@ describe("talking to the API as the owner", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * The session itself.
+ *
+ * The access token lasts an hour and the owner's day does not. Before this, the
+ * panel simply dropped them at the sign-in form when the hour was up — possibly
+ * mid-quote — and "Sign out" cleared the browser while leaving the refresh
+ * token valid on the server for another thirty days.
+ */
+describe("the session", () => {
+  const fetchMock = vi.fn();
+
+  beforeEach(() => {
+    vi.stubGlobal("fetch", fetchMock);
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+  });
+
+  function reply(body: unknown, status = 200) {
+    fetchMock.mockResolvedValueOnce({ ok: status < 400, status, json: async () => body });
+  }
+
+  async function signIn() {
+    reply({ access_token: "first", refresh_token: "renewal", user: { role: "owner" } });
+    await admin.signIn("en", "owner@mostyle.ma", "a real password");
+    fetchMock.mockClear();
+  }
+
+  it("keeps the refresh token from signing in, not only the access token", async () => {
+    await signIn();
+    expect(ownerToken()).toBe("first");
+    expect(sessionStorage.getItem("mostyle_owner_refresh")).toBe("renewal");
+  });
+
+  it("will not sign in an account that is not the workshop's", async () => {
+    reply({ access_token: "x", refresh_token: "y", user: { role: "customer" } });
+    await expect(admin.signIn("en", "someone@example.com", "password")).rejects.toThrow();
+    expect(ownerToken()).toBeNull();
+  });
+
+  it("renews an expired hour and replays the request, instead of signing the owner out", async () => {
+    await signIn();
+    reply({}, 401); // the access token aged out
+    reply({ access_token: "second", refresh_token: "rotated" }); // /auth/refresh
+    reply([{ reference: "7KQ4M2XP" }]); // the replay
+
+    await expect(admin.orders("en")).resolves.toEqual([{ reference: "7KQ4M2XP" }]);
+
+    expect(fetchMock.mock.calls[1][0]).toBe("/api/auth/refresh");
+    // The replay carries the new token, and the rotated refresh token is kept —
+    // the server spends the old one on every renewal.
+    expect(new Headers(fetchMock.mock.calls[2][1].headers).get("authorization")).toBe(
+      "Bearer second",
+    );
+    expect(sessionStorage.getItem("mostyle_owner_refresh")).toBe("rotated");
+  });
+
+  it("gives up once the refresh token is dead too", async () => {
+    await signIn();
+    reply({}, 401);
+    reply({}, 401); // /auth/refresh refuses as well
+
+    await expect(admin.orders("en")).rejects.toBeInstanceOf(NotSignedIn);
+    expect(ownerToken()).toBeNull();
+    expect(sessionStorage.getItem("mostyle_owner_refresh")).toBeNull();
+  });
+
+  it("does not try to renew its way past a 403", async () => {
+    // 403 is the server refusing this account, not an expired hour. Renewing
+    // would spend a good refresh token to be told no a second time.
+    await signIn();
+    reply({}, 403);
+    await expect(admin.orders("en")).rejects.toBeInstanceOf(NotSignedIn);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("renews once when several screens hit the same expired hour", async () => {
+    // The panel loads two or three things at once. Each of them spending a
+    // refresh token would leave all but one holding a token the server has
+    // already rotated away.
+    await signIn();
+    reply({}, 401);
+    reply({}, 401);
+    reply({ access_token: "second", refresh_token: "rotated" });
+    reply([]);
+    reply({});
+
+    await Promise.all([admin.orders("en"), admin.pulse("en")]);
+
+    const renewals = fetchMock.mock.calls.filter(([url]) => url === "/api/auth/refresh");
+    expect(renewals).toHaveLength(1);
+  });
+
+  it("revokes the session on the server when the owner signs out", async () => {
+    await signIn();
+    reply(undefined, 204);
+
+    await admin.signOut("en");
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain("/api/auth/logout");
+    expect(JSON.parse(init.body)).toEqual({ refresh_token: "renewal" });
+    expect(ownerToken()).toBeNull();
+    expect(sessionStorage.getItem("mostyle_owner_refresh")).toBeNull();
+  });
+
+  it("signs out of this phone even when the network is gone", async () => {
+    await signIn();
+    fetchMock.mockRejectedValueOnce(new Error("offline"));
+    await expect(admin.signOut("en")).resolves.toBeUndefined();
+    expect(ownerToken()).toBeNull();
+  });
+
+  it("drops the session after a password change, because the server revoked it", async () => {
+    await signIn();
+    reply(undefined, 204);
+
+    await admin.changePassword("en", "the old one", "a much longer new one");
+
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body).toEqual({
+      current_password: "the old one",
+      new_password: "a much longer new one",
+    });
+    expect(ownerToken()).toBeNull();
+  });
+
+  it("keeps the owner signed in when the current password was wrong", async () => {
+    await signIn();
+    reply({ detail: "Current password is incorrect" }, 400);
+
+    await expect(admin.changePassword("en", "wrong", "a much longer new one")).rejects.toThrow(
+      "Current password is incorrect",
+    );
+    expect(ownerToken()).toBe("first");
+  });
+});
