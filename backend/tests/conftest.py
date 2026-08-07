@@ -36,7 +36,17 @@ from app.modules.notify import email as email_module  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
+def mailbox(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
+    """Every message the shop tried to send during one test.
+
+    Autouse, so nothing ever reaches a real SMTP server — but returned rather
+    than discarded, because some of what the shop does is only observable in
+    what it posts. A password reset is the clearest case: the token exists
+    solely inside the link in that email, so a test that cannot read the
+    mailbox cannot follow the flow a person follows.
+    """
+    sent: list[dict[str, str]] = []
+
     async def fake_upload(data: bytes, content_type: str, *, prefix: str) -> str:
         return f"http://storage.test/{prefix}/photo.jpg"
 
@@ -44,6 +54,7 @@ def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     async def fake_send(to: str, subject: str, html: str) -> bool:
+        sent.append({"to": to, "subject": subject, "html": html})
         return True
 
     monkeypatch.setattr(storage, "upload_image", fake_upload)
@@ -51,6 +62,7 @@ def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.modules.catalog.routes.upload_image", fake_upload)
     monkeypatch.setattr("app.modules.catalog.routes.delete_object", fake_delete)
     monkeypatch.setattr(email_module, "send_email", fake_send)
+    return sent
 
 
 @pytest.fixture
