@@ -275,6 +275,7 @@ export interface AdminProduct {
   title_ar: string;
   description_en: string;
   price: number;
+  category_id: string | null;
   status: "draft" | "active" | "archived";
   //: Null for made-to-order, which never has a count.
   available: number | null;
@@ -282,6 +283,25 @@ export interface AdminProduct {
   show_piece_numbers: boolean;
   /** The API calls these `images`, and so does this. */
   images: { id: string; url: string; alt: string; is_primary: boolean }[];
+}
+
+/**
+ * A line of work — hooks, brackets, lamps.
+ *
+ * Not decoration. A visitor's affinity for a category is the highest-weighted
+ * term in the feed, and it is computed from nothing else, so a piece with no
+ * category is a piece the shelf cannot learn to show to the right person. It is
+ * also what the per-category diversity cap reads to stop the feed serving six
+ * near-identical things in a row.
+ */
+export interface AdminCategory {
+  id: string;
+  slug: string;
+  name_en: string;
+  name_ar: string;
+  parent_id: string | null;
+  display_order: number;
+  is_active: boolean;
 }
 
 export interface AdminPiece {
@@ -401,6 +421,16 @@ export const admin = {
   // ── The shelf ──────────────────────────────────────────────────────────────
 
   products: (lang: Lang) => call<AdminProduct[]>("/admin/products?size=60", lang),
+
+  categories: (lang: Lang) => call<AdminCategory[]>("/admin/categories", lang),
+
+  /** Both names, because both languages are authored. The slug is the
+   *  server's — it makes one from the English name and keeps it unique. */
+  createCategory: (lang: Lang, nameEn: string, nameAr: string) =>
+    call<AdminCategory>("/admin/categories", lang, {
+      method: "POST",
+      body: JSON.stringify({ name_en: nameEn, name_ar: nameAr }),
+    }),
 
   createProduct: (lang: Lang, body: Record<string, unknown>) =>
     call<AdminProduct>("/admin/products", lang, { method: "POST", body: JSON.stringify(body) }),

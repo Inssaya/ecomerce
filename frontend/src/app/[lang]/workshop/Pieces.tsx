@@ -24,19 +24,30 @@
 import Image from "next/image";
 import { useCallback, useEffect, useState } from "react";
 
-import { admin, NotSignedIn, type AdminPiece, type AdminProduct } from "@/lib/admin";
+import {
+  admin,
+  NotSignedIn,
+  type AdminCategory,
+  type AdminPiece,
+  type AdminProduct,
+} from "@/lib/admin";
 import { type Lang, money } from "@/lib/i18n";
 
 export function Pieces({ lang, onExpire }: { lang: Lang; onExpire: () => void }) {
   const ar = lang === "ar";
   const [products, setProducts] = useState<AdminProduct[] | null>(null);
+  // Loaded once here and handed to both forms, rather than fetched again by
+  // each one that needs it.
+  const [categories, setCategories] = useState<AdminCategory[]>([]);
   const [open, setOpen] = useState<string | null>(null);
   const [making, setMaking] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
-      setProducts(await admin.products(lang));
+      const [shelf, lines] = await Promise.all([admin.products(lang), admin.categories(lang)]);
+      setProducts(shelf);
+      setCategories(lines);
     } catch (error) {
       if (error instanceof NotSignedIn) onExpire();
       else setProblem(ar ? "تعذّر التحميل" : "Could not load");
@@ -47,6 +58,12 @@ export function Pieces({ lang, onExpire }: { lang: Lang; onExpire: () => void })
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** A line named inside one form is immediately offered by the other. */
+  const remember = useCallback(
+    (category: AdminCategory) => setCategories((all) => [...all, category]),
+    [],
+  );
 
   return (
     <div className="flex flex-col gap-4">
@@ -61,6 +78,8 @@ export function Pieces({ lang, onExpire }: { lang: Lang; onExpire: () => void })
       {making ? (
         <NewPiece
           lang={lang}
+          categories={categories}
+          onCategoryCreated={remember}
           onExpire={onExpire}
           onDone={async (id) => {
             setMaking(false);
@@ -124,6 +143,8 @@ export function Pieces({ lang, onExpire }: { lang: Lang; onExpire: () => void })
                 <PieceDetail
                   lang={lang}
                   product={product}
+                  categories={categories}
+                  onCategoryCreated={remember}
                   onExpire={onExpire}
                   onChanged={load}
                 />
@@ -161,15 +182,152 @@ function Badge({ lang, status }: { lang: Lang; status: string }) {
   );
 }
 
+/**
+ * Which line a piece belongs to, and a way to name a new one without leaving.
+ *
+ * There is no separate screen for managing categories and there should not be:
+ * this shop has one owner and perhaps six lines of work, and the only moment
+ * anybody thinks about them is while looking at a piece. So the select carries
+ * its own "a new line" option, and naming one takes two fields and a button.
+ *
+ * Both names are asked for, because both languages are authored here and a
+ * category with an empty Arabic name is a hole on half the site.
+ */
+function CategoryField({
+  lang,
+  categories,
+  value,
+  onChange,
+  onCreated,
+  disabled,
+  published = false,
+}: {
+  lang: Lang;
+  categories: AdminCategory[];
+  value: string | null;
+  onChange: (id: string | null) => void;
+  onCreated: (category: AdminCategory) => void;
+  disabled?: boolean;
+  /** Only used to decide whether a missing kind is worth warning about. */
+  published?: boolean;
+}) {
+  const ar = lang === "ar";
+  const NEW = "__new__";
+  const [naming, setNaming] = useState(false);
+  const [nameEn, setNameEn] = useState("");
+  const [nameAr, setNameAr] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [problem, setProblem] = useState<string | null>(null);
+
+  async function create() {
+    if (!nameEn.trim()) return;
+    setBusy(true);
+    setProblem(null);
+    try {
+      const created = await admin.createCategory(lang, nameEn.trim(), nameAr.trim());
+      onCreated(created);
+      onChange(created.id);
+      setNaming(false);
+      setNameEn("");
+      setNameAr("");
+    } catch (error) {
+      setProblem(error instanceof Error ? error.message : ar ? "تعذّر الإنشاء" : "Could not add it");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <label className="label" htmlFor="category">
+        {ar ? "أي نوع من الأشياء؟" : "What kind of thing is it?"}
+      </label>
+      <select
+        id="category"
+        name="category"
+        className="field"
+        disabled={disabled || busy}
+        value={naming ? NEW : (value ?? "")}
+        onChange={(event) => {
+          const picked = event.target.value;
+          setNaming(picked === NEW);
+          if (picked !== NEW) onChange(picked || null);
+        }}
+      >
+        <option value="">{ar ? "اختر…" : "Choose…"}</option>
+        {categories.map((category) => (
+          <option key={category.id} value={category.id}>
+            {ar ? category.name_ar || category.name_en : category.name_en}
+          </option>
+        ))}
+        <option value={NEW}>{ar ? "＋ نوع جديد" : "＋ A new kind"}</option>
+      </select>
+
+      {naming ? (
+        <div className="mt-2 flex flex-col gap-2">
+          <input
+            aria-label={ar ? "اسم النوع بالإنجليزية" : "Name of the kind, in English"}
+            placeholder={ar ? "Hooks" : "Hooks"}
+            value={nameEn}
+            onChange={(event) => setNameEn(event.target.value)}
+            maxLength={160}
+            className="field"
+          />
+          <input
+            aria-label={ar ? "اسم النوع بالعربية" : "Name of the kind, in Arabic"}
+            placeholder="خطّافات"
+            dir="rtl"
+            value={nameAr}
+            onChange={(event) => setNameAr(event.target.value)}
+            maxLength={160}
+            className="field"
+          />
+          <button
+            type="button"
+            disabled={busy || !nameEn.trim()}
+            onClick={() => void create()}
+            className="btn-quiet self-start"
+          >
+            {ar ? "أضف النوع" : "Add the kind"}
+          </button>
+        </div>
+      ) : null}
+
+      {problem ? <p className="mt-1 text-[13px] text-warn">{problem}</p> : null}
+
+      <p className="mt-1.5 text-[12.5px] text-ink-soft">
+        {ar
+          ? "هذا ما يتعلّمه الرف: من نظر إلى خطّاف يُعرض عليه المزيد من الخطّافات."
+          : "This is what the shelf learns from — someone who looks at a hook is shown more hooks."}
+      </p>
+
+      {/* Worth saying out loud only once it is in the shop: a draft with no
+          kind yet is fine, a published piece with none is invisible to the
+          strongest thing the feed knows how to do. */}
+      {published && !value ? (
+        <p className="mt-1 text-[12.5px] text-warn">
+          {ar
+            ? "هذه القطعة منشورة بلا نوع — الرف لا يعرف لمن يعرضها."
+            : "This one is live with no kind, so the shelf cannot learn who to show it to."}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
 /** Photograph it, make some, publish it — and see who is waiting. */
 function PieceDetail({
   lang,
   product,
+  categories,
+  onCategoryCreated,
   onExpire,
   onChanged,
 }: {
   lang: Lang;
   product: AdminProduct;
+  categories: AdminCategory[];
+  onCategoryCreated: (category: AdminCategory) => void;
   onExpire: () => void;
   onChanged: () => Promise<void>;
 }) {
@@ -256,6 +414,23 @@ function PieceDetail({
           </p>
         ) : null}
       </div>
+
+      {/* Which line it belongs to. Changeable afterwards, because the first
+          answer is often wrong and the ranking reads this every time. */}
+      <CategoryField
+        lang={lang}
+        categories={categories}
+        value={product.category_id}
+        disabled={busy}
+        published={published}
+        onCreated={onCategoryCreated}
+        onChange={(id) =>
+          void guarded(
+            () => admin.updateProduct(lang, product.id, { category_id: id }),
+            ar ? "تعذّر التغيير" : "Could not change that",
+          )
+        }
+      />
 
       {/* How many were made. Not a stock number — one row per object. */}
       {product.kind === "shelf" ? (
@@ -356,15 +531,20 @@ function PieceDetail({
 /** Title and price. Everything else is added once it exists. */
 function NewPiece({
   lang,
+  categories,
+  onCategoryCreated,
   onDone,
   onExpire,
 }: {
   lang: Lang;
+  categories: AdminCategory[];
+  onCategoryCreated: (category: AdminCategory) => void;
   onDone: (id: string) => Promise<void>;
   onExpire: () => void;
 }) {
   const ar = lang === "ar";
   const [kind, setKind] = useState<"shelf" | "workshop">("shelf");
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
@@ -382,6 +562,7 @@ function NewPiece({
         description_en: String(form.get("description_en") ?? ""),
         description_ar: String(form.get("description_ar") ?? ""),
         price: Number(form.get("price")),
+        category_id: categoryId,
         // Required for made-to-order: a piece with no lead time has nothing
         // honest to put on its page.
         lead_time_days: kind === "workshop" ? Number(form.get("lead_time_days")) : null,
@@ -495,6 +676,15 @@ function NewPiece({
           className="field resize-none"
         />
       </div>
+
+      <CategoryField
+        lang={lang}
+        categories={categories}
+        value={categoryId}
+        onChange={setCategoryId}
+        onCreated={onCategoryCreated}
+        disabled={busy}
+      />
 
       {problem ? <p className="text-[13px] text-warn">{problem}</p> : null}
 

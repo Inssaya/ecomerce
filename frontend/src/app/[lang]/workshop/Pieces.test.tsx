@@ -7,12 +7,12 @@
  * without a real photograph, no stock number anywhere, and the waiting list
  * shown where it changes what the owner makes next.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
 import { Pieces } from "./Pieces";
-import { admin, type AdminProduct } from "@/lib/admin";
+import { admin, type AdminCategory, type AdminProduct } from "@/lib/admin";
 
 vi.mock("@/lib/admin", async () => {
   const actual = await vi.importActual<typeof import("@/lib/admin")>("@/lib/admin");
@@ -26,6 +26,8 @@ vi.mock("@/lib/admin", async () => {
       pieces: vi.fn(),
       addPieces: vi.fn(),
       waiting: vi.fn(),
+      categories: vi.fn(),
+      createCategory: vi.fn(),
     },
   };
 });
@@ -38,6 +40,7 @@ const product = (over: Partial<AdminProduct> = {}): AdminProduct => ({
   title_ar: "رف بلوط",
   description_en: "Cut and oiled by hand.",
   price: 320,
+  category_id: null,
   status: "draft",
   available: 0,
   lead_time_days: null,
@@ -46,11 +49,23 @@ const product = (over: Partial<AdminProduct> = {}): AdminProduct => ({
   ...over,
 });
 
+const line = (over: Partial<AdminCategory> = {}): AdminCategory => ({
+  id: "c1",
+  slug: "hooks",
+  name_en: "Hooks",
+  name_ar: "خطّافات",
+  parent_id: null,
+  display_order: 0,
+  is_active: true,
+  ...over,
+});
+
 describe("the shelf screen", () => {
   beforeEach(() => {
     vi.mocked(admin.products).mockResolvedValue([product()]);
     vi.mocked(admin.pieces).mockResolvedValue([]);
     vi.mocked(admin.waiting).mockResolvedValue({ waiting: 0 });
+    vi.mocked(admin.categories).mockResolvedValue([]);
     vi.mocked(admin.updateProduct).mockResolvedValue(product({ status: "active" }));
     vi.mocked(admin.addPieces).mockResolvedValue([]);
   });
@@ -126,5 +141,104 @@ describe("the shelf screen", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /the workshop/i }));
     expect(screen.getByLabelText(/in how many days/i)).toBeInTheDocument();
+  });
+
+  // ── What kind of thing it is ───────────────────────────────────────────────
+  //
+  // A visitor's affinity for a category is the highest-weighted term in the
+  // feed and it is computed from nothing else. Before this the panel had no way
+  // to set one, so every piece had none, and the strongest thing the shelf
+  // knows how to do was multiplied by zero for the entire shop.
+
+  it("offers the lines the shop already has", async () => {
+    vi.mocked(admin.categories).mockResolvedValue([
+      line({ id: "c1", name_en: "Hooks" }),
+      line({ id: "c2", name_en: "Lamps" }),
+    ]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    const select = screen.getByLabelText(/what kind of thing/i);
+    expect(within(select).getByRole("option", { name: "Hooks" })).toBeInTheDocument();
+    expect(within(select).getByRole("option", { name: "Lamps" })).toBeInTheDocument();
+  });
+
+  it("puts a piece into a line and saves it straight away", async () => {
+    vi.mocked(admin.categories).mockResolvedValue([line({ id: "c1", name_en: "Hooks" })]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.selectOptions(screen.getByLabelText(/what kind of thing/i), "c1");
+    await waitFor(() =>
+      expect(admin.updateProduct).toHaveBeenCalledWith("en", "p1", { category_id: "c1" }),
+    );
+  });
+
+  it("names a new line without leaving the piece", async () => {
+    // A separate screen for six categories would be a screen nobody opens. The
+    // only moment anyone thinks about a line is while looking at a piece.
+    vi.mocked(admin.categories).mockResolvedValue([]);
+    vi.mocked(admin.createCategory).mockResolvedValue(line({ id: "c9", name_en: "Hooks" }));
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.selectOptions(screen.getByLabelText(/what kind of thing/i), "__new__");
+    await userEvent.type(screen.getByLabelText(/in English/i), "Hooks");
+    await userEvent.type(screen.getByLabelText(/in Arabic/i), "خطّافات");
+    await userEvent.click(screen.getByRole("button", { name: /add the kind/i }));
+
+    await waitFor(() =>
+      expect(admin.createCategory).toHaveBeenCalledWith("en", "Hooks", "خطّافات"),
+    );
+    // And the piece is put into it, rather than leaving the owner to pick the
+    // thing they just named.
+    await waitFor(() =>
+      expect(admin.updateProduct).toHaveBeenCalledWith("en", "p1", { category_id: "c9" }),
+    );
+  });
+
+  it("will not create a line with no English name", async () => {
+    // The slug comes from the English name; without one the server has nothing
+    // to build a URL from.
+    vi.mocked(admin.categories).mockResolvedValue([]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+
+    await userEvent.selectOptions(screen.getByLabelText(/what kind of thing/i), "__new__");
+    await userEvent.type(screen.getByLabelText(/in Arabic/i), "خطّافات");
+    expect(screen.getByRole("button", { name: /add the kind/i })).toBeDisabled();
+    expect(admin.createCategory).not.toHaveBeenCalled();
+  });
+
+  it("says so when a published piece has no line, and stays quiet about drafts", async () => {
+    vi.mocked(admin.products).mockResolvedValue([product({ status: "active" })]);
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    expect(await screen.findByText(/live with no kind/i)).toBeInTheDocument();
+  });
+
+  it("does not nag about a draft that has no line yet", async () => {
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByText("Oak wall shelf"));
+    expect(screen.queryByText(/live with no kind/i)).not.toBeInTheDocument();
+  });
+
+  it("carries the chosen line into a brand new piece", async () => {
+    vi.mocked(admin.categories).mockResolvedValue([line({ id: "c1", name_en: "Hooks" })]);
+    vi.mocked(admin.createProduct).mockResolvedValue(product({ id: "new" }));
+    render(<Pieces lang="en" onExpire={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: /new piece/i }));
+
+    await userEvent.type(screen.getByLabelText(/name in english/i), "Brass hook");
+    await userEvent.type(screen.getByLabelText("Price"), "120");
+    await userEvent.selectOptions(screen.getByLabelText(/what kind of thing/i), "c1");
+    await userEvent.click(screen.getByRole("button", { name: /create it as a draft/i }));
+
+    await waitFor(() =>
+      expect(admin.createProduct).toHaveBeenCalledWith(
+        "en",
+        expect.objectContaining({ category_id: "c1" }),
+      ),
+    );
   });
 });
