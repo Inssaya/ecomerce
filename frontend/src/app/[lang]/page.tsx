@@ -179,6 +179,10 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
         <Link href={`/${lang}/delivery`} className="underline underline-offset-4">
           {lang === "ar" ? "التوصيل والإرجاع" : "Delivery and returns"}
         </Link>
+        {" · "}
+        <Link href={`/${lang}/how-we-work`} className="underline underline-offset-4">
+          {lang === "ar" ? "كيف نصنع" : "How we make things"}
+        </Link>
       </p>
     </div>
   );

@@ -57,6 +57,29 @@ async def category_tree(db: DbSession, lang: Lang) -> list[CategoryNode]:
     return service.build_tree(list(rows), lang)
 
 
+@router.get("/categories/{slug}", response_model=CategoryNode)
+async def get_category(slug: str, db: DbSession, lang: Lang) -> CategoryNode:
+    """One category, so its own page can 404 honestly and print its own name.
+
+    A slug that does not exist is a real 404, not a category page listing
+    nothing — the storefront's `resource()` helper depends on this exact
+    distinction to keep dead URLs out of the index.
+    """
+    category = await db.scalar(
+        select(Category).where(Category.slug == slug, Category.is_active.is_(True))
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    # A leaf node is fine — the page is going to list its own products, not its
+    # children, so the children field is unused here.
+    return CategoryNode(
+        id=category.id,
+        slug=category.slug,
+        name=category.name(lang),
+        display_order=category.display_order,
+    )
+
+
 @router.get("/admin/categories", response_model=list[CategoryAdmin])
 async def list_categories_admin(db: DbSession, owner: Owner) -> list[Category]:
     rows = await db.scalars(select(Category).order_by(Category.display_order))

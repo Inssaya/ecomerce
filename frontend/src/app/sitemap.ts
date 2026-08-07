@@ -36,7 +36,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Public doors only. `/workshop` is the owner's control room and `/ambient`
   // is a workbench — neither is a page a buyer should ever land on from a
   // search result.
-  const fixed = ["", "/store", "/ask", "/orders", "/delivery"];
+  const fixed = ["", "/store", "/ask", "/orders", "/delivery", "/how-we-work"];
   const entries: MetadataRoute.Sitemap = [];
 
   for (const lang of LANGS) {
@@ -63,10 +63,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const places = await fromApi<{ items: { slug: string }[] }>("/places", "en", {
     revalidate: 3600,
   });
+  // Categories are the lines of work — "hooks", "lamps". A dedicated page per
+  // line is what turns a search naming one into a landing on this shop.
+  const categories = await fromApi<{ slug: string }[]>("/categories", "en", {
+    revalidate: 3600,
+  });
 
   for (const [prefix, rows, priority] of [
     ["make", services?.items ?? [], 0.8],
     ["delivery", places?.items ?? [], 0.6],
+    ["store", categories ?? [], 0.8],
   ] as const) {
     for (const row of rows) {
       for (const lang of LANGS) {

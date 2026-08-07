@@ -41,6 +41,15 @@ export interface PieceDetail extends Piece {
   created_at: string;
 }
 
+/** A line of work — hooks, brackets, lamps. What the shelf actually learns from. */
+export interface CategoryNode {
+  id: string;
+  slug: string;
+  name: string;
+  display_order: number;
+  children: CategoryNode[];
+}
+
 /** A city we deliver to, and what we can honestly say about it. */
 export interface Place {
   slug: string;
@@ -186,10 +195,7 @@ export const api = {
       { lang },
     ),
 
-  categories: (lang: Lang) =>
-    request<{ id: string; slug: string; name: string; children: unknown[] }[]>(`/categories`, {
-      lang,
-    }),
+  categories: (lang: Lang) => request<CategoryNode[]>(`/categories`, { lang }),
 
   checkout: (lang: Lang, body: unknown) =>
     request<OrderView>("/orders", { lang, method: "POST", body: JSON.stringify(body) }),

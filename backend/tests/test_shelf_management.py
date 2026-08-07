@@ -301,6 +301,30 @@ async def test_categories_come_back_as_a_tree(
     assert [child["name"] for child in top["children"]] == ["Shelves"]
 
 
+async def test_one_category_can_be_asked_for_by_its_slug(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    """The category page needs a real 404 signal for a slug that does not
+    exist, which is the difference between a page that keeps a dead URL out of
+    the index and one that renders "not found" under 200."""
+    created = (
+        await client.post(
+            "/api/admin/categories",
+            headers=owner_headers,
+            json={"name_en": "Hooks", "name_ar": "خطّافات"},
+        )
+    ).json()
+
+    english = await client.get(f"/api/categories/{created['slug']}")
+    assert english.status_code == 200
+    assert english.json()["name"] == "Hooks"
+
+    arabic = await client.get(f"/api/categories/{created['slug']}?lang=ar")
+    assert arabic.json()["name"] == "خطّافات"
+
+    assert (await client.get("/api/categories/no-such-line")).status_code == 404
+
+
 # ── Only the owner ────────────────────────────────────────────────────────────
 
 

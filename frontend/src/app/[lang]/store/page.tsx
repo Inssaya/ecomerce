@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 
-import type { Piece } from "@/lib/api";
+import Link from "next/link";
+
+import type { CategoryNode, Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
 
@@ -56,7 +58,10 @@ export default async function StorePage({
 }) {
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
-  const initial = await shelf(lang);
+  const [initial, categories] = await Promise.all([
+    shelf(lang),
+    fromApi<CategoryNode[]>("/categories", lang, { revalidate: 3600 }),
+  ]);
 
   return (
     <>
@@ -70,6 +75,26 @@ export default async function StorePage({
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: jsonLd(shelfSchema(initial, lang)) }}
         />
+      ) : null}
+      {/* The lines of work, as real links, above the personalised feed.
+          A visitor who came in looking for "hooks" can go straight to the
+          hooks page — and each of those pages is what a search naming a line
+          lands on, which is the whole reason to have them. */}
+      {(categories ?? []).length > 0 ? (
+        <nav
+          aria-label={lang === "ar" ? "الأقسام" : "Categories"}
+          className="page pt-6 flex gap-2 overflow-x-auto"
+        >
+          {(categories ?? []).map((node) => (
+            <Link
+              key={node.slug}
+              href={`/${lang}/store/${node.slug}`}
+              className="shrink-0 rounded-2xl bg-clay-soft px-4 py-1.5 text-[13px] font-medium text-ink"
+            >
+              {node.name}
+            </Link>
+          ))}
+        </nav>
       ) : null}
       <StoreFeed lang={lang} initial={initial} />
     </>

@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
@@ -128,7 +129,23 @@ export function PieceView({
       ) : null}
 
       <div className="page pt-6">
-        <h1 className="text-[26px] font-semibold leading-tight tracking-tight">{piece.title}</h1>
+        {/* One line above the title, when we know which line of work it is.
+            It sends the visitor to a page showing every other piece we have
+            in that category — the natural next move after tapping in from a
+            search or a share, and the one thing there was no way to make. */}
+        {piece.category_slug ? (
+          <p className="text-[13px]">
+            <Link
+              href={`/${lang}/store/${piece.category_slug}`}
+              className="text-ink-soft underline underline-offset-4"
+            >
+              {lang === "ar" ? "شاهد المزيد من هذا النوع" : "See more of this kind"}
+            </Link>
+          </p>
+        ) : null}
+        <h1 className="mt-1 text-[26px] font-semibold leading-tight tracking-tight">
+          {piece.title}
+        </h1>
         <p className="stamp mt-2 text-[20px] font-semibold">{money(price, lang)}</p>
 
         <p className="mt-1.5 text-[14px] text-ink-soft">
