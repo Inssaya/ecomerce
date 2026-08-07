@@ -41,7 +41,20 @@ def _service(item: Service, lang: str, *, full: bool = False) -> dict:
 
 @router.get("/places")
 async def list_places(db: DbSession, lang: Lang) -> dict:
-    return {"items": [_city(place, lang) for place in await local.cities(db)]}
+    """Every city we will make a promise about, and the promise for anywhere else.
+
+    `default` is here so the cart and the checkout can state the delivery cost
+    without inventing it. They used to hold their own copy of the two numbers,
+    which meant the shop could charge one fee and print another the moment
+    anybody changed a setting.
+    """
+    return {
+        "items": [_city(place, lang) for place in await local.cities(db)],
+        "default": {
+            "delivery_fee": settings.delivery_fee,
+            "free_delivery_over": settings.free_delivery_over,
+        },
+    }
 
 
 @router.get("/places/{slug}")

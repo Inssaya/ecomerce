@@ -33,6 +33,7 @@ async def shelf_piece(
     title: str = "Matte black hook",
     made: int = 3,
     numbered: bool = False,
+    price: float = 180,
 ) -> dict:
     """Create it, photograph it, make some, publish it — the real sequence."""
     created = await client.post(
@@ -46,7 +47,7 @@ async def shelf_piece(
             "description_ar": "مطبوع ومصقول يدوياً في الورشة.",
             "story_en": "Printed overnight, then filed and oiled by hand.",
             "story_ar": "طُبع ليلاً، ثم بُرد وزُيّت يدوياً.",
-            "price": 180,
+            "price": price,
             "show_piece_numbers": numbered,
         },
     )

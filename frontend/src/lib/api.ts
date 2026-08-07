@@ -178,6 +178,14 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  /** The cities we name, and what delivery costs anywhere else. Read by the
+   *  cart and the checkout so neither of them has to hold its own copy. */
+  places: (lang: Lang) =>
+    request<{ items: Place[]; default: { delivery_fee: number; free_delivery_over: number } }>(
+      "/places",
+      { lang },
+    ),
+
   categories: (lang: Lang) =>
     request<{ id: string; slug: string; name: string; children: unknown[] }[]>(`/categories`, {
       lang,

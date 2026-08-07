@@ -75,7 +75,14 @@ export async function generateMetadata({
       title,
       description: t("taglineSupport"),
     },
-    robots: { index: true, follow: true },
+    // No `robots` here on purpose.
+    //
+    // "index, follow" is what a crawler already assumes, so declaring it wins
+    // nothing — and it was being inherited by pages that must not be indexed.
+    // A missing piece renders the not-found page, on which Next emits
+    // `noindex`; with this line present the same document carried both
+    // directives and left a machine to decide which the shop meant. The
+    // private pages set their own noindex through `privatePage`.
   };
 }
 

@@ -107,7 +107,7 @@ async def approve(
         raise conflict("This request has not been quoted yet")
 
     price = Decimal(request.quote_price)
-    fee = delivery_fee_for(price)
+    fee = await delivery_fee_for(db, price, city)
     order = Order(
         reference=request.reference,
         tracking_token=new_tracking_token(),

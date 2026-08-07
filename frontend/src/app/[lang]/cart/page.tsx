@@ -5,22 +5,24 @@ import Link from "next/link";
 import { use } from "react";
 
 import { useCart } from "@/components/CartProvider";
+import { feeFor, useDelivery } from "@/lib/delivery";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-
-const FREE_DELIVERY_OVER = 500;
-const DELIVERY_FEE = 30;
 
 /**
  * The cart.
  *
  * The delivery fee is shown here, before checkout, on purpose: a cost the
  * customer meets for the first time at their door is a package they refuse.
+ * It is asked of the server rather than assumed — this page used to carry its
+ * own `DELIVERY_FEE = 30`, which was right until the day somebody changed the
+ * setting, and wrong silently ever after.
  */
 export default function CartPage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = use(params);
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
   const { lines, total, setQuantity, remove, ready } = useCart();
+  const terms = useDelivery(lang);
 
   if (!ready) return <div className="page pt-10" aria-hidden />;
 
@@ -35,7 +37,9 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
     );
   }
 
-  const fee = total >= FREE_DELIVERY_OVER ? 0 : DELIVERY_FEE;
+  // Null until the shop has said what it charges. A number invented locally
+  // while waiting would be a number the customer might read and act on.
+  const fee = terms ? feeFor(total, terms) : null;
 
   return (
     <div className="page pt-6 pb-32">
@@ -80,8 +84,15 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
 
       <dl className="mt-7 space-y-2 text-[15px]">
         <Row label={t("subtotal")} value={money(total, lang)} />
-        <Row label={t("delivery")} value={fee === 0 ? t("freeDelivery") : money(fee, lang)} />
-        <Row label={t("total")} value={money(total + fee, lang)} strong />
+        <Row
+          label={t("delivery")}
+          value={fee === null ? "—" : fee === 0 ? t("freeDelivery") : money(fee, lang)}
+        />
+        <Row
+          label={t("total")}
+          value={fee === null ? "—" : money(total + fee, lang)}
+          strong
+        />
       </dl>
 
       <p className="mt-4 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>

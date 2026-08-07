@@ -6,6 +6,7 @@ import { use, useState } from "react";
 
 import { useCart } from "@/components/CartProvider";
 import { api, ApiError } from "@/lib/api";
+import { feeFor, matchCity, useDelivery } from "@/lib/delivery";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
 import { track } from "@/lib/signals";
 
@@ -21,9 +22,18 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
   const t = translator(lang);
   const router = useRouter();
   const { lines, total, clear, ready } = useCart();
+  const terms = useDelivery(lang);
 
+  const [city, setCity] = useState("");
   const [sending, setSending] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+
+  // The city decides the fee and the date, so both are recomputed as it is
+  // typed. `place` is null until what they have written matches somewhere we
+  // have actually made a promise about — everywhere else pays the shop's fee
+  // and is told no date, because we have not earned the right to name one.
+  const place = terms ? matchCity(terms.cities, city) : null;
+  const fee = terms ? feeFor(total, terms, city) : null;
 
   if (ready && lines.length === 0) {
     return (
@@ -104,7 +114,32 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
           <label className="label" htmlFor="city">
             {t("yourCity")}
           </label>
-          <input id="city" name="city" required autoComplete="address-level2" className="field" />
+          {/* Suggestions, not a menu. The city list is the twenty-nine places
+              this shop will put a delivery window in writing for — but a
+              dropdown that does not contain someone's town loses the order, so
+              this stays free text and merely offers help. */}
+          <input
+            id="city"
+            name="city"
+            required
+            autoComplete="address-level2"
+            list="known-cities"
+            value={city}
+            onChange={(event) => setCity(event.target.value)}
+            className="field"
+          />
+          <datalist id="known-cities">
+            {(terms?.cities ?? []).map((known) => (
+              <option key={known.slug} value={known.name} />
+            ))}
+          </datalist>
+          {place ? (
+            <p className="mt-1.5 text-[13px] text-ink-soft">
+              {lang === "ar"
+                ? `${place.name}: التوصيل خلال ${place.delivery_days[0]}–${place.delivery_days[1]} أيام.`
+                : `${place.name}: delivered in ${place.delivery_days[0]}–${place.delivery_days[1]} days.`}
+            </p>
+          ) : null}
         </div>
 
         <div>
@@ -130,9 +165,20 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
       </div>
 
       <div className="mt-7 card p-5 shadow-soft">
-        <div className="flex justify-between text-[17px] font-semibold">
+        {/* Broken out rather than summed into one figure: at the door the
+            customer hands over cash against this line, and "why is it more
+            than the pieces cost" is the question that gets a package refused.
+            The fee is whatever that city actually costs — the same number the
+            city's own page publishes, from the same place the till reads. */}
+        <div className="flex justify-between text-[15px] text-ink-soft">
+          <span>{t("delivery")}</span>
+          <span className="stamp">
+            {fee === null ? "—" : fee === 0 ? t("freeDelivery") : money(fee, lang)}
+          </span>
+        </div>
+        <div className="mt-1 flex justify-between text-[17px] font-semibold">
           <span>{t("total")}</span>
-          <span className="stamp">{money(total + (total >= 500 ? 0 : 30), lang)}</span>
+          <span className="stamp">{fee === null ? "—" : money(total + fee, lang)}</span>
         </div>
         <p className="mt-2 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>
       {/* Where the doubt actually is. A buyer deciding whether to commit to

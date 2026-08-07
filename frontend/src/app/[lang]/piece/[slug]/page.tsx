@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 
 import type { PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
+import { alternates, jsonLd, resource, siteUrl } from "@/lib/server";
 
 import { PieceView } from "./PieceView";
 
@@ -25,7 +26,9 @@ import { PieceView } from "./PieceView";
  * hands it down as the first paint, and describes it.
  */
 async function piece(lang: Lang, slug: string): Promise<PieceDetail | null> {
-  return fromApi<PieceDetail>(`/products/${slug}`, lang);
+  // `resource`, not `fromApi`: a slug with nothing behind it has to be a real
+  // 404, and an API we merely could not reach must not be mistaken for one.
+  return resource<PieceDetail>(`/products/${slug}`, lang);
 }
 
 export async function generateMetadata({
@@ -91,6 +94,11 @@ export default async function PiecePage({
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const initial = await piece(lang, slug);
 
+  // Archived, deleted, or simply mistyped. This page used to answer 200 with
+  // the words "not found" on it, which keeps a dead product in the index
+  // competing with the live ones and tells a person nothing they can act on.
+  if (!initial) notFound();
+
   return (
     <>
       {/*
@@ -99,12 +107,10 @@ export default async function PiecePage({
         and it is written from the same fetch, so it cannot drift from what the
         page says.
       */}
-      {initial ? (
-        <script
-          type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: jsonLd(productSchema(initial, lang)) }}
-        />
-      ) : null}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(productSchema(initial, lang)) }}
+      />
       <PieceView lang={lang} slug={slug} initial={initial} />
     </>
   );

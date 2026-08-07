@@ -85,3 +85,31 @@ async def delivered_to(db: AsyncSession, name: str) -> dict:
 def fee_for(place: City) -> float:
     """What delivery costs there — the city's own price, or the shop's."""
     return float(place.delivery_fee) if place.delivery_fee is not None else settings.delivery_fee
+
+
+async def fee_for_name(db: AsyncSession, name: str | None) -> float:
+    """The same answer, for a city somebody typed rather than clicked.
+
+    Checkout takes the city as free text on purpose — a dropdown missing
+    someone's town loses the order — so the name has to be matched back to a
+    place here. Anything we do not recognise pays the shop-wide fee, which is
+    the only honest default: we have made no specific promise about it.
+
+    This exists so the number quoted on a city page and the number charged at
+    the door come from one place. They did not: the city page published
+    `fee_for`, the order charged the flat setting, and the override the City
+    model documents was honoured on the page and ignored by the till.
+    """
+    if not name or not name.strip():
+        return settings.delivery_fee
+    place = await db.scalar(
+        select(City).where(
+            func.lower(func.trim(City.name_en)) == name.strip().lower(),
+            City.is_active.is_(True),
+        )
+    )
+    if place is None:
+        place = await db.scalar(
+            select(City).where(func.trim(City.name_ar) == name.strip(), City.is_active.is_(True))
+        )
+    return fee_for(place) if place is not None else settings.delivery_fee

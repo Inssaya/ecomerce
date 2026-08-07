@@ -46,6 +46,7 @@ HARD RULES:
 - Availability is real. "Three left" means we made three. Never invent urgency, never rush anyone, never mention a countdown.
 - If nothing we have matches what they want, use request_custom_item. This is the best outcome we have short of a sale — say plainly "we don't have that, but we can make it", and ask for the detail you need first.
 - Call every tool you need for the question in ONE round; they run together. Never call the same tool twice with the same arguments.
+- Somebody else's order is none of ours to read out. To look one up you need the reference AND the phone number it was placed with, or the long token from their tracking link. If they give only a reference, ask for the phone number before you look — politely, once, and without explaining our security to them.
 - add_to_cart only after they have chosen. Then tell them it is in the cart and that they can check out when ready. You cannot place the order yourself, and you should not try: they confirm it themselves on the checkout screen.
 - Answer in the language of the question. English or Arabic only, never any other language.
 
@@ -197,13 +198,38 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             "next": "We read every one of these ourselves and come back with a price and a real date.",
         }
 
-    async def track_order(reference_or_token: str) -> dict:
+    async def track_order(reference_or_token: str, phone: str = "") -> dict:
+        """Where an order got to — for the person whose order it is.
+
+        The front door is careful about this and this used to not be. A
+        reference is eight characters designed to be *read aloud over the
+        phone* and printed on a label; it is not a secret, and it was enough
+        here to return somebody's status, total and date to anyone who typed
+        it. The HTTP surface refuses exactly that: `/orders/track` wants the
+        forty-character token, and `/orders/find` wants the reference **and**
+        the phone number, with one message for both failures so it cannot be
+        used to discover which references exist.
+
+        So this asks for the same two things, and answers the same way when
+        either is wrong.
+        """
         value = reference_or_token.strip()
-        order = await db.scalar(
-            select(Order).where(
-                (Order.reference == value.upper()) | (Order.tracking_token == value)
-            )
+        typed_phone = phone.strip()
+        # The token is unguessable, so it stands alone. The reference does not.
+        by_token = len(value) >= 32
+        if not by_token and not typed_phone:
+            return {
+                "needs": "phone",
+                "say": "Ask them for the phone number the order was placed with — "
+                "the reference on its own is not enough for us to look it up.",
+            }
+
+        order_is_theirs = (
+            Order.tracking_token == value
+            if by_token
+            else (Order.reference == value.upper()) & (Order.customer_phone == typed_phone)
         )
+        order = await db.scalar(select(Order).where(order_is_theirs))
         if order is not None:
             return {
                 "kind": "order",
@@ -212,12 +238,13 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
                 "total_mad": float(order.total),
                 "placed_on": order.created_at.date().isoformat(),
             }
-        request = await db.scalar(
-            select(CustomRequest).where(
-                (CustomRequest.reference == value.upper())
-                | (CustomRequest.tracking_token == value)
-            )
+        request_is_theirs = (
+            CustomRequest.tracking_token == value
+            if by_token
+            else (CustomRequest.reference == value.upper())
+            & (CustomRequest.customer_phone == typed_phone)
         )
+        request = await db.scalar(select(CustomRequest).where(request_is_theirs))
         if request is not None:
             return {
                 "kind": "custom_request",
@@ -226,7 +253,9 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
                 "quoted_mad": float(request.quote_price) if request.quote_price else None,
                 "ready_on": request.promised_for.isoformat() if request.promised_for else None,
             }
-        return {"error": "Nothing found with that reference"}
+        # One message whichever half was wrong, so this cannot be used to find
+        # out which references exist.
+        return {"error": "Nothing found with that reference and phone number"}
 
     async def escalate_to_human() -> dict:
         """Some things should be said by a person. In a market where trust is
@@ -287,8 +316,10 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         ),
         spec(
             "track_order",
-            "Where an order or a custom request has got to, by its reference.",
-            {"reference_or_token": _STR},
+            "Where an order or a custom request has got to. Needs the reference "
+            "AND the phone number it was placed with — or the long tracking link "
+            "token on its own. A reference alone is not enough.",
+            {"reference_or_token": _STR, "phone": _STR},
             required=["reference_or_token"],
         ),
         spec("escalate_to_human", "Open WhatsApp so a person can answer them.", {}),

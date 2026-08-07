@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
+import { alternates, fromApi, jsonLd, resource, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * "Do you deliver to Fez, and how long does it take?"
@@ -21,7 +21,7 @@ import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/serve
 async function load(lang: Lang, slug: string): Promise<Place | null> {
   // Short cache: the delivered count is live, and a city page that is a day
   // stale is claiming a smaller shop than we are.
-  return fromApi<Place>(`/places/${slug}`, lang, { revalidate: 600 });
+  return resource<Place>(`/places/${slug}`, lang, { revalidate: 600 });
 }
 
 /**

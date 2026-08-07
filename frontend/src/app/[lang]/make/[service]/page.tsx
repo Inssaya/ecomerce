@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place, ServicePage } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
+import { alternates, fromApi, jsonLd, resource, siteUrl } from "@/lib/server";
 
 /**
  * "Can you make me one of these?"
@@ -21,7 +21,7 @@ import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
  * by someone who obviously does it.
  */
 async function load(lang: Lang, slug: string): Promise<ServicePage | null> {
-  return fromApi<ServicePage>(`/services/${slug}`, lang, { revalidate: 3600 });
+  return resource<ServicePage>(`/services/${slug}`, lang, { revalidate: 3600 });
 }
 
 /**

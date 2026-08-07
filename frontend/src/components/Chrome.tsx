@@ -6,6 +6,7 @@ import { useEffect, type ReactNode } from "react";
 
 import { useCart } from "./CartProvider";
 import { Assistant } from "./Assistant";
+import { loadDelivery } from "@/lib/delivery";
 import { ensureVisitorCookie } from "@/lib/fingerprint";
 import { setSignalLanguage } from "@/lib/signals";
 import { type Lang, translator } from "@/lib/i18n";
@@ -25,6 +26,10 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
   useEffect(() => {
     setSignalLanguage(lang);
     void ensureVisitorCookie();
+    // Warmed here so the cart and the checkout have the delivery terms before
+    // anybody reaches them. Both pages refuse to print a price they have had
+    // to guess, and this is what stops that showing as a dash.
+    void loadDelivery(lang).catch(() => undefined);
   }, [lang]);
 
   const other: Lang = lang === "ar" ? "en" : "ar";

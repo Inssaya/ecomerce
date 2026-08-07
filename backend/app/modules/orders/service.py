@@ -43,6 +43,7 @@ from app.models import (
     User,
 )
 from app.modules.catalog.service import primary_image
+from app.modules.local import service as local
 from app.modules.notify.service import notify_order_status
 from app.modules.orders.schemas import CartLine, CheckoutRequest
 
@@ -94,12 +95,20 @@ async def release_stale_reservations(db: AsyncSession) -> int:
     return len(stale)
 
 
-def delivery_fee_for(subtotal: Decimal) -> Decimal:
-    """Free over the threshold, flat otherwise. Stated on the page before
-    checkout — a delivery fee discovered at the door is a refused package."""
+async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None) -> Decimal:
+    """Free over the threshold; otherwise what that city costs to reach.
+
+    Stated on the page before checkout — a delivery fee discovered at the door
+    is a refused package, and a refused package is the most expensive thing
+    that happens in this market. Which is why the city matters: the City model
+    carries an override "where a city genuinely costs more to reach", the city
+    page has always published it, and this used to charge the flat setting
+    regardless. Two numbers for one delivery, and the one the customer read was
+    not the one they were asked for.
+    """
     if subtotal >= Decimal(str(settings.free_delivery_over)):
         return Decimal("0")
-    return Decimal(str(settings.delivery_fee))
+    return Decimal(str(await local.fee_for_name(db, city)))
 
 
 async def _take_pieces(
@@ -200,7 +209,7 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
                 )
             )
 
-    fee = delivery_fee_for(subtotal)
+    fee = await delivery_fee_for(db, subtotal, body.address.city)
     order = Order(
         reference=new_order_reference(),
         tracking_token=new_tracking_token(),

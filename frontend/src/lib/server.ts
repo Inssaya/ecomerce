@@ -97,7 +97,18 @@ function apiBase(): string {
   return process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000";
 }
 
+function url(path: string, lang: Lang): string {
+  const separator = path.includes("?") ? "&" : "?";
+  return `${apiBase()}/api${path}${separator}lang=${lang}`;
+}
+
 /**
+ * Something a page is *enriched* by, where nothing is worth failing over.
+ *
+ * The landing page's counts, the store's first shelf, the sitemap's extra
+ * batches: if the API blinks, the page is still worth serving without them.
+ * Every failure collapses to null here on purpose.
+ *
  * @param revalidate seconds to cache for. Catalogue pages are shared by every
  * visitor and every crawler, so a minute of staleness costs nothing and saves
  * the API from being hit once per share preview.
@@ -107,9 +118,8 @@ export async function fromApi<T>(
   lang: Lang,
   { revalidate = 60 }: { revalidate?: number } = {},
 ): Promise<T | null> {
-  const separator = path.includes("?") ? "&" : "?";
   try {
-    const response = await fetch(`${apiBase()}/api${path}${separator}lang=${lang}`, {
+    const response = await fetch(url(path, lang), {
       headers: { "accept-language": lang },
       next: { revalidate },
     });
@@ -118,4 +128,46 @@ export async function fromApi<T>(
   } catch {
     return null;
   }
+}
+
+/**
+ * Something a page *is*.
+ *
+ * A piece, a city, a service — where the page has no meaning without it, and
+ * the honest answer to "there is no such thing" is 404 rather than a page
+ * saying "not found" with a 200 beside it. Google reads the status, not the
+ * sentence: a soft 404 keeps a dead product indexed and competing with the
+ * live ones.
+ *
+ * Which is why this cannot be `fromApi`. That one turns *every* failure into
+ * null, and a null from an API that is merely unreachable would become a 404
+ * for a piece that is perfectly fine — cached, by revalidation, over a page
+ * that sells something. So:
+ *
+ * - **null** — the shop answered and said there is no such thing. 404 it.
+ * - **throws** — we could not ask. Next renders the error page, the visitor is
+ *   told to come back, and no crawler is told anything was deleted.
+ *
+ * One honest limitation, measured rather than assumed. A page that `await`s
+ * before calling `notFound()` has already begun streaming, so the status line
+ * has gone out as 200 — a bare `notFound()` page in this same app returns a
+ * real 404, and the piece page returns 200 with the not-found body. What keeps
+ * a dead piece out of the index is therefore the `noindex` Next renders with
+ * that body, which is why the language layout no longer overrides it with an
+ * `index, follow` of its own. Getting the status right as well would mean
+ * looking the slug up in middleware, on every request, to answer a question the
+ * page is about to ask anyway.
+ */
+export async function resource<T>(
+  path: string,
+  lang: Lang,
+  { revalidate = 60 }: { revalidate?: number } = {},
+): Promise<T | null> {
+  const response = await fetch(url(path, lang), {
+    headers: { "accept-language": lang },
+    next: { revalidate },
+  });
+  if (response.status === 404) return null;
+  if (!response.ok) throw new Error(`The shop answered ${response.status} for ${path}`);
+  return (await response.json()) as T;
 }
