@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import type { PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
 
 import { PieceView } from "./PieceView";
 
@@ -102,7 +102,7 @@ export default async function PiecePage({
       {initial ? (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(productSchema(initial, lang)) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(productSchema(initial, lang)) }}
         />
       ) : null}
       <PieceView lang={lang} slug={slug} initial={initial} />

@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import uuid
 
@@ -55,6 +56,37 @@ def _get_client() -> Minio:
     return _client
 
 
+def _read_only_policy(bucket: str) -> str:
+    """Anyone may read one object. Nobody may list the bucket.
+
+    Both halves matter.
+
+    Product photographs are public by definition — the URL goes into an
+    `<img>`, into an og:image WhatsApp fetches, and into structured data
+    Google fetches, none of which carry credentials. A bucket left at MinIO's
+    default of fully private serves 403 to every one of them, which shows as a
+    shop with no photographs and no error anywhere.
+
+    But `GetObject` is the *only* thing granted. `ListBucket` would turn the
+    media host into a directory of everything the workshop has ever uploaded —
+    including photographs on drafts that were never published and pieces that
+    were withdrawn — reachable by anyone who guesses the bucket URL.
+    """
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
+                }
+            ],
+        }
+    )
+
+
 async def ensure_bucket() -> None:
     def _ensure() -> None:
         client = _get_client()
@@ -64,6 +96,10 @@ async def ensure_bucket() -> None:
         except S3Error as exc:
             if exc.code != "BucketAlreadyOwnedByYou":
                 raise
+        # Set every start, not only on creation: it is idempotent, and a bucket
+        # restored from a backup or made by hand would otherwise be silently
+        # unreadable.
+        client.set_bucket_policy(settings.media_bucket, _read_only_policy(settings.media_bucket))
 
     await asyncio.to_thread(_ensure)
 

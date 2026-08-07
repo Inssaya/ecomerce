@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import type { Place, ServiceSummary, WorkshopNumbers } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { fromApi, siteUrl, workshopPhone } from "@/lib/server";
+import { fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * The landing page. One idea, one action.
@@ -42,7 +42,7 @@ export default async function Landing({ params }: { params: Promise<{ lang: stri
       */}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(workshopSchema(lang, t)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(workshopSchema(lang, t)) }}
       />
 
       <section className="animate-rise">

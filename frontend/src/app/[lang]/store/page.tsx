@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 
 import type { Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { alternates, fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
 
 import { StoreFeed } from "./StoreFeed";
 
@@ -68,7 +68,7 @@ export default async function StorePage({
       {initial.length > 0 ? (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(shelfSchema(initial, lang)) }}
+          dangerouslySetInnerHTML={{ __html: jsonLd(shelfSchema(initial, lang)) }}
         />
       ) : null}
       <StoreFeed lang={lang} initial={initial} />

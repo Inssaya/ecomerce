@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place, ServicePage } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, siteUrl } from "@/lib/server";
+import { alternates, fromApi, jsonLd, siteUrl } from "@/lib/server";
 
 /**
  * "Can you make me one of these?"
@@ -100,7 +100,7 @@ export default async function ServiceLanding({
     <div className="page pt-8 pb-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(serviceSchema(found, lang)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(serviceSchema(found, lang)) }}
       />
 
       <nav aria-label="Breadcrumb" className="text-[13px] text-ink-soft">

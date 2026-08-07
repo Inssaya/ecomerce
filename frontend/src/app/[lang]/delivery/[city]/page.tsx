@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 
 import type { Place } from "@/lib/api";
 import { LANGS, type Lang, isLang, money, translator } from "@/lib/i18n";
-import { alternates, fromApi, siteUrl, workshopPhone } from "@/lib/server";
+import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * "Do you deliver to Fez, and how long does it take?"
@@ -96,7 +96,7 @@ export default async function CityLanding({
     <div className="page pt-8 pb-10">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(citySchema(place, lang)) }}
+        dangerouslySetInnerHTML={{ __html: jsonLd(citySchema(place, lang)) }}
       />
 
       <nav aria-label="Breadcrumb" className="text-[13px] text-ink-soft">

@@ -55,6 +55,30 @@ export function alternates(lang: Lang, path = "") {
 }
 
 /**
+ * Structured data, safe to put inside a `<script>` tag.
+ *
+ * `JSON.stringify` escapes quotes and backslashes and nothing else — in
+ * particular it leaves `<` alone. So a product title containing
+ * `</script><img src=x onerror=…>` closes the tag and everything after it is
+ * markup, on every page that piece appears on.
+ *
+ * Reaching it needs the owner's account, since titles and descriptions are
+ * written in the panel, so this is not a hole a stranger can walk through. It
+ * is worth closing anyway: the fix is three replacements, the alternative is
+ * that one careless paste from a supplier's site permanently defaces the shop,
+ * and the person who would have to notice is the same person who pasted it.
+ *
+ * U+2028 and U+2029 are escaped for a related reason: they end a line in
+ * JavaScript but not in JSON, so an unescaped one is a syntax error.
+ */
+export function jsonLd(data: unknown): string {
+  return JSON.stringify(data)
+    .replace(/</g, "\\u003c")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029");
+}
+
+/**
  * The workshop's phone, in international form, or nothing.
  *
  * Local search leans on a business having a consistent name, address and phone
