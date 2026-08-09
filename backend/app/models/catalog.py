@@ -92,6 +92,10 @@ class Category(Base, TimestampMixin):
     slug: Mapped[str] = mapped_column(String(160), unique=True, nullable=False, index=True)
     name_en: Mapped[str] = mapped_column(String(160), nullable=False)
     name_ar: Mapped[str] = mapped_column(String(160), nullable=False, default="")
+    # A small mark for the desktop category rail — uploaded through the same
+    # pipeline as a product photo, not chosen from a bundled icon set, so the
+    # admin is never limited to whatever glyphs shipped with the code.
+    icon_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 

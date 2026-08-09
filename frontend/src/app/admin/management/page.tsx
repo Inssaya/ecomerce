@@ -60,15 +60,23 @@ export default function Management() {
 
 // ── Categories ───────────────────────────────────────────────────────────────
 
+/**
+ * The category tree — root lines and their subcategories.
+ *
+ * This is what the storefront's desktop rail and the smart filter both read:
+ * a root here is an icon on the rail; its children are what the filter offers
+ * once that root is picked. Reordering, the icon, and deleting an empty branch
+ * all live here because there is nowhere else an admin could reach them.
+ */
 function Categories() {
   const [categories, setCategories] = useState<AdminCategory[] | null>(null);
-  const [adding, setAdding] = useState(false);
+  const [addingUnder, setAddingUnder] = useState<string | null | false>(false);
   const [problem, setProblem] = useState<string | null>(null);
 
   const load = useCallback(() => {
     admin
       .categories()
-      .then(setCategories)
+      .then((rows) => setCategories([...rows].sort((a, b) => a.display_order - b.display_order)))
       .catch((error) => {
         if (error instanceof NotSignedIn) bounceToSignIn();
         else setProblem("Could not load");
@@ -77,83 +85,315 @@ function Categories() {
 
   useEffect(load, [load]);
 
+  async function guarded(work: () => Promise<unknown>, failure: string) {
+    setProblem(null);
+    try {
+      await work();
+      load();
+    } catch (error) {
+      if (error instanceof NotSignedIn) bounceToSignIn();
+      else setProblem(error instanceof Error ? error.message : failure);
+    }
+  }
+
+  const roots = (categories ?? []).filter((c) => !c.parent_id);
+  const childrenOf = (id: string) => (categories ?? []).filter((c) => c.parent_id === id);
+
+  async function move(group: AdminCategory[], index: number, delta: number) {
+    const target = index + delta;
+    if (target < 0 || target >= group.length) return;
+    const a = group[index];
+    const b = group[target];
+    await Promise.all([
+      admin.updateCategory(a.id, { ...withoutMeta(a), display_order: b.display_order }),
+      admin.updateCategory(b.id, { ...withoutMeta(b), display_order: a.display_order }),
+    ]);
+    load();
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <button type="button" onClick={() => setAdding(!adding)} className={adding ? "btn-quiet self-start" : "btn-primary self-start"}>
-        {adding ? "Cancel" : "New category"}
+      <button
+        type="button"
+        onClick={() => setAddingUnder(addingUnder === false ? null : false)}
+        className={addingUnder !== false ? "btn-quiet self-start" : "btn-primary self-start"}
+      >
+        {addingUnder !== false ? "Cancel" : "New category"}
       </button>
 
-      {adding ? (
-        <form
-          className="card p-5 shadow-soft flex flex-col gap-3"
-          onSubmit={async (event) => {
-            event.preventDefault();
-            const form = new FormData(event.currentTarget);
-            const nameEn = String(form.get("name_en") ?? "").trim();
-            if (!nameEn) return;
-            try {
-              await admin.createCategory(nameEn, String(form.get("name_ar") ?? "").trim());
-              setAdding(false);
-              load();
-            } catch (error) {
-              if (error instanceof NotSignedIn) bounceToSignIn();
-              else setProblem(error instanceof Error ? error.message : "Could not add it");
-            }
+      {addingUnder !== false ? (
+        <NewCategoryForm
+          parentId={addingUnder}
+          onCancel={() => setAddingUnder(false)}
+          onCreated={() => {
+            setAddingUnder(false);
+            load();
           }}
-        >
-          <div>
-            <label className="label" htmlFor="name_en">
-              Name, English
-            </label>
-            <input id="name_en" name="name_en" required maxLength={160} className="field" />
-          </div>
-          <div>
-            <label className="label" htmlFor="name_ar">
-              Name, Arabic
-            </label>
-            <input id="name_ar" name="name_ar" maxLength={160} dir="rtl" className="field" />
-          </div>
-          <button type="submit" className="btn-primary self-start">
-            Add it
-          </button>
-        </form>
+        />
       ) : null}
 
       {problem ? <p className="text-[13px] text-warn">{problem}</p> : null}
 
       {categories === null ? (
         <div className="h-24" aria-hidden />
-      ) : categories.length === 0 ? (
+      ) : roots.length === 0 ? (
         <p className="text-[14px] text-ink-soft">No categories yet.</p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {categories.map((category) => (
-            <li key={category.id} className="card flex items-center justify-between gap-3 p-4 shadow-soft">
-              <div>
-                <p className="text-[15px] font-medium">{category.name_en}</p>
-                {category.name_ar ? <p className="text-[13px] text-ink-soft" dir="rtl">{category.name_ar}</p> : null}
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  try {
-                    await admin.updateCategory(category.id, { is_active: !category.is_active, name_en: category.name_en, name_ar: category.name_ar, parent_id: category.parent_id, display_order: category.display_order });
-                    load();
-                  } catch (error) {
-                    if (error instanceof NotSignedIn) bounceToSignIn();
-                  }
-                }}
-                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium ${
-                  category.is_active ? "bg-clay text-white" : "bg-sand text-ink-soft"
-                }`}
-              >
-                {category.is_active ? "active" : "inactive"}
-              </button>
+          {roots.map((root, index) => (
+            <li key={root.id} className="card p-4 shadow-soft">
+              <CategoryRow
+                category={root}
+                canMoveUp={index > 0}
+                canMoveDown={index < roots.length - 1}
+                onMove={(delta) => move(roots, index, delta)}
+                onToggleActive={() =>
+                  guarded(
+                    () => admin.updateCategory(root.id, { ...withoutMeta(root), is_active: !root.is_active }),
+                    "Could not change that",
+                  )
+                }
+                onDelete={() => guarded(() => admin.deleteCategory(root.id), "Could not delete it")}
+                onIconChange={(file) =>
+                  guarded(() => admin.uploadCategoryIcon(root.id, file), "That icon would not upload")
+                }
+                onIconRemove={() => guarded(() => admin.removeCategoryIcon(root.id), "Could not remove it")}
+                onAddSubcategory={() => setAddingUnder(root.id)}
+              />
+
+              {childrenOf(root.id).length > 0 || addingUnder === root.id ? (
+                <ul className="mt-3 ms-6 flex flex-col gap-2 border-s border-sand ps-4">
+                  {childrenOf(root.id).map((child, childIndex, siblings) => (
+                    <li key={child.id}>
+                      <CategoryRow
+                        category={child}
+                        canMoveUp={childIndex > 0}
+                        canMoveDown={childIndex < siblings.length - 1}
+                        onMove={(delta) => move(siblings, childIndex, delta)}
+                        onToggleActive={() =>
+                          guarded(
+                            () =>
+                              admin.updateCategory(child.id, {
+                                ...withoutMeta(child),
+                                is_active: !child.is_active,
+                              }),
+                            "Could not change that",
+                          )
+                        }
+                        onDelete={() =>
+                          guarded(() => admin.deleteCategory(child.id), "Could not delete it")
+                        }
+                        onIconChange={(file) =>
+                          guarded(
+                            () => admin.uploadCategoryIcon(child.id, file),
+                            "That icon would not upload",
+                          )
+                        }
+                        onIconRemove={() =>
+                          guarded(() => admin.removeCategoryIcon(child.id), "Could not remove it")
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           ))}
         </ul>
       )}
     </div>
+  );
+}
+
+/** `updateCategory` replaces the whole row (the server's `CategoryWrite` has
+ *  no partial-update mode), so every call carries the fields that are not
+ *  changing forward from what is already on screen. */
+function withoutMeta(category: AdminCategory) {
+  return {
+    name_en: category.name_en,
+    name_ar: category.name_ar,
+    parent_id: category.parent_id,
+    display_order: category.display_order,
+    is_active: category.is_active,
+  };
+}
+
+function CategoryRow({
+  category,
+  canMoveUp,
+  canMoveDown,
+  onMove,
+  onToggleActive,
+  onDelete,
+  onIconChange,
+  onIconRemove,
+  onAddSubcategory,
+}: {
+  category: AdminCategory;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
+  onMove: (delta: number) => void;
+  onToggleActive: () => void;
+  onDelete: () => void;
+  onIconChange: (file: File) => void;
+  onIconRemove: () => void;
+  onAddSubcategory?: () => void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+
+  return (
+    <div className="flex items-center gap-3">
+      <label className="relative h-11 w-11 shrink-0 rounded-xl overflow-hidden bg-clay-soft cursor-pointer
+                        flex items-center justify-center text-ink-soft text-[11px]">
+        {category.icon_url ? (
+          <Image src={category.icon_url} alt="" fill sizes="44px" className="object-cover" />
+        ) : (
+          <span>icon</span>
+        )}
+        <input
+          type="file"
+          accept="image/jpeg,image/png,image/webp"
+          className="sr-only"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (file) onIconChange(file);
+          }}
+        />
+      </label>
+
+      <div className="min-w-0 flex-1">
+        <p className="text-[15px] font-medium truncate">{category.name_en}</p>
+        {category.name_ar ? (
+          <p className="text-[12.5px] text-ink-soft truncate" dir="rtl">
+            {category.name_ar}
+          </p>
+        ) : null}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-1">
+        {category.icon_url ? (
+          <button type="button" onClick={onIconRemove} className="text-[12px] text-ink-soft underline underline-offset-4">
+            remove icon
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={() => onMove(-1)}
+          disabled={!canMoveUp}
+          aria-label="Move up"
+          className="tap h-8 w-8 text-ink-soft disabled:opacity-25"
+        >
+          ↑
+        </button>
+        <button
+          type="button"
+          onClick={() => onMove(1)}
+          disabled={!canMoveDown}
+          aria-label="Move down"
+          className="tap h-8 w-8 text-ink-soft disabled:opacity-25"
+        >
+          ↓
+        </button>
+        {onAddSubcategory ? (
+          <button type="button" onClick={onAddSubcategory} className="text-[12px] text-ink-soft underline underline-offset-4">
+            + sub
+          </button>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggleActive}
+          className={`rounded-full px-2.5 py-1 text-[11px] font-medium ${
+            category.is_active ? "bg-clay text-white" : "bg-sand text-ink-soft"
+          }`}
+        >
+          {category.is_active ? "active" : "inactive"}
+        </button>
+        {confirming ? (
+          <>
+            <button type="button" onClick={onDelete} className="rounded-full bg-warn px-2.5 py-1 text-[11px] font-medium text-white">
+              Confirm
+            </button>
+            <button type="button" onClick={() => setConfirming(false)} className="text-[11px] text-ink-soft">
+              No
+            </button>
+          </>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            aria-label="Delete category"
+            className="tap h-8 w-8 text-ink-soft hover:text-warn"
+          >
+            ×
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function NewCategoryForm({
+  parentId,
+  onCancel,
+  onCreated,
+}: {
+  parentId: string | null;
+  onCancel: () => void;
+  onCreated: () => void;
+}) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <form
+      className="card p-5 shadow-soft flex flex-col gap-3"
+      onSubmit={async (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        const nameEn = String(form.get("name_en") ?? "").trim();
+        if (!nameEn) return;
+        setBusy(true);
+        setProblem(null);
+        try {
+          await admin.createCategory({
+            name_en: nameEn,
+            name_ar: String(form.get("name_ar") ?? "").trim(),
+            parent_id: parentId,
+          });
+          onCreated();
+        } catch (error) {
+          if (error instanceof NotSignedIn) bounceToSignIn();
+          else setProblem(error instanceof Error ? error.message : "Could not add it");
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="text-[13px] font-medium text-ink-soft">
+        {parentId ? "New subcategory" : "New category"}
+      </p>
+      <div>
+        <label className="label" htmlFor="name_en">
+          Name, English
+        </label>
+        <input id="name_en" name="name_en" required maxLength={160} className="field" autoFocus />
+      </div>
+      <div>
+        <label className="label" htmlFor="name_ar">
+          Name, Arabic
+        </label>
+        <input id="name_ar" name="name_ar" maxLength={160} dir="rtl" className="field" />
+      </div>
+      {problem ? <p className="text-[13px] text-warn">{problem}</p> : null}
+      <div className="flex gap-2">
+        <button type="submit" disabled={busy} className="btn-primary self-start">
+          Add it
+        </button>
+        <button type="button" onClick={onCancel} className="btn-quiet self-start">
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -279,7 +519,7 @@ function CategoryField({
     if (!nameEn.trim()) return;
     setBusy(true);
     try {
-      const created = await admin.createCategory(nameEn.trim(), nameAr.trim());
+      const created = await admin.createCategory({ name_en: nameEn.trim(), name_ar: nameAr.trim() });
       onCreated(created);
       onChange(created.id);
       setNaming(false);

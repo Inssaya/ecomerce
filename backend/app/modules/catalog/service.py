@@ -207,6 +207,7 @@ def build_tree(categories: list[Category], lang: str) -> list[CategoryNode]:
             id=category.id,
             slug=category.slug,
             name=category.name(lang),
+            icon_url=category.icon_url,
             display_order=category.display_order,
             children=[],
         )

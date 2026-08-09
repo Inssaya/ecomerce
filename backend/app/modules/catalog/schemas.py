@@ -23,6 +23,7 @@ class CategoryNode(BaseModel):
     id: str
     slug: str
     name: str
+    icon_url: str | None = None
     display_order: int
     children: list[CategoryNode] = []
 
@@ -124,6 +125,7 @@ class CategoryAdmin(BaseModel):
     slug: str
     name_en: str
     name_ar: str
+    icon_url: str | None
     parent_id: str | None
     display_order: int
     is_active: bool

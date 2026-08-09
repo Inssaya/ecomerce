@@ -76,6 +76,7 @@ async def get_category(slug: str, db: DbSession, lang: Lang) -> CategoryNode:
         id=category.id,
         slug=category.slug,
         name=category.name(lang),
+        icon_url=category.icon_url,
         display_order=category.display_order,
     )
 
@@ -111,6 +112,62 @@ async def update_category(
         setattr(category, field, value)
     await db.commit()
     await db.refresh(category)
+    return category
+
+
+@router.delete(
+    "/admin/categories/{category_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_category(category_id: str, db: DbSession, owner: Owner) -> None:
+    """Only an empty line of work. A category with subcategories or products
+    still filed under it is not empty — move them first, or the tree the rail
+    reads and the feed narrows by would lose a branch out from under it."""
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    if await db.scalar(select(Category.id).where(Category.parent_id == category_id)):
+        raise conflict("This category still has subcategories — move or delete them first")
+    if await db.scalar(select(Product.id).where(Product.category_id == category_id)):
+        raise conflict("This category still has products in it — move them first")
+    icon_url = category.icon_url
+    await db.delete(category)
+    await db.commit()
+    if icon_url:
+        await delete_object(icon_url)
+
+
+@router.post("/admin/categories/{category_id}/icon", response_model=CategoryAdmin)
+async def upload_category_icon(
+    category_id: str, file: UploadFile, db: DbSession, owner: Owner
+) -> Category:
+    """The mark shown on the desktop rail. Same storage pipeline as a product
+    photo — an admin never has to pick from a bundled icon set."""
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    data = await file.read()
+    if not data:
+        raise bad_request("That file is empty")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="That icon is larger than 12 MB")
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Icons must be JPEG, PNG or WebP")
+
+    old_icon = category.icon_url
+    category.icon_url = await upload_image(data, content_type, prefix=f"categories/{category_id}")
+    await db.commit()
+    await db.refresh(category)
+    if old_icon:
+        await delete_object(old_icon)
+    return category
+
+
+@router.delete("/admin/categories/{category_id}/icon", response_model=CategoryAdmin)
+async def remove_category_icon(category_id: str, db: DbSession, owner: Owner) -> Category:
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    old_icon = category.icon_url
+    category.icon_url = None
+    await db.commit()
+    await db.refresh(category)
+    if old_icon:
+        await delete_object(old_icon)
     return category
 
 

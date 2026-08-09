@@ -301,6 +301,103 @@ async def test_categories_come_back_as_a_tree(
     assert [child["name"] for child in top["children"]] == ["Shelves"]
 
 
+async def test_a_category_with_subcategories_cannot_be_deleted(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    parent = (
+        await client.post(
+            "/api/admin/categories", headers=owner_headers, json={"name_en": "Furniture"}
+        )
+    ).json()
+    await client.post(
+        "/api/admin/categories",
+        headers=owner_headers,
+        json={"name_en": "Shelves", "parent_id": parent["id"]},
+    )
+
+    refused = await client.delete(f"/api/admin/categories/{parent['id']}", headers=owner_headers)
+    assert refused.status_code == 409
+
+
+async def test_a_category_with_products_cannot_be_deleted(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    category = (
+        await client.post(
+            "/api/admin/categories", headers=owner_headers, json={"name_en": "Hooks"}
+        )
+    ).json()
+    await client.post(
+        "/api/admin/products",
+        headers=owner_headers,
+        json={
+            "kind": "shelf",
+            "title_en": "A hook",
+            "price": 100,
+            "category_id": category["id"],
+        },
+    )
+
+    refused = await client.delete(f"/api/admin/categories/{category['id']}", headers=owner_headers)
+    assert refused.status_code == 409
+
+
+async def test_an_empty_category_can_be_deleted(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    category = (
+        await client.post(
+            "/api/admin/categories", headers=owner_headers, json={"name_en": "Temporary"}
+        )
+    ).json()
+
+    removed = await client.delete(f"/api/admin/categories/{category['id']}", headers=owner_headers)
+    assert removed.status_code == 204
+
+    tree = (await client.get("/api/categories")).json()
+    assert all(node["slug"] != category["slug"] for node in tree)
+
+
+async def test_a_categorys_icon_can_be_uploaded_and_removed(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    category = (
+        await client.post(
+            "/api/admin/categories", headers=owner_headers, json={"name_en": "Lamps"}
+        )
+    ).json()
+    assert category["icon_url"] is None
+
+    # A 1x1 PNG — the storage layer sniffs real bytes, not the declared type.
+    png = bytes.fromhex(
+        "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
+        "de0000000c4944415478da6360000002000155037e02000000004945" "4e44ae426082"
+    )
+    uploaded = await client.post(
+        f"/api/admin/categories/{category['id']}/icon",
+        headers=owner_headers,
+        files={"file": ("icon.png", png, "image/png")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["icon_url"]
+
+    removed = await client.delete(
+        f"/api/admin/categories/{category['id']}/icon", headers=owner_headers
+    )
+    assert removed.status_code == 200
+    assert removed.json()["icon_url"] is None
+
+
+async def test_category_deletion_and_icons_are_the_owners_alone(client: AsyncClient) -> None:
+    for method, path in [
+        ("DELETE", "/api/admin/categories/anything"),
+        ("POST", "/api/admin/categories/anything/icon"),
+        ("DELETE", "/api/admin/categories/anything/icon"),
+    ]:
+        response = await client.request(method, path)
+        assert response.status_code == 401
+
+
 async def test_one_category_can_be_asked_for_by_its_slug(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:

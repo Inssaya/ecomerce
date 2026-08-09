@@ -180,6 +180,7 @@ export interface AdminCategory {
   slug: string;
   name_en: string;
   name_ar: string;
+  icon_url: string | null;
   parent_id: string | null;
   display_order: number;
   is_active: boolean;
@@ -264,13 +265,29 @@ export const admin = {
     }),
 
   categories: () => call<AdminCategory[]>("/admin/categories"),
-  createCategory: (nameEn: string, nameAr: string) =>
-    call<AdminCategory>("/admin/categories", {
-      method: "POST",
-      body: JSON.stringify({ name_en: nameEn, name_ar: nameAr }),
-    }),
+  createCategory: (body: { name_en: string; name_ar?: string; parent_id?: string | null; display_order?: number }) =>
+    call<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(body) }),
   updateCategory: (id: string, body: Record<string, unknown>) =>
     call<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCategory: (id: string) => call<void>(`/admin/categories/${id}`, { method: "DELETE" }),
+
+  async uploadCategoryIcon(categoryId: string, file: File): Promise<AdminCategory> {
+    const { ownerToken } = await import("./session");
+    const body = new FormData();
+    body.append("file", file);
+    const response = await fetch(`/api/admin/categories/${categoryId}/icon?lang=en`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${ownerToken() ?? ""}` },
+      body,
+    });
+    if (!response.ok) {
+      const detail = await response.json().catch(() => null);
+      throw new Error(detail?.detail || "That icon would not upload");
+    }
+    return response.json();
+  },
+  removeCategoryIcon: (categoryId: string) =>
+    call<AdminCategory>(`/admin/categories/${categoryId}/icon`, { method: "DELETE" }),
 
   products: () => call<AdminProduct[]>("/admin/products?size=60"),
   createProduct: (body: Record<string, unknown>) =>
