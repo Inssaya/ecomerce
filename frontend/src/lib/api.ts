@@ -47,6 +47,7 @@ export interface CategoryNode {
   id: string;
   slug: string;
   name: string;
+  icon_url: string | null;
   display_order: number;
   children: CategoryNode[];
 }
@@ -201,12 +202,14 @@ export const api = {
       page = 1,
       size = 30,
       category,
+      q,
       seed,
-    }: { page?: number; size?: number; category?: string; seed?: number } = {},
+    }: { page?: number; size?: number; category?: string; q?: string; seed?: number } = {},
   ) =>
     request<{ items: Piece[]; total: number; page: number; size: number; has_more: boolean }>(
       `/products?page=${page}&size=${size}` +
         (category ? `&category=${encodeURIComponent(category)}` : "") +
+        (q ? `&q=${encodeURIComponent(q)}` : "") +
         (seed === undefined ? "" : `&seed=${seed}`),
       { lang },
     ),

@@ -1,11 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
 
+import { CategoryRail } from "./CategoryRail";
 import { useCart } from "./CartProvider";
 import { Logo } from "./Logo";
+import { SearchBox } from "./SearchBox";
 import { loadDelivery } from "@/lib/delivery";
 import { ensureVisitorCookie } from "@/lib/fingerprint";
 import { setSignalLanguage } from "@/lib/signals";
@@ -27,10 +29,8 @@ import { type Lang, translator } from "@/lib/i18n";
 export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) {
   const t = translator(lang);
   const path = usePathname();
-  const router = useRouter();
   const { count } = useCart();
   const { session } = useSession();
-  const [query, setQuery] = useState("");
   const [menu, setMenu] = useState(false);
 
   useEffect(() => {
@@ -61,12 +61,6 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
   // this button fires. Elsewhere it would be a control that does nothing,
   // which is worse than no control at all.
   const shopping = path === `/${lang}`;
-
-  function search(event: React.FormEvent) {
-    event.preventDefault();
-    const term = query.trim();
-    router.push(term ? `/${lang}/search?q=${encodeURIComponent(term)}` : `/${lang}`);
-  }
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -119,20 +113,18 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
                 </button>
               ) : null}
 
-              <form onSubmit={search} className="relative min-w-0 w-[130px] sm:w-[210px]">
-                <SearchIcon className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-ink-mute" />
-                <input
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  type="search"
-                  inputMode="search"
-                  placeholder={t("searchPlaceholder")}
-                  aria-label={t("searchPlaceholder")}
-                  className="w-full h-10 rounded-full bg-surface border border-sand ps-9 pe-3.5
-                             text-[14.5px] text-ink placeholder:text-ink-mute
-                             focus:border-clay focus:outline-none transition-colors duration-200"
-                />
-              </form>
+              {/* `useSearchParams()` lives inside this component, which is
+                  why it needs the boundary: without it, every otherwise-static
+                  page `Chrome` wraps — `/ask`, `/how-we-work`, and the rest —
+                  would be forced into client-side rendering just to draw a
+                  search box none of them use the query string for. */}
+              <Suspense
+                fallback={
+                  <div className="h-10 w-[130px] sm:w-[210px] rounded-full bg-surface border border-sand" />
+                }
+              >
+                <SearchBox lang={lang} />
+              </Suspense>
 
               {session ? (
                 <Link
@@ -215,27 +207,16 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
         </div>
       </header>
 
-      <main className="flex-1 pb-16 animate-fade">{children}</main>
-    </div>
-  );
-}
+      {/* Desktop only, and only on the shop itself — see the component for
+          why this is a floating column of marks rather than a sidebar. */}
+      {shopping ? (
+        <Suspense fallback={null}>
+          <CategoryRail lang={lang} />
+        </Suspense>
+      ) : null}
 
-function SearchIcon({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      className={className}
-      aria-hidden
-    >
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
+      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:pe-16" : ""}`}>{children}</main>
+    </div>
   );
 }
 

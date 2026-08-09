@@ -52,6 +52,13 @@ export function ProductFeed({
   const path = usePathname();
   const params = useSearchParams();
   const active = params.get("category") ?? "";
+  const query = params.get("q") ?? "";
+
+  // The active line might be a root or one of its children — either way, the
+  // popover needs to know which root to show subcategories underneath.
+  const activeRoot = categories.find(
+    (root) => root.slug === active || root.children.some((child) => child.slug === active),
+  );
 
   const [pieces, setPieces] = useState(initial);
   const [page, setPage] = useState(1);
@@ -79,7 +86,7 @@ export function ProductFeed({
     let cancelled = false;
     setNarrowing(true);
     api
-      .products(lang, { page: 1, size: PAGE, category: active || undefined, seed })
+      .products(lang, { page: 1, size: PAGE, category: active || undefined, q: query || undefined, seed })
       .then((batch) => {
         if (cancelled) return;
         setPieces(batch.items);
@@ -91,7 +98,7 @@ export function ProductFeed({
     return () => {
       cancelled = true;
     };
-  }, [active, lang, seed]);
+  }, [active, lang, query, seed]);
 
   const loadMore = useCallback(async () => {
     if (loading || !more) return;
@@ -102,6 +109,7 @@ export function ProductFeed({
         page: next,
         size: PAGE,
         category: active || undefined,
+        q: query || undefined,
         seed,
       });
       // Belt and braces on top of the stable seed: a piece published between
@@ -117,7 +125,7 @@ export function ProductFeed({
     } finally {
       setLoading(false);
     }
-  }, [active, lang, loading, more, page, seed]);
+  }, [active, lang, loading, more, page, query, seed]);
 
   useEffect(() => {
     const mark = sentinel.current;
@@ -136,51 +144,96 @@ export function ProductFeed({
     const next = new URLSearchParams(params.toString());
     if (slug) next.set("category", slug);
     else next.delete("category");
-    const query = next.toString();
+    const search = next.toString();
     // `replace`, not `push`: narrowing the shelf is not somewhere you should
     // have to press Back through five times to leave.
-    router.replace(query ? `${path}?${query}` : path, { scroll: false });
-    setPicking(false);
+    router.replace(search ? `${path}?${search}` : path, { scroll: false });
+  }
+
+  function clearSearch() {
+    const next = new URLSearchParams(params.toString());
+    next.delete("q");
+    const search = next.toString();
+    router.replace(search ? `${path}?${search}` : path, { scroll: false });
   }
 
   return (
     <>
+      {/*
+        The smart filter. One control does both jobs on a phone, since there
+        is no rail there to pick a root category from — "All" clears
+        everything, the roots are the same lines the rail shows as icons, and
+        picking a root reveals its own subcategories right underneath so a
+        second tap narrows further without reopening anything.
+      */}
       {picking && categories.length > 0 ? (
-        <div className="mb-4 animate-fade">
+        <div className="mb-4 animate-fade rounded-2xl border border-sand bg-surface p-3">
           <div className="flex flex-wrap gap-2">
             <FilterChip on={!active} onClick={() => narrow("")}>
               {t("allPieces")}
             </FilterChip>
-            {categories.map((line) => (
-              <FilterChip key={line.slug} on={active === line.slug} onClick={() => narrow(line.slug)}>
-                {line.name}
+            {categories.map((root) => (
+              <FilterChip key={root.slug} on={active === root.slug} onClick={() => narrow(root.slug)}>
+                {root.name}
               </FilterChip>
             ))}
           </div>
+
+          {activeRoot && activeRoot.children.length > 0 ? (
+            <div className="mt-2.5 flex flex-wrap gap-2 border-t border-sand pt-2.5">
+              <FilterChip
+                small
+                on={active === activeRoot.slug}
+                onClick={() => narrow(activeRoot.slug)}
+              >
+                {lang === "ar" ? `كل ${activeRoot.name}` : `All ${activeRoot.name}`}
+              </FilterChip>
+              {activeRoot.children.map((child) => (
+                <FilterChip key={child.slug} small on={active === child.slug} onClick={() => narrow(child.slug)}>
+                  {child.name}
+                </FilterChip>
+              ))}
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {/* A filter that is on stays visible after the panel closes — otherwise
-          a narrowed shelf looks like an empty one. */}
-      {!picking && active ? (
-        <div className="mb-4">
-          <FilterChip on onClick={() => narrow("")}>
-            {categories.find((line) => line.slug === active)?.name ?? active}
-            <span aria-hidden className="ms-2">×</span>
-          </FilterChip>
+      {/* Active filters stay visible after the popover closes, each with its
+          own way out — otherwise a narrowed shelf just looks like an empty
+          one, and clearing one filter should never have to clear both. */}
+      {!picking && (active || query) ? (
+        <div className="mb-4 flex flex-wrap gap-2">
+          {active ? (
+            <FilterChip on onClick={() => narrow("")}>
+              {categories.find((root) => root.slug === active)?.name ??
+                categories.flatMap((root) => root.children).find((child) => child.slug === active)?.name ??
+                active}
+              <span aria-hidden className="ms-2">×</span>
+            </FilterChip>
+          ) : null}
+          {query ? (
+            <FilterChip on onClick={clearSearch}>
+              “{query}”
+              <span aria-hidden className="ms-2">×</span>
+            </FilterChip>
+          ) : null}
         </div>
       ) : null}
 
       <div className={`transition-opacity duration-200 ${narrowing ? "opacity-40" : "opacity-100"}`}>
         {pieces.length === 0 ? (
           <p className="py-24 text-center text-[15px] text-ink-soft">
-            {active
+            {query
               ? lang === "ar"
-                ? "لا شيء في هذا القسم بعد."
-                : "Nothing in this one yet."
-              : lang === "ar"
-                ? "لا شيء على الرف بعد."
-                : "Nothing on the shelf yet."}
+                ? "لا شيء يطابق ذلك."
+                : "Nothing matches that."
+              : active
+                ? lang === "ar"
+                  ? "لا شيء في هذا القسم بعد."
+                  : "Nothing in this one yet."
+                : lang === "ar"
+                  ? "لا شيء على الرف بعد."
+                  : "Nothing on the shelf yet."}
           </p>
         ) : (
           /*
@@ -211,10 +264,12 @@ export function ProductFeed({
 
 function FilterChip({
   on,
+  small,
   onClick,
   children,
 }: {
   on: boolean;
+  small?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -223,12 +278,13 @@ function FilterChip({
       type="button"
       onClick={onClick}
       aria-pressed={on}
-      className={`h-9 shrink-0 rounded-full px-4 text-[13.5px] font-medium
-                  transition-colors duration-200 ${
-                    on
-                      ? "bg-ink text-white"
-                      : "border border-sand bg-surface text-ink-soft hover:text-ink hover:border-ink"
-                  }`}
+      className={`shrink-0 rounded-full font-medium transition-colors duration-200 ${
+        small ? "h-8 px-3.5 text-[13px]" : "h-9 px-4 text-[13.5px]"
+      } ${
+        on
+          ? "bg-ink text-white"
+          : "border border-sand bg-surface text-ink-soft hover:text-ink hover:border-ink"
+      }`}
     >
       {children}
     </button>
