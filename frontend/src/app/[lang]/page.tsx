@@ -1,266 +1,103 @@
-import Link from "next/link";
-
-import type { Place, ServiceSummary, WorkshopNumbers } from "@/lib/api";
+import { ProductFeed } from "@/components/ProductFeed";
+import type { CategoryNode, Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
+import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
- * The landing page. One idea, one action.
+ * The shop, and the front door.
  *
- * The old homepage dumped four storefronts and every product at once, which is
- * the confusion the whole rebuild exists to fix. This page says who we are and
- * offers exactly two doors.
+ * There is one page that lists what the workshop makes and this is it — no
+ * separate `/store`, no route per category. Somebody arriving from a search
+ * lands on the objects, not on writing about them: no hero, no headline, no
+ * buttons, no counters. The photographs start at the top of the page.
+ *
+ * The order is shuffled per visit, so the shelf does not always open on the
+ * same six pieces. The seed is minted here, on the server, and handed to the
+ * feed — every later page of this visit is drawn from that same arrangement,
+ * which is the only way a shuffled list can be paged without repeating itself.
  */
-export default async function Landing({ params }: { params: Promise<{ lang: string }> }) {
+export const dynamic = "force-dynamic";
+
+/** What the first screen needs; the feed asks for the next thirty itself. */
+const FIRST_PAGE = 30;
+
+export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
-  // A count a minute stale is fine; a slow first paint is not. Never throws —
-  // a landing page that fails because a counter was unavailable is worse than
-  // a landing page without a counter.
-  // Three reads, in parallel — sequential awaits here would be three round
-  // trips on the page every visitor sees first.
-  const [numbers, serviceList, placeList] = await Promise.all([
-    fromApi<WorkshopNumbers>("/workshop", lang),
-    fromApi<{ items: ServiceSummary[] }>("/services", lang, { revalidate: 3600 }),
-    fromApi<{ items: Place[] }>("/places", lang, { revalidate: 3600 }),
+  return {
+    title: `MoStyle — ${t("tagline")}`,
+    description: t("taglineSupport"),
+    alternates: alternates(lang),
+  };
+}
+
+export default async function Shop({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ lang: string }>;
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { lang: raw } = await params;
+  const { category } = await searchParams;
+  const lang = (isLang(raw) ? raw : "en") as Lang;
+  const t = translator(lang);
+
+  // A new arrangement per visit. Postgres' `md5(id || seed)` turns it into a
+  // fixed order, so paging stays consistent from here on.
+  const seed = Math.floor(Math.random() * 2_147_483_647);
+
+  const [first, categoryList] = await Promise.all([
+    fromApi<{ items: Piece[]; total: number; has_more: boolean }>(
+      `/products?page=1&size=${FIRST_PAGE}&seed=${seed}` +
+        (category ? `&category=${encodeURIComponent(category)}` : ""),
+      lang,
+    ),
+    fromApi<CategoryNode[]>("/categories", lang, { revalidate: 3600 }),
   ]);
-  const services = serviceList?.items ?? [];
-  const places = placeList?.items ?? [];
+
+  const pieces = first?.items ?? [];
 
   return (
-    <div className="page pt-14 pb-8">
-      {/*
-        Who we are, for a machine.
-
-        The `makesOffer` line is the whole positioning stated in the one
-        vocabulary Google reads: this is a workshop that manufactures what it
-        sells. It is also what makes the site eligible to be shown as a
-        business rather than as a page — and the sitelinks search box is what
-        puts the shelf's own search under the result instead of sending people
-        to a homepage they then have to navigate.
-      */}
+    <div className="px-2.5 pt-2.5 sm:px-4 sm:pt-4 lg:px-6 lg:pt-6">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(workshopSchema(lang, t)) }}
       />
 
-      <section className="animate-rise">
-        <h1 className="text-[34px] leading-[1.15] font-semibold tracking-tight">{t("tagline")}</h1>
-        <p className="mt-4 text-[17px] text-ink-soft leading-relaxed">{t("taglineSupport")}</p>
-      </section>
+      {/* The page still needs a name for a screen reader and for search — it
+          just is not something anybody has to look at. */}
+      <h1 className="sr-only">{`MoStyle — ${t("tagline")}`}</h1>
 
-      {/*
-        Open with the most characteristic thing in the subject's world.
-
-        For a workshop that is the count of what it has made — a real number,
-        read from the pieces table, not a marketing figure. It is also the one
-        sentence a reseller cannot write: they have no idea how many of
-        anything exists, because they did not make any of it.
-      */}
-      {numbers && numbers.pieces_made > 0 ? (
-        <section className="mt-10 flex items-baseline gap-6 border-y border-sand py-5">
-          <div>
-            <p className="stamp text-[38px] font-semibold leading-none">{numbers.pieces_made}</p>
-            <p className="mt-1.5 text-[13px] text-ink-soft">{t("piecesMade")}</p>
-          </div>
-          <div>
-            <p className="stamp text-[38px] font-semibold leading-none text-clay">
-              {numbers.pieces_here}
-            </p>
-            <p className="mt-1.5 text-[13px] text-ink-soft">{t("stillOnTheShelf")}</p>
-          </div>
-        </section>
-      ) : null}
-
-      <section className="mt-12 space-y-4">
-        <Door
-          href={`/${lang}/store`}
-          title={t("theShelf")}
-          meaning={t("shelfMeaning")}
-          action={t("browse")}
-          primary
-        />
-        <Door
-          href={`/${lang}/ask`}
-          title={t("theWorkshop")}
-          meaning={t("workshopMeaning")}
-          action={t("askUs")}
-        />
-      </section>
-
-      {/*
-        What the workshop does, as opposed to what is on the shelf today.
-
-        Here for two reasons and both matter. A visitor who wants something
-        made has no idea from the two doors above that we cut, print and
-        engrave — the Workshop door says "tell us what you need", which assumes
-        they already know we can. And these are the pages that answer a search
-        for the work itself, so they have to be linked from the homepage or
-        nothing crawls them.
-      */}
-      {services.length > 0 ? (
-        <section className="mt-14">
-          <h2 className="text-[19px] font-semibold">
-            {lang === "ar" ? "ما نصنعه" : "What we make"}
-          </h2>
-          <div className="mt-4 flex flex-col gap-2.5">
-            {services.map((item) => (
-              <Link
-                key={item.slug}
-                href={`/${lang}/make/${item.slug}`}
-                className="card block p-4 shadow-soft active:scale-[0.99] transition-transform duration-gentle"
-              >
-                <h3 className="text-[16px] font-semibold">{item.name}</h3>
-                <p className="mt-1 text-[14px] text-ink-soft leading-relaxed">{item.summary}</p>
-              </Link>
-            ))}
-          </div>
-        </section>
-      ) : null}
-
-      {/*
-        And where it goes. Only the handful of biggest cities are named here —
-        the rest are reachable from any service page, so every city is two taps
-        from this page without turning the homepage into a list of thirty
-        towns.
-      */}
-      {places.length > 0 ? (
-        <section className="mt-10">
-          <h2 className="text-[17px] font-semibold">
-            {lang === "ar" ? "نوصّل في كل المغرب" : "We deliver across Morocco"}
-          </h2>
-          <p className="mt-2 text-[14px] text-ink-soft leading-relaxed">
-            {places.slice(0, 8).map((place, index) => (
-              <span key={place.slug}>
-                {index > 0 ? <span aria-hidden> · </span> : null}
-                <Link
-                  href={`/${lang}/delivery/${place.slug}`}
-                  className="underline underline-offset-4 decoration-sand"
-                >
-                  {place.name}
-                </Link>
-              </span>
-            ))}
-          </p>
-        </section>
-      ) : null}
-
-      <section className="mt-14 card p-6 shadow-soft">
-        <h2 className="text-[19px] font-semibold">{t("ourStory")}</h2>
-        <div className="mt-3 space-y-3 text-[15px] text-ink-soft leading-relaxed">
-          <p>
-            {lang === "ar"
-              ? "كل ما يُباع تقريباً على الإنترنت في المغرب وصل داخل حاوية. صوّره أحدهم، وعرضه، وأرسله. لا أحد في تلك السلسلة لمس ما يبيعه."
-              : "Almost everything sold online in Morocco arrived in a container. Someone photographed it, listed it, and shipped it on. Nobody in that chain has ever touched the thing they're selling."}
-          </p>
-          <p>
-            {lang === "ar"
-              ? "لدينا ورشة. نصنع قطعنا واحدة واحدة — طباعة، وخراطة، وصقل باليد. الصورة في الصفحة هي القطعة نفسها التي ستصلك، لأنها واحدة فقط، ولأننا نحن من صنعها."
-              : "We have a workshop. We make our pieces one at a time — printed, machined, finished by hand. The photo on the page is the actual piece you will receive, because there is only one of it and we're the ones who made it."}
-          </p>
-          <p className="text-ink font-medium">{t("ifWeDontHaveIt")}</p>
-        </div>
-      </section>
-
-      {/*
-        Quiet, and last, because it is for the small number of people who are
-        already waiting on a package rather than the ones deciding whether to
-        buy. They are the ones most likely to be back on this page, though —
-        the link they were sent is the thing they have lost.
-      */}
-      <p className="mt-10 text-center text-[14px] text-ink-soft">
-        {t("alreadyOrdered")}{" "}
-        <Link href={`/${lang}/orders`} className="font-medium text-clay underline-offset-4 underline">
-          {t("findYourOrder")}
-        </Link>
-      </p>
-      <p className="mt-2 text-center text-[13px] text-ink-soft">
-        <Link href={`/${lang}/delivery`} className="underline underline-offset-4">
-          {lang === "ar" ? "التوصيل والإرجاع" : "Delivery and returns"}
-        </Link>
-        {" · "}
-        <Link href={`/${lang}/how-we-work`} className="underline underline-offset-4">
-          {lang === "ar" ? "كيف نصنع" : "How we make things"}
-        </Link>
-      </p>
+      <ProductFeed
+        lang={lang}
+        initial={pieces}
+        hasMore={first?.has_more ?? false}
+        seed={seed}
+        categories={categoryList ?? []}
+      />
     </div>
   );
 }
 
-function Door({
-  href,
-  title,
-  meaning,
-  action,
-  primary,
-}: {
-  href: string;
-  title: string;
-  meaning: string;
-  action: string;
-  primary?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`card block p-6 shadow-soft active:scale-[0.99] transition-transform duration-gentle ${
-        primary ? "bg-clay text-white" : ""
-      }`}
-    >
-      <h2 className="text-[22px] font-semibold">{title}</h2>
-      <p className={`mt-1.5 text-[15px] ${primary ? "text-white/80" : "text-ink-soft"}`}>
-        {meaning}
-      </p>
-      <p className={`mt-5 text-[15px] font-semibold ${primary ? "" : "text-clay"}`}>{action} →</p>
-    </Link>
-  );
-}
-
-function workshopSchema(lang: Lang, t: ReturnType<typeof translator>) {
-  const home = `${siteUrl}/${lang}`;
+function workshopSchema(lang: Lang, t: (key: "tagline" | "taglineSupport") => string) {
   return {
     "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": ["Organization", "HomeAndConstructionBusiness"],
-        "@id": `${siteUrl}#workshop`,
-        name: "MoStyle",
-        url: home,
-        slogan: t("tagline"),
-        description: t("taglineSupport"),
-        address: { "@type": "PostalAddress", addressCountry: "MA" },
-        currenciesAccepted: "MAD",
-        paymentAccepted: "Cash on delivery",
-        // Omitted entirely when unset. A wrong number here is worse than none,
-        // because it is the one a search result puts a "call" button on.
-        ...(workshopPhone ? { telephone: workshopPhone } : {}),
-        areaServed: { "@type": "Country", name: "Morocco" },
-        // The position, in the one vocabulary a crawler reads: we make the
-        // things we sell.
-        makesOffer: {
-          "@type": "Offer",
-          itemOffered: { "@type": "Product", name: t("theShelf") },
-        },
+    "@type": "Organization",
+    name: "MoStyle",
+    url: `${siteUrl}/${lang}`,
+    description: t("taglineSupport"),
+    slogan: t("tagline"),
+    ...(workshopPhone ? { telephone: workshopPhone } : {}),
+    areaServed: { "@type": "Country", name: "Morocco" },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${siteUrl}/${lang}/search?q={search_term_string}`,
       },
-      {
-        "@type": "WebSite",
-        "@id": `${siteUrl}#site`,
-        url: home,
-        name: "MoStyle",
-        inLanguage: lang,
-        publisher: { "@id": `${siteUrl}#workshop` },
-        // Puts the shelf's own search under the search result, so people
-        // arrive at a piece rather than at a homepage to navigate.
-        potentialAction: {
-          "@type": "SearchAction",
-          target: {
-            "@type": "EntryPoint",
-            urlTemplate: `${siteUrl}/${lang}/store?q={search_term_string}`,
-          },
-          "query-input": "required name=search_term_string",
-        },
-      },
-    ],
+      "query-input": "required name=search_term_string",
+    },
   };
 }

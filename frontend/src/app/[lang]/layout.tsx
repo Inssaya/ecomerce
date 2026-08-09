@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { IBM_Plex_Mono, IBM_Plex_Sans_Arabic } from "next/font/google";
+import { IBM_Plex_Sans_Arabic, Instrument_Serif, Schibsted_Grotesk } from "next/font/google";
 import { notFound } from "next/navigation";
 import type { ReactNode } from "react";
 
@@ -22,10 +22,25 @@ import { alternates, siteUrl } from "@/lib/server";
  * IBM Plex Sans Arabic carries Latin and Arabic drawn together, for interfaces.
  * Neither script dominates and there is nothing to keep in sync.
  */
-const text = IBM_Plex_Sans_Arabic({
+const text = Schibsted_Grotesk({
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  variable: "--font-text",
+  display: "swap",
+});
+
+/**
+ * Arabic is not covered by Schibsted Grotesk, so it keeps its own face.
+ *
+ * Declared *after* the Latin face and applied through `--font-arabic`, which
+ * `[dir="rtl"]` puts first in the stack. Dropping this would not fall back
+ * gracefully — it would render Arabic in whatever the device happened to have,
+ * which is the "translation layer bolted on" the brief rules out.
+ */
+const arabic = IBM_Plex_Sans_Arabic({
   subsets: ["arabic", "latin"],
   weight: ["300", "400", "500", "600"],
-  variable: "--font-text",
+  variable: "--font-arabic",
   display: "swap",
 });
 
@@ -38,9 +53,10 @@ const text = IBM_Plex_Sans_Arabic({
  * the one place the design is allowed to be loud; everything around it stays
  * quiet.
  */
-const stamp = IBM_Plex_Mono({
+const stamp = Instrument_Serif({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400"],
+  style: ["normal", "italic"],
   variable: "--font-stamp",
   display: "swap",
 });
@@ -108,7 +124,11 @@ export default async function LangLayout({
   const language = lang as Lang;
 
   return (
-    <html lang={language} dir={dir(language)} className={`${text.variable} ${stamp.variable}`}>
+    <html
+      lang={language}
+      dir={dir(language)}
+      className={`${text.variable} ${arabic.variable} ${stamp.variable}`}
+    >
       <body className={text.className}>
         <AmbientProvider>
           <CartProvider>

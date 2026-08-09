@@ -39,7 +39,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
     return (
       <div className="page pt-20 text-center">
         <p className="text-[17px] text-ink-soft">{t("cartEmpty")}</p>
-        <Link href={`/${lang}/store`} className="btn-quiet mt-6">
+        <Link href={`/${lang}`} className="btn-quiet mt-6">
           {t("browse")}
         </Link>
       </div>
@@ -82,7 +82,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
 
   return (
     <form onSubmit={submit} className="page pt-6 pb-10">
-      <h1 className="text-[26px] font-semibold tracking-tight">{t("checkout")}</h1>
+      <h1 className="sr-only">{t("checkout")}</h1>
 
       <div className="mt-6 space-y-4">
         <div>

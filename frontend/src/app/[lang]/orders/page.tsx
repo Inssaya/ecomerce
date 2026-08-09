@@ -49,7 +49,7 @@ export default function FindOrder({ params }: { params: Promise<{ lang: string }
 
   return (
     <div className="page pt-8 pb-10">
-      <h1 className="text-[26px] font-semibold tracking-tight">{t("findYourOrder")}</h1>
+      <h1 className="sr-only">{t("findYourOrder")}</h1>
       <p className="mt-2 text-[15px] text-ink-soft leading-relaxed">{t("findYourOrderLead")}</p>
 
       <form onSubmit={submit} className="mt-7 space-y-4">

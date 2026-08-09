@@ -27,10 +27,59 @@ const copy = {
   ifWeDontHaveIt: ["If we don't have it, we make it.", "إن لم نجده لك، صنعناه لك."],
 
   // Navigation and shell.
+  // Plain words. The bar is read by someone who may not be fluent in English,
+  // so it says what it means: "All" rather than "Everything we carry".
+  everything: ["All", "الكل"],
   theShelf: ["The Shelf", "الرف"],
   theWorkshop: ["The Workshop", "الورشة"],
   shelfMeaning: ["Pieces we have already made.", "قطع صنعناها بالفعل."],
   workshopMeaning: ["You describe it, we make it.", "تصفه لنا، فنصنعه."],
+  // The five destinations in the bar, in the order a shopper needs them.
+  navHome: ["Home", "الرئيسية"],
+  navShop: ["Shop", "المتجر"],
+  navCustom: ["Custom", "حسب الطلب"],
+  navAbout: ["About", "من نحن"],
+  navContact: ["Contact", "اتصل بنا"],
+  filter: ["Filter", "تصفية"],
+  allPieces: ["Everything", "كل القطع"],
+  priceLowHigh: ["Price: low to high", "الثمن: من الأقل"],
+  priceHighLow: ["Price: high to low", "الثمن: من الأعلى"],
+  newestFirst: ["Newest first", "الأحدث أولاً"],
+
+  // Accounts. Buying never needs one; talking to the assistant does.
+  signIn: ["Sign in", "تسجيل الدخول"],
+  signOut: ["Sign out", "تسجيل الخروج"],
+  signUp: ["Create an account", "إنشاء حساب"],
+  emailLabel: ["Email", "البريد الإلكتروني"],
+  passwordLabel: ["Password", "كلمة السر"],
+  nameLabel: ["Your name", "اسمك"],
+  haveAccount: ["Already have an account?", "لديك حساب بالفعل؟"],
+  needAccount: ["Need an account?", "تحتاج حساباً؟"],
+  signInFailed: ["That email and password do not match.", "البريد وكلمة السر غير متطابقين."],
+
+  // The assistant lives on one page, behind a sign-in.
+  chatGateTitle: ["Talk to the workshop", "تحدّث مع الورشة"],
+  chatGateBody: [
+    "The assistant answers about pieces, sizes, delivery and custom work. Sign in first — it keeps the queue for people who are actually buying.",
+    "يجيب المساعد عن القطع والمقاسات والتوصيل والطلبات الخاصة. سجّل الدخول أولاً — لنُبقي الدور لمن يريد الشراء فعلاً.",
+  ],
+  chatEmpty: ["Ask anything about what we make.", "اسأل عن أي شيء نصنعه."],
+  contactIntro: [
+    "Message the workshop directly, or ask the assistant. We read every one ourselves.",
+    "راسل الورشة مباشرة، أو اسأل المساعد. نقرأ كل رسالة بأنفسنا.",
+  ],
+
+  profile: ["Profile", "الملف"],
+  totalSpent: ["Spent with us", "ما أنفقته معنا"],
+  ordersPlaced: ["Orders delivered", "طلبات تم تسليمها"],
+  currentOrder: ["Being made now", "قيد الصنع الآن"],
+  purchases: ["What you have bought", "ما اشتريته"],
+  noPurchases: [
+    "Nothing yet. Orders you place while signed in appear here.",
+    "لا شيء بعد. الطلبات التي تضعها وأنت مسجّل الدخول تظهر هنا.",
+  ],
+  changePhoto: ["Change photo", "غيّر الصورة"],
+
   browse: ["See what we have", "شاهد ما لدينا"],
   askUs: ["Tell us what you need", "أخبرنا بما تحتاج"],
   cart: ["Cart", "السلة"],

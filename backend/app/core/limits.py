@@ -123,3 +123,4 @@ RequestLimit = Annotated[None, Depends(RateLimit(6, 600, name="custom-request"))
 AssistantLimit = Annotated[None, Depends(RateLimit(30, 600, name="assistant"))]
 SignalLimit = Annotated[None, Depends(RateLimit(120, 60, name="signals"))]
 LookupLimit = Annotated[None, Depends(RateLimit(15, 600, name="lookup"))]
+ContactLimit = Annotated[None, Depends(RateLimit(6, 600, name="contact"))]

@@ -36,14 +36,15 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   // Public doors only. `/workshop` is the owner's control room and `/ambient`
   // is a workbench — neither is a page a buyer should ever land on from a
   // search result.
-  const fixed = ["", "/store", "/ask", "/orders", "/delivery", "/how-we-work"];
+  const fixed = ["", "/ask", "/orders", "/delivery", "/how-we-work"];
   const entries: MetadataRoute.Sitemap = [];
 
   for (const lang of LANGS) {
     for (const path of fixed) {
       entries.push({
         url: `${siteUrl}/${lang}${path}`,
-        changeFrequency: path === "/store" ? "daily" : "weekly",
+        // The shop is the front door and changes whenever a piece is made.
+        changeFrequency: path === "" ? "daily" : "weekly",
         priority: path === "" ? 1 : 0.7,
         alternates: {
           languages: Object.fromEntries(
@@ -72,7 +73,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   for (const [prefix, rows, priority] of [
     ["make", services?.items ?? [], 0.8],
     ["delivery", places?.items ?? [], 0.6],
-    ["store", categories ?? [], 0.8],
   ] as const) {
     for (const row of rows) {
       for (const lang of LANGS) {
@@ -87,6 +87,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
           },
         });
       }
+    }
+  }
+
+  // A line of work is a filter on the shop, not a page of its own — but each
+  // is still a real URL worth crawling, because "brass hooks" is what somebody
+  // actually searches for.
+  for (const line of categories ?? []) {
+    for (const lang of LANGS) {
+      entries.push({
+        url: `${siteUrl}/${lang}?category=${line.slug}`,
+        changeFrequency: "weekly",
+        priority: 0.8,
+        alternates: {
+          languages: Object.fromEntries(
+            LANGS.map((other) => [other, `${siteUrl}/${other}?category=${line.slug}`]),
+          ),
+        },
+      });
     }
   }
 

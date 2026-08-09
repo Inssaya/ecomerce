@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from app.deps import DbSession, Lang, Owner
 from app.modules.admin import analytics as analytics_service
+from app.modules.admin import customers as customers_service
 from app.modules.admin import forecast, metrics
 from app.modules.admin.metrics import KPI_EXPLANATIONS, Period
 
@@ -98,6 +99,23 @@ async def forecast_next_week(db: DbSession, owner: Owner) -> dict:
     interrogate is a number they will either over-trust or ignore.
     """
     return await forecast.next_seven_days(db)
+
+
+@router.get("/customers")
+async def customers(db: DbSession, owner: Owner, q: str | None = Query(default=None)) -> list[dict]:
+    """Everyone who has bought something, registered or not — see
+    `customers.py` for why a guest counts as a customer here."""
+    return await customers_service.list_customers(db, q)
+
+
+class CustomerActive(BaseModel):
+    active: bool
+
+
+@router.patch("/customers/{user_id}/active")
+async def set_customer_active(user_id: str, body: CustomerActive, db: DbSession, owner: Owner) -> dict:
+    user = await customers_service.set_customer_active(db, user_id, body.active)
+    return {"id": user.id, "is_active": user.is_active}
 
 
 class Explanation(BaseModel):

@@ -40,6 +40,9 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Preferred language for email and notifications: "en" or "ar".
     lang: Mapped[str] = mapped_column(String(2), default="en", nullable=False)
+    #: The customer's own photograph. Null on almost every account — the
+    #: storefront falls back to an initial rather than a stock silhouette.
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

@@ -125,3 +125,18 @@ class OrderResponse(BaseModel):
 class StatusChange(BaseModel):
     status: OrderStatus
     note: str | None = Field(default=None, max_length=500)
+
+
+class MyOrders(BaseModel):
+    """One account's history, and what it has actually paid.
+
+    `total_spent` is delivered orders only — in a cash-on-delivery market the
+    difference between placed and delivered is the whole business, and a
+    profile that adds up refused packages is telling the customer a number
+    nobody ever handed over.
+    """
+
+    orders: list[OrderResponse]
+    total_spent: float
+    delivered: int
+

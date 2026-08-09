@@ -13,6 +13,7 @@ const config: Config = {
         "clay-soft": "hsl(var(--clay-soft))",
         ink: "hsl(var(--ink))",
         "ink-soft": "hsl(var(--ink-soft))",
+        "ink-mute": "hsl(var(--ink-mute))",
         good: "hsl(var(--good))",
         warn: "hsl(var(--warn))",
       },

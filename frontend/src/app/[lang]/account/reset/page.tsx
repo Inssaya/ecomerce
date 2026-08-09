@@ -145,7 +145,7 @@ function ChooseNew({ lang, token }: { lang: Lang; token: string }) {
     return (
       <div className="mt-5 flex flex-col gap-4 items-start">
         <p className="text-[15px] leading-relaxed">{t("passwordChanged")}</p>
-        <Link href={`/${lang}/workshop`} className="btn-primary">
+        <Link href="/admin" className="btn-primary">
           {ar ? "ادخل إلى الورشة" : "Go to the workshop"}
         </Link>
       </div>

@@ -8,6 +8,7 @@
 import { problemFrom } from "./detail";
 import { visitorId } from "./fingerprint";
 import type { Lang } from "./i18n";
+import { sessionToken } from "./session-store";
 
 export interface Piece {
   id: string;
@@ -163,6 +164,14 @@ async function request<T>(
   // Server-rendered requests have no browser to fingerprint.
   if (typeof window !== "undefined") {
     headers.set("x-visitor-id", await visitorId());
+    // Signed in? Say so. Checkout reads it to attach the order to the account,
+    // which is the only reason a customer's purchase history can exist at all —
+    // without this header every order is a guest order and every profile is
+    // permanently empty.
+    const token = sessionToken();
+    if (token && !headers.has("authorization")) {
+      headers.set("authorization", `Bearer ${token}`);
+    }
   }
 
   const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
@@ -177,6 +186,30 @@ export const api = {
     request<{ items: Piece[]; page: number; has_more: boolean }>(`/feed?page=${page}`, { lang }),
 
   piece: (lang: Lang, slug: string) => request<PieceDetail>(`/products/${slug}`, { lang }),
+
+  /**
+   * The shelf, a page at a time.
+   *
+   * `seed` shuffles it. The same seed always produces the same order, which is
+   * what makes paging a shuffled list possible at all — the server hashes each
+   * id with it, so page two cannot repeat page one. The seed is minted once per
+   * visit on the server and carried down here.
+   */
+  products: (
+    lang: Lang,
+    {
+      page = 1,
+      size = 30,
+      category,
+      seed,
+    }: { page?: number; size?: number; category?: string; seed?: number } = {},
+  ) =>
+    request<{ items: Piece[]; total: number; page: number; size: number; has_more: boolean }>(
+      `/products?page=${page}&size=${size}` +
+        (category ? `&category=${encodeURIComponent(category)}` : "") +
+        (seed === undefined ? "" : `&seed=${seed}`),
+      { lang },
+    ),
 
   workshop: (lang: Lang) => request<WorkshopNumbers>("/workshop", { lang }),
 
@@ -213,6 +246,12 @@ export const api = {
 
   ask: (lang: Lang, body: unknown) =>
     request<RequestView>("/requests", { lang, method: "POST", body: JSON.stringify(body) }),
+
+  /** A personal message, so it always lands somewhere the workshop will see
+   *  it — the WhatsApp/email links beside this form are drafts the visitor
+   *  may or may not actually send; this is the one that always arrives. */
+  contact: (lang: Lang, body: { name: string; email?: string; phone?: string; message: string }) =>
+    request<{ id: string }>("/contact", { lang, method: "POST", body: JSON.stringify(body) }),
 
   customRequest: (lang: Lang, token: string) =>
     request<RequestView>(`/requests/track/${token}`, { lang }),

@@ -209,7 +209,7 @@ export default async function DeliveryAndReturns({
       ) : null}
 
       <div className="mt-10 flex flex-wrap gap-3">
-        <Link href={`/${lang}/store`} className="btn-primary">
+        <Link href={`/${lang}`} className="btn-primary">
           {t("browse")}
         </Link>
         <Link href={`/${lang}/orders`} className="btn-quiet">

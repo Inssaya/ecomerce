@@ -10,13 +10,17 @@
  */
 @layer base {
   :root {
-    --cream: 38 40% 96%;      /* the page */
-    --surface: 40 45% 99%;    /* cards, sheets */
-    --sand: 34 28% 89%;       /* dividers, resting states */
-    --clay: 18 34% 53%;       /* the one accent */
-    --clay-soft: 20 45% 94%;  /* the accent, at rest */
-    --ink: 24 12% 17%;        /* text */
-    --ink-soft: 24 8% 46%;    /* secondary text */
+    /* Retuned to the design's own tokens — #f7f5f1, #ffffff, #e5e1da,
+       #d24a24, #fbeee9, #171618, #4a4750, #8a8690 — converted to HSL so the
+       existing utilities keep working unchanged. */
+    --cream: 40 27% 96%;      /* the page      #f7f5f1 */
+    --surface: 0 0% 100%;     /* cards, sheets #ffffff */
+    --sand: 38 17% 88%;       /* dividers      #e5e1da */
+    --clay: 13 71% 48%;       /* the one accent — ember #d24a24 */
+    --clay-soft: 17 69% 95%;  /* the accent, at rest  #fbeee9 */
+    --ink: 270 4% 9%;         /* text          #171618 */
+    --ink-soft: 260 6% 30%;   /* secondary     #4a4750 */
+    --ink-mute: 264 4% 55%;   /* tertiary      #8a8690 */
     --good: 150 30% 38%;
     --warn: 8 55% 48%;
 
@@ -90,6 +94,10 @@
    * leading, since ascenders and descenders overlap between lines otherwise.
    */
   [dir="rtl"] body {
+    /* Schibsted Grotesk carries no Arabic, so Arabic takes its own face first
+       in the stack. Without this the browser silently substitutes whatever the
+       device has, and the two languages stop looking like one shop. */
+    font-family: var(--font-arabic), system-ui, sans-serif;
     font-size: 17px;
     line-height: 1.9;
   }
@@ -142,7 +150,7 @@
    * in the design; everything else stays quiet around it.
    */
   .stamp {
-    font-family: var(--font-stamp), ui-monospace, monospace;
+    font-family: var(--font-stamp), Georgia, serif;
     font-feature-settings: "tnum" 1;
     letter-spacing: 0.02em;
     /* Latin numerals in both languages: a reference has to survive being
@@ -186,6 +194,30 @@
   .page {
     @apply mx-auto w-full max-w-[560px] px-5;
   }
+
+  /* The shop itself. A grid of photographs wants the width a phone cannot
+     give it, while prose stays at `.page` — 560px is a comfortable measure to
+     read and a cramped one to shop in. */
+  .page-wide {
+    @apply mx-auto w-full max-w-[1180px] px-5;
+  }
+
+  /* Escapes a narrow column to the full viewport, so a band of photographs can
+     run edge to edge inside a page whose prose must not. */
+  .breakout {
+    width: 100vw;
+    margin-inline-start: calc(50% - 50vw);
+  }
+
+  /* A row that scrolls sideways without a scrollbar cutting across it. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
 }
 
 @layer components {
@@ -203,7 +235,7 @@
 
   .tally-mark {
     @apply inline-block h-7 rounded-md px-2 text-[12px] leading-7 tabular-nums;
-    font-family: var(--font-stamp), ui-monospace, monospace;
+    font-family: var(--font-stamp), Georgia, serif;
   }
 
   .tally-here {

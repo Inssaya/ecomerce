@@ -55,23 +55,58 @@ export default async function HowWeWork({ params }: { params: Promise<{ lang: st
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
 
+  const ar = lang === "ar";
+
+  // Three facts about the place, side by side above the prose. On a laptop the
+  // old page opened on a wall of paragraphs in a phone-width column; this gives
+  // the eye somewhere to land first and uses the width the screen has.
+  const facts = ar
+    ? [
+        ["نصنع، لا نعيد البيع", "الآلات لنا. القطعة تُصنع هنا، لا تصل في حاوية."],
+        ["الصورة هي القطعة", "لا صور مخزنية أبداً. ما تراه هو ما يصلك."],
+        ["تخلّص عند الباب", "نقداً عند التسليم، في كل المغرب. لا شيء مقدماً."],
+      ]
+    : [
+        ["Made, not resold", "The machines are ours. A piece is made here, not unloaded from a container."],
+        ["The photo is the piece", "Never a stock image. What you see is what is boxed."],
+        ["Pay at the door", "Cash on delivery, anywhere in Morocco. Nothing up front."],
+      ];
+
   return (
-    <article className="page pt-6 pb-14 max-w-prose">
+    <div className="page-wide pt-8 pb-16">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(schema(lang)) }}
       />
-      {lang === "ar" ? <ArabicContent /> : <EnglishContent />}
 
-      <div className="mt-10 flex flex-wrap gap-2">
-        <Link href={`/${lang}/store`} className="btn-primary">
-          {lang === "ar" ? "شاهد الرف" : "See the shelf"}
-        </Link>
-        <Link href={`/${lang}/ask`} className="btn-quiet">
-          {lang === "ar" ? "اطلب قطعة" : "Ask for a piece"}
-        </Link>
+      <h1 className="max-w-[20ch] text-[clamp(32px,4.4vw,58px)] leading-[1.02] font-semibold tracking-[-0.04em]">
+        {ar ? "ورشة، لا متجر." : "A workshop, not a shop."}
+      </h1>
+
+      <div className="mt-9 grid gap-3 sm:grid-cols-3">
+        {facts.map(([title, detail]) => (
+          <div key={title} className="rounded-2xl border border-sand bg-surface p-5">
+            <p className="text-[15.5px] font-semibold">{title}</p>
+            <p className="mt-1.5 text-[14px] leading-[1.6] text-ink-soft">{detail}</p>
+          </div>
+        ))}
       </div>
-    </article>
+
+      {/* The writing keeps a reading measure of its own — prose at 1180px wide
+          is unreadable no matter how much room the screen has. */}
+      <article className="mt-14 max-w-[68ch]">
+        {ar ? <ArabicContent /> : <EnglishContent />}
+
+        <div className="mt-10 flex flex-wrap gap-2">
+          <Link href={`/${lang}`} className="btn-primary">
+            {ar ? "شاهد الرف" : "See the shelf"}
+          </Link>
+          <Link href={`/${lang}/ask`} className="btn-quiet">
+            {ar ? "اطلب قطعة" : "Ask for a piece"}
+          </Link>
+        </div>
+      </article>
+    </div>
   );
 }
 

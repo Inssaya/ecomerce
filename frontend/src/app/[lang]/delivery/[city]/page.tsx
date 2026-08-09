@@ -33,7 +33,9 @@ async function load(lang: Lang, slug: string): Promise<Place | null> {
  * where any place name returns a page is the exact shape of a doorway network,
  * and answering 200 for /delivery/paris is how you look like one.
  */
-export const dynamicParams = false;
+// Same reason as `${lang}/[category]`: the build cannot reach the API, so a
+// false here would 404 every one of these pages rather than only unknown ones.
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   const places = await fromApi<{ items: { slug: string }[] }>("/places", "en");
@@ -206,7 +208,7 @@ export default async function CityLanding({
       ) : null}
 
       <div className="mt-9 flex flex-wrap gap-3">
-        <Link href={`/${lang}/store`} className="btn-primary">
+        <Link href={`/${lang}`} className="btn-primary">
           {t("browse")}
         </Link>
         <Link href={`/${lang}/ask`} className="btn-quiet">

@@ -11,13 +11,14 @@ from sqlalchemy import select
 
 from app.core.errors import get_or_404
 from app.core.limits import CheckoutLimit, LookupLimit
-from app.deps import DbSession, OptionalUser, Owner, Paging
+from app.deps import CurrentUser, DbSession, OptionalUser, Owner, Paging
 from app.models import Order, OrderStatus
 from app.modules.notify.service import whatsapp_url
 from app.modules.orders import service
 from app.modules.orders.schemas import (
     CheckoutRequest,
     FindOrder,
+    MyOrders,
     OrderResponse,
     StatusChange,
 )
@@ -39,6 +40,37 @@ async def checkout(
     account gate before the first purchase is a lost purchase."""
     order = await service.place_order(db, body, user)
     return _out(order)
+
+
+@router.get("/orders/mine", response_model=MyOrders)
+async def my_orders(user: CurrentUser, db: DbSession) -> MyOrders:
+    """Everything this account has bought, and what it came to.
+
+    Only orders actually placed while signed in appear here. Buying needs no
+    account, so a customer who checked out as a guest — which is most of them —
+    has orders keyed to a phone number and reachable through `/orders/find`,
+    not through this. Claiming those by matching on the phone would hand one
+    person's order history to anyone who registered with their number.
+
+    `total_spent` counts delivered orders only. Money is collected at the door,
+    so an order that was placed, or refused, or came back to the workshop is
+    not money the shop has.
+    """
+    orders = (
+        await db.scalars(
+            select(Order)
+            .where(Order.customer_id == user.id)
+            .order_by(Order.created_at.desc())
+        )
+    ).all()
+    spent = sum(
+        float(order.total) for order in orders if order.status is OrderStatus.delivered
+    )
+    return MyOrders(
+        orders=[_out(order) for order in orders],
+        total_spent=spent,
+        delivered=sum(1 for o in orders if o.status is OrderStatus.delivered),
+    )
 
 
 @router.get("/orders/track/{tracking_token}", response_model=OrderResponse)

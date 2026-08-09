@@ -9,12 +9,13 @@ from __future__ import annotations
 import secrets
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, UploadFile, status
 from sqlalchemy import select
 
 from app.config import settings
 from app.core.cache import get_redis
 from app.core.errors import bad_request
+from app.core.storage import sniff_image, upload_image
 from app.core.limits import (
     RegisterLimit,
     ResetLimit,
@@ -45,6 +46,10 @@ from app.modules.auth.schemas import (
 )
 from app.modules.auth.service import issue_session, revoke_all_sessions
 from app.modules.notify.email import send_password_reset
+
+#: A face, not a photograph of a wall. Smaller than the 12 MB product limit
+#: because nothing here is ever displayed larger than 96px.
+MAX_AVATAR_BYTES = 4 * 1024 * 1024
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -131,6 +136,31 @@ async def me(user: CurrentUser) -> User:
 async def update_me(body: UserUpdate, user: CurrentUser, db: DbSession) -> User:
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(user, field, value)
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+@router.post("/me/avatar", response_model=UserResponse)
+async def upload_avatar(file: UploadFile, user: CurrentUser, db: DbSession) -> User:
+    """The customer's own photograph.
+
+    Same rules as product photography, for the same reason: the declared
+    content type is whatever the client typed, so the format is decided from
+    the file's own first bytes. A profile picture is the one upload on the site
+    a stranger can make, which is exactly why it is sniffed rather than trusted.
+    """
+    data = await file.read()
+    if not data:
+        raise bad_request("That file is empty")
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(status_code=413, detail="That photo is larger than 4 MB")
+
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
+
+    user.avatar_url = await upload_image(data, content_type, prefix=f"avatars/{user.id}")
     await db.commit()
     await db.refresh(user)
     return user

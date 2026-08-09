@@ -24,6 +24,7 @@ from app.modules.admin.routes import router as admin_router
 from app.modules.ai.routes import router as ai_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.catalog.routes import router as catalog_router
+from app.modules.contact.routes import router as contact_router
 from app.modules.feed.routes import router as feed_router
 from app.modules.local.routes import router as local_router
 from app.modules.local.seed import seed as seed_local
@@ -116,6 +117,7 @@ async def security_headers(request: Request, call_next):
 api = APIRouter(prefix="/api")
 api.include_router(auth_router)
 api.include_router(catalog_router)
+api.include_router(contact_router)
 api.include_router(orders_router)
 api.include_router(requests_router)
 api.include_router(feed_router)

@@ -30,7 +30,7 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
     return (
       <div className="page pt-20 text-center">
         <p className="text-[17px] text-ink-soft">{t("cartEmpty")}</p>
-        <Link href={`/${lang}/store`} className="btn-quiet mt-6">
+        <Link href={`/${lang}`} className="btn-quiet mt-6">
           {t("browse")}
         </Link>
       </div>
@@ -43,7 +43,7 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
 
   return (
     <div className="page pt-6 pb-32">
-      <h1 className="text-[26px] font-semibold tracking-tight">{t("yourCart")}</h1>
+      <h1 className="sr-only">{t("yourCart")}</h1>
 
       <ul className="mt-6 space-y-3">
         {lines.map((line) => (

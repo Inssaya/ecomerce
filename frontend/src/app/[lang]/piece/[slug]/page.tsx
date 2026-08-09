@@ -34,9 +34,8 @@ async function piece(lang: Lang, slug: string): Promise<PieceDetail | null> {
   return resource<PieceDetail>(`/products/${slug}`, lang);
 }
 
-/** Up to five other pieces in the same line of work — one drops when the
- *  current one shows up, leaving four. */
-const RELATED = 5;
+/** Pull enough neighbours to make the section feel like a shelf, not a teaser. */
+const RELATED = 12;
 
 async function related(
   lang: Lang,
@@ -48,7 +47,7 @@ async function related(
     lang,
     { revalidate: 300 },
   );
-  return (page?.items ?? []).filter((item) => item.id !== exceptId).slice(0, 4);
+  return (page?.items ?? []).filter((item) => item.id !== exceptId).slice(0, 8);
 }
 
 export async function generateMetadata({
@@ -141,45 +140,29 @@ export default async function PiecePage({
       />
       <PieceView lang={lang} slug={slug} initial={initial} />
       {more.length > 0 && initial.category_slug ? (
-        <MorePieces lang={lang} pieces={more} categorySlug={initial.category_slug} />
+        <MorePieces lang={lang} pieces={more} />
       ) : null}
     </>
   );
 }
 
 /**
- * A handful of other pieces in the same line, at the foot of the page.
- *
- * This is the real internal linking a shop should have — every piece page
- * points at three or four others, plus the category itself. It is what turns a
- * link shared to WhatsApp into a browsing session rather than one impression
- * and a bounce. Ordered newest first, matching the shop's own default; the
- * personalised ordering is the feed's job, and this is not the feed.
+ * A fuller shelf of neighbours, kept on the same page.
  */
 function MorePieces({
   lang,
   pieces,
-  categorySlug,
 }: {
   lang: Lang;
   pieces: Piece[];
-  categorySlug: string;
 }) {
   const ar = lang === "ar";
   return (
-    <section className="page mt-4 pb-14 border-t border-sand pt-8">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-[19px] font-semibold tracking-tight">
-          {ar ? "من النوع نفسه" : "More of this kind"}
-        </h2>
-        <Link
-          href={`/${lang}/store/${categorySlug}`}
-          className="text-[13px] text-ink-soft underline underline-offset-4"
-        >
-          {ar ? "شاهد الكل" : "See all"}
-        </Link>
-      </div>
-      <ul className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+    <section className="shell border-t border-rule pt-10 pb-16">
+      {/* A rule and a label. The paragraph that used to sit here explained
+          what "more of this kind" meant, which the heading already says. */}
+      <h2 className="eyebrow">{ar ? "من النوع نفسه" : "More of this kind"}</h2>
+      <ul className="mt-6 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-3 md:gap-x-5 xl:grid-cols-4">
         {pieces.map((piece) => (
           <li key={piece.id}>
             <PieceCard lang={lang} piece={piece} />

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
@@ -125,6 +125,12 @@ async def list_products(
     category: str | None = Query(default=None, description="Category slug"),
     kind: ProductKind | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=120),
+    seed: int | None = Query(
+        default=None,
+        ge=0,
+        le=2_147_483_647,
+        description="Shuffle the shelf deterministically. Same seed, same order.",
+    ),
 ) -> ProductPage:
     query = service.visible()
     if category:
@@ -138,9 +144,21 @@ async def list_products(
         query = query.where(service.text_match(q))
 
     total = await db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
-    rows = await db.scalars(
-        query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
-    )
+
+    # The shelf, shuffled — but shuffled the *same way* for every page of one
+    # visit.
+    #
+    # `ORDER BY random()` would be a different order on every request, so page
+    # two would re-roll the whole shelf: some pieces would arrive twice and
+    # others would never be reachable at all. Hashing the id together with a
+    # seed the caller keeps for the session gives a fixed but arbitrary order,
+    # which is what "random" has to mean the moment there is paging.
+    if seed is None:
+        ordering = Product.created_at.desc()
+    else:
+        ordering = func.md5(func.concat(cast(Product.id, String), str(seed)))
+
+    rows = await db.scalars(query.order_by(ordering).offset(paging.offset).limit(paging.size))
     products = list(rows.unique())
     left = await service.availability(db, [product.id for product in products])
     items = [service.to_card(product, lang, left.get(product.id, 0)) for product in products]

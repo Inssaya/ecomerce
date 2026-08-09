@@ -226,3 +226,173 @@ async def test_the_panel_survives_an_empty_shop(
     assert money["conversion"]["visitor_to_order_pct"] == 0.0
     assert money["revenue"]["average_order_mad"] == 0.0
     assert CASABLANCA  # the shared fixture is intact
+
+
+# ── Customers ─────────────────────────────────────────────────────────────────
+
+
+async def register_and_buy(client: AsyncClient, piece: dict, *, email: str) -> tuple[str, str]:
+    """A customer who has an account, buying while signed in. Returns
+    (order reference, user id)."""
+    registered = await client.post(
+        "/api/auth/register",
+        json={"email": email, "password": "a-long-enough-password", "full_name": "Salma B."},
+    )
+    assert registered.status_code == 201, registered.text
+    user_id = registered.json()["user"]["id"]
+    login = await client.post(
+        "/api/auth/login", json={"email": email, "password": "a-long-enough-password"}
+    )
+    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+
+    order = await client.post(
+        "/api/orders",
+        headers=headers,
+        json={
+            "full_name": "Salma B.",
+            "phone": "0622222222",
+            "address": {"line1": "9 Rue Ibn Sina", "city": "Rabat"},
+            "items": [{"product_id": piece["id"], "quantity": 1}],
+        },
+    )
+    assert order.status_code == 201, order.text
+    return order.json()["reference"], user_id
+
+
+async def test_customers_lists_guests_and_registered_accounts_separately(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    piece = await shelf_piece(client, owner_headers, made=4)
+    guest_reference = await buy(client, piece)
+    await walk(client, owner_headers, guest_reference, *TO_THE_DOOR, "delivered")
+
+    registered_reference, user_id = await register_and_buy(client, piece, email="salma@example.com")
+    await walk(client, owner_headers, registered_reference, *TO_THE_DOOR, "delivered")
+
+    customers = (await client.get("/api/admin/customers", headers=owner_headers)).json()
+    guest = next(row for row in customers if row["phone"] == "0611111111")
+    account = next(row for row in customers if row["phone"] == "0622222222")
+
+    assert guest["has_account"] is False
+    assert guest["created_account_at"] is None
+    assert guest["is_active"] is None
+    assert guest["time_on_site_seconds"] is None  # no visitor_id on Order — decided out of scope
+    assert guest["revenue_mad"] == 210.0  # 180 + 30 delivery
+    assert guest["products_bought"] == 1
+
+    assert account["has_account"] is True
+    assert account["id"] == user_id
+    assert account["created_account_at"] is not None
+    assert account["is_active"] is True
+    assert account["revenue_mad"] == 210.0
+
+
+async def test_customers_split_bought_from_cancelled(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    piece = await shelf_piece(client, owner_headers, made=4)
+    delivered = await buy(client, piece)
+    cancelled = await buy(client, piece)
+    await walk(client, owner_headers, delivered, *TO_THE_DOOR, "delivered")
+    await client.post(
+        f"/api/admin/orders/{cancelled}/status", headers=owner_headers, json={"status": "cancelled"}
+    )
+
+    customers = (await client.get("/api/admin/customers", headers=owner_headers)).json()
+    row = next(row for row in customers if row["phone"] == "0611111111")
+    assert row["orders_count"] == 2
+    assert row["products_bought"] == 1
+    assert row["products_cancelled"] == 1
+    assert row["revenue_mad"] == 210.0  # only the delivered one counts (180 + 30 delivery)
+
+
+async def test_customers_can_be_searched(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    piece = await shelf_piece(client, owner_headers, made=4)
+    await buy(client, piece)
+
+    found = (
+        await client.get("/api/admin/customers?q=0611111111", headers=owner_headers)
+    ).json()
+    assert len(found) == 1
+    empty = (await client.get("/api/admin/customers?q=nobody", headers=owner_headers)).json()
+    assert empty == []
+
+
+async def test_owner_can_deactivate_a_customer_account(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    piece = await shelf_piece(client, owner_headers, made=1)
+    _, user_id = await register_and_buy(client, piece, email="ban-me@example.com")
+
+    toggled = await client.patch(
+        f"/api/admin/customers/{user_id}/active", headers=owner_headers, json={"active": False}
+    )
+    assert toggled.status_code == 200, toggled.text
+    assert toggled.json()["is_active"] is False
+
+    blocked = await client.post(
+        "/api/auth/login", json={"email": "ban-me@example.com", "password": "a-long-enough-password"}
+    )
+    assert blocked.status_code in (401, 403)
+
+
+async def test_customers_endpoints_are_owner_only(client: AsyncClient) -> None:
+    assert (await client.get("/api/admin/customers")).status_code == 401
+    assert (
+        await client.patch("/api/admin/customers/anything/active", json={"active": False})
+    ).status_code == 401
+
+
+# ── Contact messages ──────────────────────────────────────────────────────────
+
+
+async def test_contact_message_lands_in_the_admin_inbox(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    sent = await client.post(
+        "/api/contact",
+        json={"name": "Youssef", "email": "youssef@example.com", "message": "Do you make lamps?"},
+    )
+    assert sent.status_code == 201, sent.text
+
+    inbox = (await client.get("/api/admin/contact-messages", headers=owner_headers)).json()
+    assert len(inbox) == 1
+    assert inbox[0]["message"] == "Do you make lamps?"
+    assert inbox[0]["read_at"] is None
+
+
+async def test_contact_message_needs_a_way_back(client: AsyncClient) -> None:
+    """Email and phone are each optional, but a message with neither is a
+    message the workshop cannot reply to."""
+    sent = await client.post("/api/contact", json={"name": "Youssef", "message": "Hello"})
+    assert sent.status_code == 422
+
+
+async def test_owner_can_mark_a_message_read(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    await client.post(
+        "/api/contact", json={"name": "Youssef", "phone": "0611111111", "message": "Hello"}
+    )
+    inbox = (await client.get("/api/admin/contact-messages", headers=owner_headers)).json()
+    message_id = inbox[0]["id"]
+
+    marked = await client.post(
+        f"/api/admin/contact-messages/{message_id}/read", headers=owner_headers
+    )
+    assert marked.status_code == 200, marked.text
+    assert marked.json()["read_at"] is not None
+
+    # Marking an already-read message again must not fail or move the clock.
+    again = await client.post(
+        f"/api/admin/contact-messages/{message_id}/read", headers=owner_headers
+    )
+    assert again.status_code == 200
+    assert again.json()["read_at"] == marked.json()["read_at"]
+
+
+async def test_contact_inbox_is_owner_only(client: AsyncClient) -> None:
+    assert (await client.get("/api/admin/contact-messages")).status_code == 401
+    assert (await client.post("/api/admin/contact-messages/anything/read")).status_code == 401

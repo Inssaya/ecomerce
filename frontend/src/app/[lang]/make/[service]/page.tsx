@@ -38,7 +38,9 @@ async function load(lang: Lang, slug: string): Promise<ServicePage | null> {
  * write. That is the right way round: these are five pages of written copy,
  * not a catalogue.
  */
-export const dynamicParams = false;
+// Same reason as `/store/[category]`: the build cannot reach the API, so a
+// false here would 404 every one of these pages rather than only unknown ones.
+export const dynamicParams = true;
 
 export async function generateStaticParams() {
   const services = await fromApi<{ items: { slug: string }[] }>("/services", "en");

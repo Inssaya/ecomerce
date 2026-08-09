@@ -26,10 +26,10 @@ export default async function NotFound() {
         لم نجد ذلك. ربما بيعت القطعة، أو صُنعت مرّة واحدة ولم تتكرّر.
       </p>
       <div className="flex gap-2">
-        <Link href="/en/store" className="btn-primary">
+        <Link href="/en" className="btn-primary">
           See the shelf
         </Link>
-        <Link href="/ar/store" className="btn-quiet">
+        <Link href="/ar" className="btn-quiet">
           شاهد الرف
         </Link>
       </div>

@@ -24,8 +24,13 @@ import type { Lang } from "./i18n";
  * page lives on a domain you do not own. Set at **build** time, because most
  * of these pages are prerendered.
  */
+// `||` rather than `??` on purpose. A Docker `ARG` with no default becomes an
+// empty string, not undefined, so `??` kept it — and "" is not a URL. Every
+// page under the language layout builds `metadataBase: new URL(siteUrl)`, so
+// one empty variable threw in all 27 of them, reported as an opaque digest on
+// whichever page a worker reached first.
 export const siteUrl = (
-  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000"
+  process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"
 ).replace(/\/$/, "");
 
 /**
