@@ -46,6 +46,8 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
   const other: Lang = lang === "ar" ? "en" : "ar";
   const swapped = path.replace(`/${lang}`, `/${other}`);
 
+  const isAsk = path?.startsWith(`/${lang}/ask`);
+
   // The shop is the front door now, so "Shop" points at it and there is no
   // second entry for a `/store` that no longer exists.
   const places = [
@@ -97,34 +99,24 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
 
             {/* Everything from here is pushed to the far end. */}
             <div className="flex items-center gap-2 ms-auto min-w-0">
-              {/* In front of the search bar: narrow the shelf, then name what
-                  you want on it — the two are one thought. */}
-              {shopping ? (
-                <button
-                  type="button"
-                  onClick={() => window.dispatchEvent(new Event("mostyle:filter"))}
-                  aria-label={t("filter")}
-                  title={t("filter")}
-                  className="h-10 w-10 shrink-0 inline-flex items-center justify-center rounded-full
-                             border border-sand bg-surface text-ink-soft
-                             transition-colors duration-200 hover:text-ink hover:border-ink"
+              {/* The search box and, immediately after it, the filter — both
+                  live in `SearchBox` because the filter has to know which line
+                  is currently open to decide whether it has anything to offer,
+                  and that is the same `useSearchParams()` the box already
+                  reads. Which is also why this needs the boundary: without it,
+                  every otherwise-static page `Chrome` wraps — `/ask`,
+                  `/how-we-work`, and the rest — would be forced into
+                  client-side rendering just to draw a search box none of them
+                  use the query string for. */}
+              {!isAsk ? (
+                <Suspense
+                  fallback={
+                    <div className="h-10 w-[130px] sm:w-[210px] rounded-full bg-surface border border-sand" />
+                  }
                 >
-                  <FilterIcon />
-                </button>
+                  <SearchBox lang={lang} />
+                </Suspense>
               ) : null}
-
-              {/* `useSearchParams()` lives inside this component, which is
-                  why it needs the boundary: without it, every otherwise-static
-                  page `Chrome` wraps — `/ask`, `/how-we-work`, and the rest —
-                  would be forced into client-side rendering just to draw a
-                  search box none of them use the query string for. */}
-              <Suspense
-                fallback={
-                  <div className="h-10 w-[130px] sm:w-[210px] rounded-full bg-surface border border-sand" />
-                }
-              >
-                <SearchBox lang={lang} />
-              </Suspense>
 
               {session ? (
                 <Link
@@ -156,17 +148,19 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
               </Link>
 
               {/* Last, at the far end: the bag. */}
-              <Link
-                href={`/${lang}/cart`}
-                aria-label={t("cart")}
-                className="inline-flex items-center gap-2 h-10 ps-3.5 pe-3 shrink-0 rounded-full
+              {!isAsk ? (
+                <Link
+                  href={`/${lang}/cart`}
+                  aria-label={t("cart")}
+                  className="inline-flex items-center gap-2 h-10 ps-3.5 pe-3 shrink-0 rounded-full
                            bg-ink text-white transition-colors duration-200 hover:bg-clay"
-              >
-                <BagIcon />
-                <span className="min-w-[20px] h-5 rounded-full bg-white/20 text-[12px] leading-5 text-center px-1">
-                  {count}
-                </span>
-              </Link>
+                >
+                  <BagIcon />
+                  <span className="min-w-[20px] h-5 rounded-full bg-white/20 text-[12px] leading-5 text-center px-1">
+                    {count}
+                  </span>
+                </Link>
+              ) : null}
 
               <button
                 type="button"
@@ -215,27 +209,11 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
         </Suspense>
       ) : null}
 
-      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:pe-16" : ""}`}>{children}</main>
+      {/* Padded both sides, not just the rail's: clearing only the side the
+          marks sit on would shove the whole wall off-centre by exactly the
+          width of the rail, which reads as a mistake rather than as a margin. */}
+      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>{children}</main>
     </div>
-  );
-}
-
-function FilterIcon() {
-  return (
-    <svg
-      width="17"
-      height="17"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.8"
-      strokeLinecap="round"
-      aria-hidden
-    >
-      <path d="M4 6h16" />
-      <path d="M7 12h10" />
-      <path d="M10 18h4" />
-    </svg>
   );
 }
 

@@ -38,10 +38,16 @@ const config: Config = {
           to: { opacity: "1", transform: "translateY(0)" },
         },
         fade: { from: { opacity: "0" }, to: { opacity: "1" } },
+        // One word landing, for the About page's spoken-aloud intro.
+        wordIn: {
+          from: { opacity: "0", transform: "translateY(7px)" },
+          to: { opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         rise: "rise 400ms cubic-bezier(0.22, 0.61, 0.36, 1) both",
         fade: "fade 300ms ease-out both",
+        "word-in": "wordIn 420ms cubic-bezier(0.22, 0.61, 0.36, 1) both",
       },
     },
   },

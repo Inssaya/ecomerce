@@ -37,12 +37,15 @@ const PAGE = 30;
 export function ProductFeed({
   lang,
   initial,
+  initialBroken = false,
   hasMore,
   seed,
   categories,
 }: {
   lang: Lang;
   initial: Piece[];
+  /** The first fetch failed rather than genuinely finding nothing. */
+  initialBroken?: boolean;
   hasMore: boolean;
   seed: number;
   categories: CategoryNode[];
@@ -66,6 +69,8 @@ export function ProductFeed({
   const [loading, setLoading] = useState(false);
   const [narrowing, setNarrowing] = useState(false);
   const [picking, setPicking] = useState(false);
+  const [broken, setBroken] = useState(initialBroken);
+  const [retryTick, setRetryTick] = useState(0);
   const sentinel = useRef<HTMLDivElement>(null);
 
   // The header's filter button, which is the only control for this.
@@ -76,13 +81,16 @@ export function ProductFeed({
   }, []);
 
   // The server rendered page one for whatever the URL asked for; this owns
-  // every state after that.
+  // every state after that. A retry bypasses the skip even on the very first
+  // render, which is the only way to recover from a server-side fetch that
+  // failed before this component ever mounted.
   const first = useRef(true);
   useEffect(() => {
-    if (first.current) {
+    if (first.current && retryTick === 0) {
       first.current = false;
       return;
     }
+    first.current = false;
     let cancelled = false;
     setNarrowing(true);
     api
@@ -92,13 +100,16 @@ export function ProductFeed({
         setPieces(batch.items);
         setPage(1);
         setMore(batch.has_more);
+        setBroken(false);
       })
-      .catch(() => undefined)
+      .catch(() => {
+        if (!cancelled) setBroken(true);
+      })
       .finally(() => !cancelled && setNarrowing(false));
     return () => {
       cancelled = true;
     };
-  }, [active, lang, query, seed]);
+  }, [active, lang, query, seed, retryTick]);
 
   const loadMore = useCallback(async () => {
     if (loading || !more) return;
@@ -140,7 +151,7 @@ export function ProductFeed({
     return () => watcher.disconnect();
   }, [loadMore, more]);
 
-  function narrow(slug: string) {
+  function narrow(slug: string, close = true) {
     const next = new URLSearchParams(params.toString());
     if (slug) next.set("category", slug);
     else next.delete("category");
@@ -148,13 +159,11 @@ export function ProductFeed({
     // `replace`, not `push`: narrowing the shelf is not somewhere you should
     // have to press Back through five times to leave.
     router.replace(search ? `${path}?${search}` : path, { scroll: false });
-  }
-
-  function clearSearch() {
-    const next = new URLSearchParams(params.toString());
-    next.delete("q");
-    const search = next.toString();
-    router.replace(search ? `${path}?${search}` : path, { scroll: false });
+    // Closed on a choice that is actually final. A root with children stays
+    // open, because tapping it is only step one — the panel closing under a
+    // second tap that was meant to reveal, not confirm, is what left it stuck
+    // open before.
+    if (close) setPicking(false);
   }
 
   return (
@@ -168,25 +177,39 @@ export function ProductFeed({
       */}
       {picking && categories.length > 0 ? (
         <div className="mb-4 animate-fade rounded-2xl border border-sand bg-surface p-3">
-          <div className="flex flex-wrap gap-2">
+          {/*
+            The lines themselves, phone only. On a wide screen they are the
+            rail down the side of the page, so listing them again here would
+            be the same four marks twice; `lg:hidden` is the whole difference
+            between the two layouts.
+          */}
+          <div className="flex flex-wrap gap-2 lg:hidden">
             <FilterChip on={!active} onClick={() => narrow("")}>
               {t("allPieces")}
             </FilterChip>
             {categories.map((root) => (
-              <FilterChip key={root.slug} on={active === root.slug} onClick={() => narrow(root.slug)}>
+              <FilterChip
+                key={root.slug}
+                on={active === root.slug}
+                onClick={() => narrow(root.slug, root.children.length === 0)}
+              >
                 {root.name}
               </FilterChip>
             ))}
           </div>
 
+          {/* What this control is actually for: narrowing inside the open
+              line. Never another line's subcategories — only the ones that
+              belong to whatever is selected right now. */}
           {activeRoot && activeRoot.children.length > 0 ? (
-            <div className="mt-2.5 flex flex-wrap gap-2 border-t border-sand pt-2.5">
+            <div className="flex flex-wrap gap-2 lg:mt-0 lg:border-0 lg:pt-0
+                            mt-2.5 border-t border-sand pt-2.5">
               <FilterChip
                 small
                 on={active === activeRoot.slug}
                 onClick={() => narrow(activeRoot.slug)}
               >
-                {lang === "ar" ? `كل ${activeRoot.name}` : `All ${activeRoot.name}`}
+                {lang === "ar" ? `الكل` : `All`}
               </FilterChip>
               {activeRoot.children.map((child) => (
                 <FilterChip key={child.slug} small on={active === child.slug} onClick={() => narrow(child.slug)}>
@@ -198,43 +221,36 @@ export function ProductFeed({
         </div>
       ) : null}
 
-      {/* Active filters stay visible after the popover closes, each with its
-          own way out — otherwise a narrowed shelf just looks like an empty
-          one, and clearing one filter should never have to clear both. */}
-      {!picking && (active || query) ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          {active ? (
-            <FilterChip on onClick={() => narrow("")}>
-              {categories.find((root) => root.slug === active)?.name ??
-                categories.flatMap((root) => root.children).find((child) => child.slug === active)?.name ??
-                active}
-              <span aria-hidden className="ms-2">×</span>
-            </FilterChip>
-          ) : null}
-          {query ? (
-            <FilterChip on onClick={clearSearch}>
-              “{query}”
-              <span aria-hidden className="ms-2">×</span>
-            </FilterChip>
-          ) : null}
-        </div>
-      ) : null}
-
       <div className={`transition-opacity duration-200 ${narrowing ? "opacity-40" : "opacity-100"}`}>
         {pieces.length === 0 ? (
-          <p className="py-24 text-center text-[15px] text-ink-soft">
-            {query
-              ? lang === "ar"
-                ? "لا شيء يطابق ذلك."
-                : "Nothing matches that."
-              : active
+          <div className="py-24 text-center">
+            <p className="text-[15px] text-ink-soft">
+              {broken
                 ? lang === "ar"
-                  ? "لا شيء في هذا القسم بعد."
-                  : "Nothing in this one yet."
-                : lang === "ar"
-                  ? "لا شيء على الرف بعد."
-                  : "Nothing on the shelf yet."}
-          </p>
+                  ? "تعذّر تحميل المتجر الآن."
+                  : "Couldn't load the shop right now."
+                : query
+                  ? lang === "ar"
+                    ? "لا شيء يطابق ذلك."
+                    : "Nothing matches that."
+                  : active
+                    ? lang === "ar"
+                      ? "لا شيء في هذا القسم بعد."
+                      : "Nothing in this one yet."
+                    : lang === "ar"
+                      ? "لا شيء على الرف بعد."
+                      : "Nothing on the shelf yet."}
+            </p>
+            {broken ? (
+              <button
+                type="button"
+                onClick={() => setRetryTick((n) => n + 1)}
+                className="btn-quiet mt-4"
+              >
+                {lang === "ar" ? "أعد المحاولة" : "Try again"}
+              </button>
+            ) : null}
+          </div>
         ) : (
           /*
             CSS columns, not a JS layout pass: the browser packs the wall before

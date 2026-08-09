@@ -18,9 +18,10 @@ import type { Lang } from "@/lib/i18n";
  * than as a list of labelled rows.
  *
  * `position: fixed` is what keeps it in place while the wall scrolls under it,
- * and `end-*` rather than `right-*` is deliberate: in Arabic this mirrors to
- * the visual left with everything else that uses logical properties, instead
- * of sitting on the wrong side of a right-to-left page.
+ * and `start-*` rather than `left-*` is deliberate: it sits on the left of an
+ * English page and mirrors to the right in Arabic, with everything else that
+ * uses logical properties, instead of stranding itself on the wrong side of a
+ * right-to-left page.
  *
  * It reads and writes the same `?category=` the smart filter does — picking a
  * mark here and picking the same line from the filter popover are the same
@@ -58,7 +59,7 @@ export function CategoryRail({ lang }: { lang: Lang }) {
   return (
     <nav
       aria-label="Categories"
-      className="hidden lg:flex fixed end-6 top-1/2 -translate-y-1/2 z-20
+      className="hidden lg:flex fixed start-6 top-1/2 -translate-y-1/2 z-20
                  flex-col items-center gap-1.5"
     >
       {roots.map((root) => (
@@ -89,18 +90,21 @@ function RailIcon({
         onClick={onClick}
         aria-pressed={on}
         aria-label={root.name}
-        className={`flex h-10 w-10 items-center justify-center rounded-full transition-colors duration-200 ${
+        className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${
           on ? "bg-ink text-white" : "text-ink-soft hover:bg-clay-soft hover:text-ink"
         }`}
       >
         {root.icon_url ? (
-          <span className="relative block h-5 w-5 overflow-hidden rounded-sm">
+          // The mark is an uploaded image, so a text colour cannot touch it —
+          // `brightness-0` flattens whatever was uploaded to black and
+          // `invert` lifts it to white once the line is the active one.
+          <span className="relative block h-6 w-6 overflow-hidden">
             <Image
               src={root.icon_url}
               alt=""
               fill
-              sizes="20px"
-              className={`object-contain ${on ? "invert brightness-0" : ""}`}
+              sizes="24px"
+              className={`object-contain ${on ? "brightness-0 invert" : "opacity-80"}`}
             />
           </span>
         ) : (
@@ -114,9 +118,9 @@ function RailIcon({
           pointing at the rail. */}
       <span
         role="tooltip"
-        className="pointer-events-none absolute end-full top-1/2 -translate-y-1/2 me-2.5
+        className="pointer-events-none absolute start-full top-1/2 -translate-y-1/2 ms-2.5
                    whitespace-nowrap rounded-lg bg-ink px-2.5 py-1.5 text-[12.5px] font-medium text-white
-                   opacity-0 translate-x-1 transition-all duration-150
+                   opacity-0 -translate-x-1 transition-all duration-150
                    group-hover:opacity-100 group-hover:translate-x-0"
       >
         {root.name}

@@ -21,8 +21,8 @@ const copy = {
   // The position itself.
   tagline: ["Made, not resold.", "نصنع، لا نعيد البيع"],
   taglineSupport: [
-    "Everything else online came from a container. Ours came from a workshop.",
-    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة.",
+    "Everything else online came from a container. Ours came from a workshop. Free shipping over 500 DH.",
+    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة. توصيل مجاني فوق 500 درهم.",
   ],
   ifWeDontHaveIt: ["If we don't have it, we make it.", "إن لم نجده لك، صنعناه لك."],
 
@@ -133,6 +133,10 @@ const copy = {
   // Cart and checkout.
   yourCart: ["Your cart", "سلتك"],
   cartEmpty: ["Nothing in here yet.", "لا شيء هنا بعد."],
+  yourOrder: ["Your order", "طلبك"],
+  itemCount: ["{n} pieces", "{n} قطعة"],
+  editCart: ["Edit", "عدّل"],
+  qty: ["Qty {n}", "الكمية {n}"],
   subtotal: ["Pieces", "القطع"],
   delivery: ["Delivery", "التوصيل"],
   freeDelivery: ["Free", "مجاناً"],

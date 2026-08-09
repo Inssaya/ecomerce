@@ -23,6 +23,7 @@ export function SearchBox({ lang }: { lang: Lang }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
+  const category = searchParams.get("category") ?? "";
 
   // On the shop itself the box mirrors whatever `?q=` currently is — typed
   // here, cleared from the filter popover's "×", or simply reloaded.
@@ -50,20 +51,66 @@ export function SearchBox({ lang }: { lang: Lang }) {
   }
 
   return (
-    <form onSubmit={submit} className="relative min-w-0 w-[130px] sm:w-[210px]">
-      <SearchIcon className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-ink-mute" />
-      <input
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        type="search"
-        inputMode="search"
-        placeholder={t("searchPlaceholder")}
-        aria-label={t("searchPlaceholder")}
-        className="w-full h-10 rounded-full bg-surface border border-sand ps-9 pe-3.5
-                   text-[14.5px] text-ink placeholder:text-ink-mute
-                   focus:border-clay focus:outline-none transition-colors duration-200"
-      />
-    </form>
+    <>
+      <form onSubmit={submit} className="relative min-w-0 w-[130px] sm:w-[210px]">
+        <SearchIcon className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-ink-mute" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          type="search"
+          inputMode="search"
+          placeholder={t("searchPlaceholder")}
+          aria-label={t("searchPlaceholder")}
+          className="w-full h-10 rounded-full bg-surface border border-sand ps-9 pe-3.5
+                     text-[14.5px] text-ink placeholder:text-ink-mute
+                     focus:border-clay focus:outline-none transition-colors duration-200"
+        />
+      </form>
+
+      {/*
+        After the search box, not before it: you name what you want first, then
+        narrow it down.
+
+        On a wide screen this only appears once a line is open, because there it
+        offers that line's subcategories and nothing else — the lines themselves
+        are already the rail down the side, and repeating them here would just
+        be the same four marks twice. A phone has no rail, so there the button
+        is always available and the popover carries the lines too.
+      */}
+      {shopping ? (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event("mostyle:filter"))}
+          aria-label={t("filter")}
+          title={t("filter")}
+          className={`h-10 w-10 shrink-0 items-center justify-center rounded-full
+                      border border-sand bg-surface text-ink-soft
+                      transition-colors duration-200 hover:text-ink hover:border-ink
+                      ${category ? "inline-flex" : "inline-flex lg:hidden"}`}
+        >
+          <FilterIcon />
+        </button>
+      ) : null}
+    </>
+  );
+}
+
+function FilterIcon() {
+  return (
+    <svg
+      width="17"
+      height="17"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.8"
+      strokeLinecap="round"
+      aria-hidden
+    >
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M10 18h4" />
+    </svg>
   );
 }
 

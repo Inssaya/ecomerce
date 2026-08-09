@@ -50,6 +50,13 @@ export async function generateMetadata({
   };
 }
 
+// `next build` has no network path to `api` — the same isolation the home
+// page's own comment documents. Left static, this page's fee, free-delivery
+// threshold, and per-city list would all freeze at whatever `fromApi`
+// returned when that path was unreachable, which is nothing, and stay wrong
+// for up to an hour of real traffic before the first background revalidation.
+export const dynamic = "force-dynamic";
+
 export default async function DeliveryAndReturns({
   params,
 }: {
@@ -80,6 +87,10 @@ export default async function DeliveryAndReturns({
           "راسلنا خلال ٤٨ ساعة وسنتّفق. القطعة المصنوعة خصيصاً باسمك أو بمقاسك استثناء — لا يمكن بيعها لأحد غيرك، ونقول لك ذلك قبل أن نبدأ.",
         ],
         [
+          "ماذا عن قطعة مخصصة تتجاوز 500 درهم؟",
+          "نطلب 30% من الثمن مقدماً قبل أن نبدأ صنعها. قطعة مخصصة لا يمكن بيعها لأي شخص آخر، وهذا يغطّي عملنا إن غيّر أحد رأيه في المنتصف. الـ70% المتبقية تُدفع كالعادة، نقداً عند الباب، حين تصل.",
+        ],
+        [
           "وإن وصلت مكسورة؟",
           "نصنع بديلاً أو نعيد لك المال، كما تفضّل. أرسل صورة فقط — لا نطلب أكثر من ذلك.",
         ],
@@ -104,6 +115,10 @@ export default async function DeliveryAndReturns({
         [
           "What if I take it and change my mind?",
           "Message us within 48 hours and we will sort it out. A piece made specifically for you — your name on it, your measurement — is the exception, because it cannot be sold to anyone else. We say so before we start it.",
+        ],
+        [
+          "What about a custom piece over 500 DH?",
+          "We ask for 30% of the price upfront before we start making it. A custom piece can't be resold to anyone else, so this covers our work if someone changes their mind partway through. The remaining 70% is still paid the normal way — cash, at the door, when it arrives.",
         ],
         [
           "What if it arrives broken?",
@@ -152,8 +167,8 @@ export default async function DeliveryAndReturns({
       </h1>
       <p className="mt-3 text-[17px] text-ink-soft leading-relaxed">
         {ar
-          ? "لا شيء عليك حتى تمسك القطعة بيدك."
-          : "You owe nothing until the piece is in your hand."}
+          ? "لشيء جاهز على الرف، لا شيء عليك حتى تمسك القطعة بيدك."
+          : "For anything already on the shelf, you owe nothing until the piece is in your hand."}
       </p>
 
       <section className="mt-7 grid grid-cols-2 gap-2.5">
