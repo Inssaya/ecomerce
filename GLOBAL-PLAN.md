@@ -11,9 +11,21 @@ six places. Everything below is the merged, conflict-resolved version.
 | Owns | Manage door (Products, Customers, Feed), Logs door, shared shell + kit | Order door (Orders, Custom, Messages) |
 | Also owns | `models/catalog.py`, `models/security.py`, `modules/admin/customers.py`, `primitives.tsx`, `console.css`, `AdminShell.tsx` | `models/orders.py`, `models/requests.py`, `modules/orders/**`, `modules/requests/**` |
 
-**Rules** — neither agent runs Docker, migrations, or the test suite. Write code, write
-your summary, stop. The owner picks one of you afterwards to build, migrate and test.
-Every shared-file edit is **additive** and **logged** in your summary block.
+**Rules**
+
+- Neither agent runs Docker, migrations, or the test suite. Write code, write your summary,
+  stop. The owner picks one of you afterwards to build, migrate and test.
+- Every shared-file edit is **additive** and **logged** in your summary block.
+- **Do not restyle anything.** The current console look — the palette, the type, the spacing,
+  the rail, `console.css` — is what the owner wants and it stays. New UI is composed from the
+  primitives that already exist and inherits the existing look. The only CSS anyone writes is a
+  new scoped rule for something that genuinely has no rule yet (a colour swatch, a red row).
+  No token changes, no resets, no "while I was in there".
+- **The only source of truth is `requirementMOdification.md`.** Do not go reading other plans,
+  reports or design docs in this repo for direction. This file is the merge of that spec; if
+  something here contradicts it, the spec wins.
+- **Do nothing that was not asked for.** Every table, column, popup and endpoint below traces
+  back to a line in the spec. Nothing gets added because it seemed nice.
 
 ---
 
