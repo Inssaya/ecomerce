@@ -704,3 +704,93 @@ written, not applied.
 - Anything in session 4's scope (Customers page, Logs door, the fifth rail item).
 
 **Next session starts at:** Session 4 (Customers, Logs, `todo.md`).
+
+### Session 4 — Customers, Logs, and `todo.md`
+
+**Did — backend**
+- `models/security.py`: `SecurityLevel` (info/warn/danger), `SecurityEvent`, `Blocklist`
+  (one row blocks one thing — a fingerprint *or* an address, never both, because the two
+  have different lifetimes and a single row cannot carry two expiries).
+- Migration `e6f184a9b7d0` on `f6923ea18b24`. Hand-written, up and down.
+- `modules/security/service.py`: `log()` (writes the row, fires the alert on `danger`),
+  `_alert()` (debounced per `(kind, ip)` via a Redis `SET NX EX` — a flood is one email, not
+  one per hit; fails toward *sending* if Redis is down, since staying quiet during a real
+  attack is worse than a duplicate), `prune()` (D12 retention: danger forever, warn 90 days,
+  info 30, run non-fatally at startup next to the existing local-content seed), and the
+  blocklist pair `create_block` / `remove_block` / `is_blocked` — enforcement reads **Redis
+  only**, mirrored on block/unblock, fails open exactly like `RateLimit` already does. An IP
+  block always carries a 24-hour `expires_at`; a fingerprint block never does (D11).
+- `modules/security/routes.py`: `GET /admin/security/logs` (level + since filters),
+  `GET /admin/security/events/{id}`, `GET /admin/security/blocklist` (not in the original
+  four-endpoint list — added because a `DELETE .../block/{id}` needs somewhere to find the
+  id from), `POST /admin/security/block`, `DELETE /admin/security/block/{id}`.
+- `main.py`: a `blocklist_guard` middleware ahead of routing (exempting `/health`/`/ready`),
+  the security router registered, and `security_service.prune()` called at startup.
+- `core/limits.py`: `RateLimit.__call__` now logs a `SecurityEvent` on every 429 — `danger`
+  for the auth-shaped buckets (`signin`, `signin-acct`, `reset`, `reset-acct`, `register`),
+  `warn` for the rest — in its own `SessionLocal`, its own failure boundary; a logging call
+  must never be the reason a 429 fails to return.
+- `modules/admin/customers.py` (rewritten): every bucket now collects the set of
+  `Order.visitor_id` fingerprints it has ever ordered from. Likes/saves/dwell are joined
+  through that set for a guest, and through `user_id` for an account — **queried separately
+  and never both**, so a signed-in visitor's own reaction is never counted twice. New
+  `total_products` (distinct products ever ordered, not the same figure as the existing
+  `products_bought` quantity), `city`, `type`, `created_at` (first order seen). New
+  `customer_analytics()` (visits/opened/stayed/dwell/added/purchased + liked/saved piece
+  lists, all-time) and `block_customer()` (blocks every fingerprint on file, permanently,
+  optionally deactivating the account in the same action — the owner reads "block this
+  customer" as one sentence, not two separate decisions).
+- `modules/admin/routes.py`: `GET /admin/customers/{id}/analytics`,
+  `POST /admin/customers/{id}/block`.
+
+**Did — frontend**
+- `AdminShell.tsx`: Logs added as the fifth door (icon `shield`, new in `icons.tsx`); the
+  phone-rail comment and count updated — the row still flexes to fit via the existing
+  `flex: 1` rule, no CSS restructuring needed.
+- `console.css`: `.console-row-danger` alongside the existing `.console-row-cancelled` (the
+  latter name reads wrong on a log row); both share the same red-text rule.
+- `console/types.ts` + `api.ts`: `Customer` extended; new `CustomerAnalytics`,
+  `SecurityEvent`, `SecurityLevel`, `BlockEntry`; the matching `api.*` calls.
+- **Customers** (`manage/customers/page.tsx`, rewritten): `DataTable` — Created · Name ·
+  Phone · Email · Type · Total spent · Total products · Saves · Likes · Actions — on
+  `ConsoleHeader` with search only. Three popups: **Open** (profile, order history, totals —
+  "Address" is not a stored fact on a customer bucket, only per-order, so the popup shows
+  City and lets the order list carry each order's own address rather than inventing a
+  canonical one); **Analytics** (visits/funnel/dwell/liked/saved — works for a guest, per
+  D6); **Block** (a reason field, an account-deactivate checkbox shown only when there is an
+  account, one confirm that calls the combined backend action).
+- **Logs** (new `admin/logs/page.tsx`): plain `DataTable` — Time · Level · Kind · Message ·
+  IP — on the existing `ControlStrip` (matching Board/Assistant's single-page-door
+  precedent, not `ConsoleHeader`, which is for multi-page doors). Danger rows red via
+  `rowClassName`. Row → event popup with the full detail list, raw `meta` behind a
+  `<details>`, and a **Block device** action that opens an inline form (reason + independent
+  fingerprint/IP checkboxes, matching D11 exactly).
+- Storefront: `ApiError` gained an optional `code`; `request()` reads it from the response
+  body and dispatches a `mostyle:blocked` window event on `code === "blocked"` — a global
+  event because the throw can come from any component at any depth, not just one page.
+  `Chrome.tsx` listens and swaps its `<main>` content for the new `BlockedScreen` component,
+  which renders the owner's exact wording in both languages.
+
+**Verified:** `npx tsc --noEmit` clean; `npm run build` passes (new `/admin/logs` route
+present); backend byte-compiles; lint clean on every new/changed file (two pre-existing
+warnings elsewhere, untouched by this session, left as they were). Nothing was run against a
+database — M1 through M4 are all written, not applied.
+
+**Did not do**
+- **An unblock UI.** `GET /admin/security/blocklist` and `DELETE /admin/security/block/{id}`
+  exist and work, but nothing in the Logs page lists currently-active blocks to unblock from
+  — only the block action itself is wired into the UI. The plan's own "done when" criterion
+  for this door didn't call for it, but it is a real gap: today, lifting a block means calling
+  the API directly.
+- **Pruning expired IP blocks from the `blocklist` table.** Redis stops enforcing an IP block
+  after 24 hours correctly, but the database row stays `active=true` with no sweep to catch
+  up — `GET /admin/security/blocklist` can show an IP as still blocked for a while after
+  enforcement has actually lapsed. Cosmetic, not a security gap (Redis is what's actually
+  enforced), but worth a small prune pass alongside `SecurityEvent` retention later.
+- Add `promised_for` to order-status email copy (already deferred from session 3, still
+  optional). Real WhatsApp Business API. Dashboard density. All in `todo.md` now.
+
+**This closes the four-session plan.** Every session's migration (M1 `d41a7c9b6e02`, M2
+`e58b2d0f7a13`, M3 `f6923ea18b24`, M4 `e6f184a9b7d0`) is written and chained correctly; none
+has been applied. `todo.md` exists at the repo root. Whoever runs Docker next should start
+from §10, Verification, at the top of this file.

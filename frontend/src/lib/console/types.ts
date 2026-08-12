@@ -439,16 +439,65 @@ export interface AdminPiece {
 export interface Customer {
   id: string;
   has_account: boolean;
+  /** Same fact as `has_account`, in the word the table shows: "auth" or "guest". */
+  type: "auth" | "guest";
   name: string;
   phone: string;
   email: string | null;
+  city: string | null;
+  /** When this person was first seen — their earliest order, guest or not. */
+  created_at: string;
   created_account_at: string | null;
   is_active: boolean | null;
   orders_count: number;
   revenue_mad: number;
   products_bought: number;
   products_cancelled: number;
+  /** Distinct products ever ordered, any status — not the same number as
+      `products_bought`, which counts paid quantity. */
+  total_products: number;
+  total_likes: number;
+  total_saves: number;
   time_on_site_seconds: number | null;
+}
+
+/** One person's behaviour, all-time — works for a guest via the fingerprints
+    on their orders, the same join the list itself is built from. */
+export interface CustomerAnalytics {
+  visits: number;
+  opened: number;
+  stayed: number;
+  dwell_seconds: number;
+  added_to_cart: number;
+  purchased: number;
+  liked: { id: string; slug: string; title: string }[];
+  saved: { id: string; slug: string; title: string }[];
+}
+
+// ── Security / Logs ────────────────────────────────────────────────────────
+
+export type SecurityLevel = "info" | "warn" | "danger";
+
+export interface SecurityEvent {
+  id: string;
+  created_at: string;
+  level: SecurityLevel;
+  kind: string;
+  message: string;
+  ip: string | null;
+  visitor_id: string | null;
+  user_id: string | null;
+  meta: Record<string, unknown> | null;
+}
+
+export interface BlockEntry {
+  id: string;
+  created_at: string;
+  reason: string;
+  ip: string | null;
+  visitor_id: string | null;
+  expires_at: string | null;
+  active: boolean;
 }
 
 export interface FeedWeight {

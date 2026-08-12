@@ -36,7 +36,8 @@ export type IconName =
   | "eye"
   | "eye-off"
   | "clock"
-  | "tag";
+  | "tag"
+  | "shield";
 
 const PATHS: Record<IconName, ReactElement> = {
   board: <><rect x="3" y="3" width="7" height="9" rx="1.5" /><rect x="14" y="3" width="7" height="5" rx="1.5" /><rect x="14" y="12" width="7" height="9" rx="1.5" /><rect x="3" y="16" width="7" height="5" rx="1.5" /></>,
@@ -67,6 +68,7 @@ const PATHS: Record<IconName, ReactElement> = {
   "eye-off": <><path d="M4 4l16 16" /><path d="M9.9 5.2A9.6 9.6 0 0 1 12 5c6.4 0 10 6 10 6a17 17 0 0 1-3.3 3.9M6.3 7.8C3.6 9.4 2 12 2 12s3.6 6 10 6a9.8 9.8 0 0 0 3.5-.6" /></>,
   clock: <><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></>,
   tag: <><path d="M3 12V5a2 2 0 0 1 2-2h7l9 9-9 9-9-9Z" /><circle cx="7.5" cy="7.5" r="1.2" /></>,
+  shield: <><path d="M12 3 4.5 6v6c0 5 3.2 8 7.5 9 4.3-1 7.5-4 7.5-9V6L12 3Z" /><path d="m9 12 2 2 4-4" /></>,
 };
 
 export function Icon({

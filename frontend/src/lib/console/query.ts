@@ -65,6 +65,7 @@ export const INVALIDATES: Record<string, string[]> = {
   categoryChanged: ["categories", "pieces"],
   feedChanged: ["feed"],
   customerChanged: ["customers"],
+  securityChanged: ["security-logs", "blocklist"],
 };
 
 /** Fire the invalidation set for a named mutation. */

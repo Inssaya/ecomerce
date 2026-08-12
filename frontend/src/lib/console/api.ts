@@ -9,9 +9,11 @@ import type {
   Analytics,
   AttributeGroup,
   AttributeSuggestions,
+  BlockEntry,
   ContactMessage,
   CopilotAnswer,
   Customer,
+  CustomerAnalytics,
   Decide,
   FeedPreview,
   FeedWeight,
@@ -19,6 +21,8 @@ import type {
   ProductAnalytics,
   ProductAttribute,
   ProductMedia,
+  SecurityEvent,
+  SecurityLevel,
   Today,
   Variant,
   Waiting,
@@ -212,11 +216,31 @@ export const api = {
 
   // ── Customers ──────────────────────────────────────────────────────────────
   customers: (q?: string) => call<Customer[]>(`/admin/customers${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  customerAnalytics: (id: string) => call<CustomerAnalytics>(`/admin/customers/${id}/analytics`),
   setCustomerActive: (id: string, active: boolean) =>
     call<{ id: string; is_active: boolean }>(`/admin/customers/${id}/active`, {
       method: "PATCH",
       body: JSON.stringify({ active }),
     }),
+  blockCustomer: (id: string, reason: string, deactivateAccount = true) =>
+    call<{ devices_blocked: number; account_deactivated: boolean }>(`/admin/customers/${id}/block`, {
+      method: "POST",
+      body: JSON.stringify({ reason, deactivate_account: deactivateAccount }),
+    }),
+
+  // ── Security / Logs ───────────────────────────────────────────────────────
+  securityLogs: (options: { level?: SecurityLevel; since?: string; limit?: number } = {}) => {
+    const parts: string[] = [];
+    if (options.level) parts.push(`level=${options.level}`);
+    if (options.since) parts.push(`since=${encodeURIComponent(options.since)}`);
+    if (options.limit) parts.push(`limit=${options.limit}`);
+    return call<SecurityEvent[]>(`/admin/security/logs${parts.length ? `?${parts.join("&")}` : ""}`);
+  },
+  securityEvent: (id: string) => call<SecurityEvent>(`/admin/security/events/${id}`),
+  blocklist: () => call<BlockEntry[]>("/admin/security/blocklist"),
+  createBlock: (body: { reason: string; visitor_id?: string | null; ip?: string | null }) =>
+    call<BlockEntry[]>("/admin/security/block", { method: "POST", body: JSON.stringify(body) }),
+  removeBlock: (id: string) => call<void>(`/admin/security/block/${id}`, { method: "DELETE" }),
 
   // ── Feed ───────────────────────────────────────────────────────────────────
   feedWeights: () => call<FeedWeight[]>("/admin/feed/weights"),

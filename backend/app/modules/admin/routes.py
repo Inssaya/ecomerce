@@ -11,7 +11,7 @@ from __future__ import annotations
 from datetime import date
 
 from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.deps import DbSession, Lang, Owner
 from app.modules.admin import analytics as analytics_service
@@ -252,6 +252,14 @@ async def customers(db: DbSession, owner: Owner, q: str | None = Query(default=N
     return await customers_service.list_customers(db, q)
 
 
+@router.get("/customers/{customer_id}/analytics")
+async def customer_analytics(customer_id: str, db: DbSession, owner: Owner) -> dict:
+    """One person's behaviour — visits, the funnel, dwell, what they have
+    hearted or saved. Works for a guest: see `customers.py` for the
+    fingerprint join that makes that true."""
+    return await customers_service.customer_analytics(db, customer_id)
+
+
 class CustomerActive(BaseModel):
     active: bool
 
@@ -260,6 +268,22 @@ class CustomerActive(BaseModel):
 async def set_customer_active(user_id: str, body: CustomerActive, db: DbSession, owner: Owner) -> dict:
     user = await customers_service.set_customer_active(db, user_id, body.active)
     return {"id": user.id, "is_active": user.is_active}
+
+
+class CustomerBlock(BaseModel):
+    reason: str = Field(min_length=1, max_length=500)
+    #: Whether to also flip the account off, when there is one. Blocking a
+    #: device and deactivating an account are different moves — a guest has
+    #: only the first available — offered together because "block this
+    #: customer" is the sentence the owner is actually reading.
+    deactivate_account: bool = True
+
+
+@router.post("/customers/{customer_id}/block")
+async def block_customer(customer_id: str, body: CustomerBlock, db: DbSession, owner: Owner) -> dict:
+    return await customers_service.block_customer(
+        db, customer_id, reason=body.reason, deactivate_account=body.deactivate_account
+    )
 
 
 class Explanation(BaseModel):

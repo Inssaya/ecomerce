@@ -1002,9 +1002,12 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
 /* A cancelled order's whole row reads differently at a glance — the money
    did not land, and a queue skimmed top to bottom should say so without a
    second look at the status column. */
-.console-table tr.console-row-cancelled td { color: var(--danger); }
+.console-table tr.console-row-cancelled td,
+.console-table tr.console-row-danger td { color: var(--danger); }
 .console-table tr.console-row-cancelled td .console-muted,
-.console-table tr.console-row-cancelled td .console-cell-sub { color: color-mix(in srgb, var(--danger) 70%, var(--ink3)); }
+.console-table tr.console-row-cancelled td .console-cell-sub,
+.console-table tr.console-row-danger td .console-muted,
+.console-table tr.console-row-danger td .console-cell-sub { color: color-mix(in srgb, var(--danger) 70%, var(--ink3)); }
 
 /* Key/value pairs — the Aptiv intervention shape (customer desires, contact
    channels) reused for the Custom modal. Not a table: these are a handful of
@@ -1065,7 +1068,9 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
   }
   .console-rail-brand { display: none; }
   .console-rail-foot { margin-top: 0; flex: 1; position: relative; }
-  /* Five targets, none of them wrapping: four doors plus "More". */
+  /* Six targets, none of them wrapping: five doors plus "More". Each
+     `.console-nav-item` is `flex: 1` below, so the row keeps sharing width
+     evenly whether there are four doors or five. */
   .console-rail-more { display: flex; }
   .console-rail-utils {
     position: absolute;

@@ -191,10 +191,22 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** Set only for a handful of machine-readable refusals — today just
+     *  `"blocked"`, from the blocklist middleware. Everything else is a
+     *  plain sentence with no code, and callers should keep reading
+     *  `.message`. */
+    readonly code?: string,
   ) {
     super(message);
   }
 }
+
+/** The whole storefront's reaction to a `403 blocked` response, wherever it
+ *  came from — see `Chrome.tsx`, which listens for this and swaps the page
+ *  for the block screen. A window event rather than React state here because
+ *  the throw can come from any component, at any depth, mid-checkout or
+ *  mid-scroll. */
+export const BLOCKED_EVENT = "mostyle:blocked";
 
 async function request<T>(
   path: string,
@@ -224,7 +236,19 @@ async function request<T>(
 
   const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
   if (!response.ok) {
-    throw new ApiError(response.status, await problemFrom(response));
+    // Read the body once, as a clone, so both the human message and the
+    // machine code can come out of it — `Response.json()` only works once.
+    let code: string | undefined;
+    try {
+      const body = await response.clone().json();
+      if (typeof body?.code === "string") code = body.code;
+    } catch {
+      /* not JSON — no code, `problemFrom` will say so below */
+    }
+    if (code === "blocked" && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(BLOCKED_EVENT));
+    }
+    throw new ApiError(response.status, await problemFrom(response), code);
   }
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
 }

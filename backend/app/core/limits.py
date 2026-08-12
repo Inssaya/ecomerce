@@ -96,11 +96,42 @@ class RateLimit:
 
         if used > self.times:
             wait = max(remaining, 1)
+            await self._record(request, identity, bucket, used)
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Too many attempts — wait a moment and try again",
                 headers={"Retry-After": str(wait)},
             )
+
+    #: A trip against the owner's own password is a different story than a
+    #: trip against `/signals` — the first is a real attack signal, the
+    #: second is closer to a slipped keypress at scale.
+    _DANGER_BUCKETS = {"signin", "signin-acct", "reset", "reset-acct", "register"}
+
+    async def _record(self, request: Request, identity: str, bucket: str, used: int) -> None:
+        """Feed the Logs door. Its own session, its own failure boundary —
+        logging a rate-limit trip must never be the reason the 429 fails to
+        return."""
+        from app.db import SessionLocal
+        from app.models import SecurityLevel
+        from app.modules.security import service as security_service
+
+        level = SecurityLevel.danger if bucket in self._DANGER_BUCKETS else SecurityLevel.warn
+        try:
+            async with SessionLocal() as db:
+                await security_service.log(
+                    db,
+                    level=level,
+                    kind="rate_limit",
+                    message=f"'{bucket}' tripped by {self.by}={identity} ({used}/{self.times} in {self.seconds}s)",
+                    ip=client_ip(request),
+                    # Every limit today is keyed `by="ip"` or `by="body:<field>"` —
+                    # never a fingerprint — so there is no visitor id to attach yet.
+                    visitor_id=None,
+                    meta={"bucket": bucket, "by": self.by, "times": self.times, "seconds": self.seconds, "used": used},
+                )
+        except Exception as exc:
+            logger.error("Could not record rate-limit trip: %s", exc)
 
 
 async def clear(bucket: str, by: str, identity: str) -> None:

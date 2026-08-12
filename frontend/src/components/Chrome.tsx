@@ -4,10 +4,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 
+import { BlockedScreen } from "./BlockedScreen";
 import { CategoryRail } from "./CategoryRail";
 import { useCart } from "./CartProvider";
 import { Logo } from "./Logo";
 import { SearchBox } from "./SearchBox";
+import { BLOCKED_EVENT } from "@/lib/api";
 import { loadDelivery } from "@/lib/delivery";
 import { ensureVisitorCookie } from "@/lib/fingerprint";
 import { setSignalLanguage } from "@/lib/signals";
@@ -32,6 +34,10 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
   const { count } = useCart();
   const { session } = useSession();
   const [menu, setMenu] = useState(false);
+  // Set by any API call, anywhere, that comes back `403 blocked` — see
+  // `lib/api.ts`. Once true it stays true; a blocked visitor does not get
+  // the shop back by navigating, only by being unblocked.
+  const [blocked, setBlocked] = useState(false);
 
   useEffect(() => {
     setSignalLanguage(lang);
@@ -40,6 +46,12 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
     // anybody reaches them.
     void loadDelivery(lang).catch(() => undefined);
   }, [lang]);
+
+  useEffect(() => {
+    const onBlocked = () => setBlocked(true);
+    window.addEventListener(BLOCKED_EVENT, onBlocked);
+    return () => window.removeEventListener(BLOCKED_EVENT, onBlocked);
+  }, []);
 
   useEffect(() => setMenu(false), [path]);
 
@@ -212,7 +224,9 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
       {/* Padded both sides, not just the rail's: clearing only the side the
           marks sit on would shove the whole wall off-centre by exactly the
           width of the rail, which reads as a mistake rather than as a margin. */}
-      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>{children}</main>
+      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>
+        {blocked ? <BlockedScreen lang={lang} /> : children}
+      </main>
     </div>
   );
 }

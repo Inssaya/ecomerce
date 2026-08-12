@@ -34,6 +34,7 @@ from app.models.requests import (
     RequestEvent,
     RequestStatus,
 )
+from app.models.security import Blocklist, SecurityEvent, SecurityLevel
 from app.models.signals import (
     AFFINITY_HALF_LIFE_DAYS,
     DEFAULT_FEED_WEIGHTS,
@@ -66,6 +67,7 @@ __all__ = [
     "TERMINAL_STATUSES",
     "AttributeGroup",
     "BilingualMixin",
+    "Blocklist",
     "Category",
     "DiscountKind",
     "InteractionKind",
@@ -84,6 +86,8 @@ __all__ = [
     "ProductStatus",
     "ProductVariant",
     "RefreshToken",
+    "SecurityEvent",
+    "SecurityLevel",
     "Signal",
     "SignalType",
     "TimestampMixin",

@@ -13,13 +13,16 @@ from contextlib import asynccontextmanager
 from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
 from app.core.cache import close_redis, get_redis
+from app.core.limits import client_ip
 from app.core.llm import close_client
 from app.core.storage import ensure_bucket
 from app.db import SessionLocal, engine
+from app.deps import visitor_id as read_visitor_id
 from app.modules.admin.routes import router as admin_router
 from app.modules.ai.routes import router as ai_router
 from app.modules.auth.routes import router as auth_router
@@ -30,6 +33,8 @@ from app.modules.local.routes import router as local_router
 from app.modules.local.seed import seed as seed_local
 from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
+from app.modules.security import service as security_service
+from app.modules.security.routes import router as security_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mostyle")
@@ -59,6 +64,16 @@ async def lifespan(app: FastAPI):
         # Same reasoning as storage: a shop that will not start because a
         # landing page is missing is worse than a shop without that page.
         logger.warning("Could not seed cities and services: %s", exc)
+
+    # Housekeeping for the Logs door — see `SecurityEvent` retention (D12).
+    # Non-fatal for the same reason as everything else above.
+    try:
+        async with SessionLocal() as db:
+            removed = await security_service.prune(db)
+        if removed:
+            logger.info("Pruned %s aged-out security events", removed)
+    except Exception as exc:
+        logger.warning("Could not prune security events: %s", exc)
 
     logger.info("%s API ready", settings.app_name)
     yield
@@ -114,6 +129,33 @@ async def security_headers(request: Request, call_next):
         )
     return response
 
+
+@app.middleware("http")
+async def blocklist_guard(request: Request, call_next):
+    """Turn away a blocked device or address before it reaches a route.
+
+    Checked against Redis only (see `security.service.is_blocked`) — no
+    database read on every request, and it fails open on a Redis outage the
+    same way the rate limiter does. `/health` and `/ready` are exempt: an
+    orchestrator polling those must never be the thing that gets blocked.
+    """
+    if request.url.path in ("/health", "/ready"):
+        return await call_next(request)
+
+    ip = client_ip(request)
+    visitor = read_visitor_id(request)
+    if await security_service.is_blocked(ip=ip, visitor_id=visitor):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": "You are blocked for security reasons — contact support on "
+                "0623842535, or email mostyle.service@gmail.com.",
+                "code": "blocked",
+            },
+        )
+    return await call_next(request)
+
+
 api = APIRouter(prefix="/api")
 api.include_router(auth_router)
 api.include_router(catalog_router)
@@ -124,6 +166,7 @@ api.include_router(feed_router)
 api.include_router(local_router)
 api.include_router(admin_router)
 api.include_router(ai_router)
+api.include_router(security_router)
 app.include_router(api)
 
 

@@ -1,17 +1,18 @@
 "use client";
 
 /**
- * The shell: four doors and the page beneath them.
+ * The shell: five doors and the page beneath them.
  *
  * Aptiv's whole admin is four dock items covering eight areas, and it stays
  * simple because a door can carry two faces and one door holds everything
- * administrative. This is the same shape: Board · Orders · Assistant ·
- * Manage. Sections inside them are real routes — deep-linkable — they just
- * are not doors.
+ * administrative. This is the same shape, one door wider: Board · Orders ·
+ * Assistant · Manage · Logs. Sections inside them are real routes —
+ * deep-linkable — they just are not doors.
  *
  * Nav adapts rather than picking a side: a labelled rail on a laptop, an
- * icon rail on a tablet, a bottom bar on a phone. Four items fits all three
- * without a "More".
+ * icon rail on a tablet, a bottom bar on a phone. On a phone the row is now
+ * five doors plus "More" — the row still flexes to fit, same as it did at
+ * four; see the `.console-nav-item { flex: 1 }` rule in console.css.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -29,6 +30,7 @@ const DOORS: { href: string; label: string; icon: IconName; owns: string[] }[] =
   { href: "/admin/orders", label: "Orders", icon: "orders", owns: ["/admin/orders"] },
   { href: "/admin/assistant", label: "Assistant", icon: "assistant", owns: ["/admin/assistant"] },
   { href: "/admin/manage", label: "Manage", icon: "manage", owns: ["/admin/manage"] },
+  { href: "/admin/logs", label: "Logs", icon: "shield", owns: ["/admin/logs"] },
 ];
 
 export function AdminShell({ children }: { children: ReactNode }) {
