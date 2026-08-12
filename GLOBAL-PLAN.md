@@ -1,453 +1,433 @@
 # M-StyLe Console Rebuild — Global Plan
 
-One plan for two Claude sessions. It replaces the two separate plans pasted into
-`requirementMOdification.md`; those were written blind to each other and collide in
-six places. Everything below is the merged, conflict-resolved version.
+One agent, four sessions. This file is the memory between them: a session starts by reading
+this file and nothing else, does its slice, then writes its summary into §9 at the bottom.
 
-**Agents**
-
-| | CLAUDEMANAGDOOR | CLAUDEORDERDOOR |
-|---|---|---|
-| Owns | Manage door (Products, Customers, Feed), Logs door, shared shell + kit | Order door (Orders, Custom, Messages) |
-| Also owns | `models/catalog.py`, `models/security.py`, `modules/admin/customers.py`, `primitives.tsx`, `console.css`, `AdminShell.tsx` | `models/orders.py`, `models/requests.py`, `modules/orders/**`, `modules/requests/**` |
-
-**Rules**
-
-- Neither agent runs Docker, migrations, or the test suite. Write code, write your summary,
-  stop. The owner picks one of you afterwards to build, migrate and test.
-- Every shared-file edit is **additive** and **logged** in your summary block.
-- **Do not restyle anything.** The current console look — the palette, the type, the spacing,
-  the rail, `console.css` — is what the owner wants and it stays. New UI is composed from the
-  primitives that already exist and inherits the existing look. The only CSS anyone writes is a
-  new scoped rule for something that genuinely has no rule yet (a colour swatch, a red row).
-  No token changes, no resets, no "while I was in there".
-- **The only source of truth is `requirementMOdification.md`.** Do not go reading other plans,
-  reports or design docs in this repo for direction. This file is the merge of that spec; if
-  something here contradicts it, the spec wins.
-- **Do nothing that was not asked for.** Every table, column, popup and endpoint below traces
-  back to a line in the spec. Nothing gets added because it seemed nice.
+**Source of truth is `requirementMOdification.md`.** Nothing in this repo's other plans,
+reports or design docs is direction. If this file ever contradicts that spec, the spec wins.
 
 ---
 
-## 1. What exists today (verified, not assumed)
+## 1. Rules that hold for every session
 
-- The admin is `frontend/src/app/admin/`: a side **Rail** with four doors — Board,
-  Orders, Assistant, Manage ([AdminShell.tsx:27-32](frontend/src/app/admin/AdminShell.tsx#L27-L32)).
-  Sub-sections are real routes, switched by `SectionSwitch` / `ManageSwitch`.
-- Every page renders its own [`ControlStrip`](frontend/src/app/admin/ui/primitives.tsx#L131) —
+- **Do not restyle.** The current console look — palette, type, spacing, the rail,
+  `console.css` — is what the owner wants and it stays. New UI is composed from primitives that
+  already exist and inherits the existing look. The only CSS anyone writes is a scoped rule for
+  something that genuinely has no rule yet (a colour swatch, a red row). No token changes, no
+  resets, no "while I was in there".
+- **Build only what the spec asks for.** Every table, column, popup and endpoint below traces
+  back to a line in `requirementMOdification.md`.
+- **No Docker, no migrations run, no test suite.** Write the code, write the summary, stop.
+  The owner decides when to build and migrate. Migrations are hand-written files, never
+  `--autogenerate`.
+- **Every session ends buildable.** Don't leave a half-rewritten page behind. If a slice won't
+  fit, cut scope at a working boundary and say so in the summary.
+- **Every session ends with a commit and a push** to `ecomerce` /
+  `claude/monolith-rebuild-5xzsfl`, so nothing is ever sitting uncommitted again.
+
+---
+
+## 2. Ground truth — verified, not assumed
+
+- Admin lives at `frontend/src/app/admin/`. A side **Rail** with four doors — Board, Orders,
+  Assistant, Manage ([AdminShell.tsx:27-32](frontend/src/app/admin/AdminShell.tsx#L27-L32)).
+  Sub-sections are real routes switched by `SectionSwitch` / `ManageSwitch`.
+- Each page renders its own [`ControlStrip`](frontend/src/app/admin/ui/primitives.tsx#L131) —
   that is the "top header" the spec talks about. There is no global header component yet.
-- Styling is plain CSS **scoped entirely under `.console`** in
-  [console.css](frontend/src/app/admin/console.css) (981 lines). A popup portaled to
-  `document.body` renders as unstyled raw text. Everything portals into `.console`.
-- The kit already has `DataTable` + `useTableSort`, `Drawer`, `ConfirmProvider`/`useConfirm`,
-  `Pill`, `Money`, `Age`, `SearchInput`, `Segmented`, `EmptyState`
+- All styling is scoped under `.console` in
+  [console.css](frontend/src/app/admin/console.css) (981 lines). **A popup portaled to
+  `document.body` renders as unstyled raw text.** Everything portals into `.console`. This is
+  the signature failure of this codebase — check it every time.
+- The kit already has `DataTable` + `useTableSort`, `Drawer`, `ConfirmProvider` / `useConfirm`,
+  `Pill`, `Money`, `Age`, `SearchInput`, `Segmented`, `EmptyState`, `useDebounced`
   ([primitives.tsx](frontend/src/app/admin/ui/primitives.tsx)).
-- Manage · Pieces is today a two-pane split: scannable list +
-  [`PieceInspector`](frontend/src/app/admin/manage/PieceInspector.tsx) (614 lines,
-  photos / words / batch / variants).
+- Manage · Pieces is today a two-pane split: a scannable list plus
+  [`PieceInspector`](frontend/src/app/admin/manage/PieceInspector.tsx) (614 lines — photos,
+  words, batch, variants).
 - Customers are **not** rows in `users`. They are `coalesce(customer_id, customer_phone)`
   buckets walked in Python over `orders`
   ([customers.py:38-124](backend/app/modules/admin/customers.py#L38-L124)).
-- SMTP already exists and works ([notify/email.py](backend/app/modules/notify/email.py),
-  `send_email`). Nobody needs to build a mailer.
-- Client IP extraction already exists ([limits.py:35-45](backend/app/core/limits.py#L35-L45)).
-- Latest migration is `20260811_1900_archive_contact_messages` (revision `c3f1a8b52d64`).
+- SMTP already works — `send_email` in
+  [notify/email.py](backend/app/modules/notify/email.py). Nobody builds a mailer.
+- Client IP extraction already exists —
+  [limits.py:35-45](backend/app/core/limits.py#L35-L45).
+- Migration head is `20260811_1900_archive_contact_messages`, revision `c3f1a8b52d64`.
 
 ---
 
-## 2. Unified decisions — read this section twice
+## 3. Settled decisions
 
-These are the points where the two blind plans disagreed, overlapped, or both missed
-something. **These decisions are binding on both agents.**
+### D1 — Attributes: three groups, one shape, suggestion lists
+The owner's spec, exactly: a product carries **measures**, **colours** and **materials**. It can
+carry all three, or one, or none. Two shapes cover all of it:
 
-### D1 — One header primitive, built once, consumed twice
-Both plans independently rebuild `ControlStrip`. That would be two conflicting rewrites of a
-shared file. Instead: **CLAUDEMANAGDOOR adds a new `ConsoleHeader` primitive** to
-`primitives.tsx`, additively (`ControlStrip` stays, untouched, until every page is migrated).
-`CLAUDEORDERDOOR` codes against this exact signature without waiting:
+- **typed** — `name → value`: `Width → 10 cm`, `Height → 50 cm`. The name comes from a
+  suggestion list or is typed fresh; **the value is free text**, unit included as the admin
+  typed it. No unit column, no parsing, no maths on it.
+- **plain** — value only, no name: `M`, `L`, `XL`, `Cotton 100%`, `Wood`.
+
+Colours are the same shape with a hex alongside, rendered as a **circle** on the storefront.
+
+**Suggestions**, per group, offered in a dropdown the admin can also type past:
+- measure names: Width, Height, Length, Depth, Diameter, Weight
+- measure plain values: S, M, L, XL, XXL
+- colours: a starter palette of named colours with hex
+- materials: Wood, Metal, Cotton 100%, Leather, Plastic, Glass
+
+The list is **built-in presets ∪ every value already used elsewhere in this shop**, from one
+endpoint. So it grows as the owner works, and nobody has to build a settings screen for it.
+
+**The customer sees exactly what the admin entered on that product — nothing else.** No facets,
+no filters, no inference.
+
+### D2 — Attributes carry no price and no stock
+Only the admin sets the price. Only the admin sets availability. Picking "red / M" checks
+nothing and costs nothing extra. Attributes are specification, not inventory.
+
+### D3 — Attributes replace variants as the buyer's choice, and the order must record them
+The order modal has to show the "selected product attributes". So the order line stores them:
+`OrderItem.selection` is a **frozen JSON snapshot** of what the buyer picked
+(`[{group, name, value, hex}]`) — a snapshot, not foreign keys, so relabelling an attribute
+next month does not rewrite last month's order.
+
+`ProductVariant` **stays in the database and disappears from the admin UI.** Live orders point
+at it. Where an old order has a variant and no selection, the modal shows the variant string.
+Dropping the model is a todo, not this work.
+
+### D4 — Personalization is real, and it is the customer's name
+Settled shape:
+- Admin, per product: a **Personalization** toggle and a **price increase, in percent**, applied
+  when the buyer turns it on.
+- Customer, on the product page: an optional field, **their name, 20 characters maximum**.
+- The order line stores the exact text, and the admin order modal shows it verbatim.
+- **Order of operations on price: discount first, then the personalization markup on the
+  discounted price.** Stated here because it is genuinely ambiguous and needs one answer.
+
+### D5 — Delivery time: one field, feeding one countdown
+- `Product.delivery_days` — set and edited in the Products table and the Open popup, for shelf
+  and workshop pieces alike.
+- `Order.promised_for` — the date the countdown counts to, admin-editable, defaulted at
+  checkout to `order date + max(delivery_days or lead_time_days across the items)`.
+- `lead_time_days` keeps its current meaning for workshop pricing copy and the
+  `ck_workshop_has_lead_time` constraint. Do not remove it.
+
+### D6 — `Order.visitor_id` is what makes guest data exist
+Likes and saves are keyed on the device fingerprint. Customers are grouped by phone number.
+Those two never join — so "total saves / total likes" per customer, and the whole customer
+behaviour view, would read **zero for every guest**, and guests are most of this shop.
+`customers.py:84-86` already admits it cannot attribute dwell to a guest.
+
+Fix: the order records the visitor fingerprint at checkout. The customer aggregation then
+collects each bucket's fingerprints and joins likes, saves and behaviour signals through them —
+for guests as well as accounts. One column, three features.
+
+### D7 — Discount is one model, read everywhere
+`discount_kind` (`percent | fixed`) · `discount_value` · `discount_active`. Per product, off by
+default, manually switchable — "that doesn't apply on all products, and we can disable it
+manually". `effective_price()` lives on the model so the admin table, the storefront, the cart
+and the order total all read the same number. Nothing recomputes it locally.
+
+### D8 — Delete means archive, everywhere
+No hard deletes in this work. Orders and custom requests get `hidden_at`; products use the
+existing `ProductStatus.archived`. Every Delete = `useConfirm()` → archive → recoverable from a
+Hidden/Archived filter in the same table.
+
+Soft-delete is **admin-view only**: `GET /orders/track/{token}` and `POST /orders/find` must not
+filter on `hidden_at`. Someone waiting for a package still tracks it.
+
+### D9 — One header primitive
+A new `ConsoleHeader` in `primitives.tsx`, added **additively** — `ControlStrip` stays until
+every page has moved off it. Three zones, left to right:
 
 ```tsx
-export function ConsoleHeader({ filters, search, pages }: {
-  filters?: ReactNode;                       // zone 1 — omit entirely to hide (Messages)
+export function ConsoleHeader({ filters, search, pages, trailing }: {
+  filters?: ReactNode;                       // zone 1 — omit entirely to hide it (Messages)
   search?: { value: string; onChange: (v: string) => void; placeholder?: string };
-  pages: { href: string; label: string; active?: boolean }[];  // zone 3
+  pages: { href: string; label: string; active?: boolean }[];   // zone 3
   trailing?: ReactNode;                      // e.g. Manage's "Add" button
 }): JSX.Element
 ```
 
-Three zones, left → right: filters · search · quick-page nav. No page titles. **No
-"N need attention" pills** anywhere — the owner said so explicitly.
+No page titles. **No "N need attention" pills** anywhere — the owner said so directly.
 
-### D2 — The rail keeps five doors, Logs is the fifth
-Board · Orders · Assistant · Manage · **Logs**. Note the rail already folds utilities behind
-"More" on phones; a fifth door makes six phone targets. MANAGE adjusts the phone breakpoint
-rules in `console.css` when adding it. This is the only structural change to the shell.
+### D10 — Customer type is one derivation
+Guest vs Verified = `has_account`. `customers.py` already derives it; `OrderResponse` exposes
+the same flag from `customer_id is not None`. Same two words in both UIs.
 
-### D3 — Attributes replace variants as the *customer's choice*, and orders must record them
-This is the biggest thing both plans got half-right. The manage spec says: delete the variants
-section, add flexible **measure / colour / material**, and colours "show up with a circle in
-the user interface". The order spec says the order modal must show "selected product
-attributes (Size, Color, Variant specifications)".
+### D11 — Blocking (my call, reversible)
+Fingerprint block is permanent until lifted. **IP block is optional per block and expires after
+24 hours**, because an IP can be a whole household or a café and a permanent ban there punishes
+strangers. The block screen is the owner's words: *"You are blocked for security reasons —
+contact support on 0623842535, or email mostyle.service@gmail.com."*
 
-So attributes are not decoration — **they are what the buyer picks**, which means the order
-line must store the selection. Decision:
+### D12 — Log retention (my call, reversible)
+`danger` kept forever. `warn` pruned after 90 days, `info` after 30. Pruning is a small query
+run on startup, not a scheduler.
 
-- `ProductAttribute` is the new source of truth for size/colour/material (MANAGE builds it).
-- `OrderItem` gains `selection: JSON` — a frozen snapshot list of
-  `{group, name, value, unit, hex}` captured at checkout (ORDER builds it). A **snapshot**,
-  not FKs, so relabelling an attribute next month does not rewrite last month's order.
-- `ProductVariant` **stays in the database, disappears from the admin UI**. Existing orders
-  reference it; dropping it is a todo, not this pass. Where an old order has a variant and no
-  selection, the modal shows the variant option string.
+### D13 — Category management moves into the Add popup
+Manage's quick-pages are `[Products, Customers, Feed]` — categories is no longer a page. The
+CRUD moves out of `manage/categories/page.tsx` into a `<CategoryManager/>` used inside the Add
+popup. The old route becomes a redirect to `/admin/manage` rather than a dead bookmark.
 
-### D4 — Delivery time: one field, one owner
-MANAGE's plan adds `Product.delivery_days`; ORDER's plan adds `Order.promised_for` derived
-from `lead_time_days`. Both are needed and they chain:
+### D14 — "Custom" is a label, not a route
+`SectionSwitch` reads **Custom**; the route stays `/admin/orders/commissions`. Renaming the
+folder is churn across imports and bookmarks for nothing visible.
 
-- `Product.delivery_days` (nullable int) — set/edited in the Products table and Open popup,
-  applies to **shelf and workshop** pieces alike. MANAGE owns it.
-- `Order.promised_for` (nullable date) — the deadline the countdown counts to, admin-editable,
-  defaulted at checkout to `order date + max(delivery_days or lead_time_days over the items)`.
-  ORDER owns it, and reads MANAGE's field.
-- `lead_time_days` keeps its existing meaning for workshop pricing copy and the
-  `ck_workshop_has_lead_time` constraint. Do not remove it.
+### D15 — Logs is the fifth door
+Board · Orders · Assistant · Manage · **Logs**. The rail already folds utilities behind "More"
+on phones, so a fifth door makes six phone targets — adjust that breakpoint rule when adding
+it, and nothing else.
 
-### D5 — Guest identity: `Order.visitor_id` is the missing link
-MANAGE's plan puts likes/saves on the **visitor fingerprint**. Customers are bucketed by
-**phone**. Those two never join, so "total likes / total saves per customer" and the whole
-customer-behaviour Analytics popup would be **empty for every guest** — and guests are most of
-this shop. `customers.py:84-86` already admits it can't attribute dwell to guests.
-
-Fix, and it fixes three features at once: **ORDER adds `visitor_id: String(80)` to `Order`**,
-written at checkout from the fingerprint the storefront already sends. MANAGE's customer
-aggregation then collects the set of `visitor_id`s per bucket and joins likes, saves and
-behaviour signals through it — for guests *and* accounts.
-
-### D6 — Delete means archive, everywhere, in both doors
-No hard deletes anywhere in this pass. Orders and custom requests get `hidden_at`; products
-use the existing `ProductStatus.archived`. Every Delete action = `useConfirm()` → archive →
-recoverable from a "Hidden/Archived" filter in the same table. One vocabulary across both doors.
-
-### D7 — Discount is one model, shown in both doors and the storefront
-`discount_kind` (`percent | fixed`) · `discount_value` · `discount_active`. Per-product,
-off by default, manually disable-able — exactly as the owner described ("that doesn't apply on
-all products, and we can disable it manually"). `effective_price()` lives on the model so the
-admin table, the storefront, the cart and the order total all read the same number.
-**MANAGE builds it; ORDER uses `effective_price()` for order lines — never recomputes it.**
-
-### D8 — Customer type is derived in one place
-Guest vs Verified = `has_account`. `customers.py` already derives it. ORDER's `OrderResponse`
-exposes the same flag from `customer_id is not None`. Same words in both UIs: **Guest** /
-**Verified**.
-
-### D9 — Migration chain is pre-assigned, so the two of you cannot fork it
-Alembic is a linear chain. Use exactly these revisions and parents, in this order:
-
-| # | File | revision | down_revision | Owner |
-|---|---|---|---|---|
-| M1 | `20260812_1000_product_attributes_discount_interactions.py` | `d41a7c9b6e02` | `c3f1a8b52d64` | MANAGE |
-| M2 | `20260812_1030_security_events_and_blocklist.py` | `e58b2d0f7a13` | `d41a7c9b6e02` | MANAGE |
-| M3 | `20260812_1100_order_promise_hidden_visitor_selection.py` | `f6923ea18b24` | `e58b2d0f7a13` | ORDER |
-| M4 | `20260812_1130_custom_request_hidden.py` | `a7034fb29c35` | `f6923ea18b24` | ORDER |
-
-Nobody runs `alembic revision --autogenerate` — hand-write the file, matching the prose-doc
-style of the existing ones. Both `upgrade()` and `downgrade()`.
-
-### D10 — Personalization: build the plumbing, don't advertise it
-The order spec wants the modal to show "exact customer input whenever the Personalized option
-flag is selected". Repo memory says personalize-option is deferred and must not be sold as
-live. Resolution: `Product.personalizable: bool = False` (MANAGE, toggle in the Open popup) and
-`OrderItem.personalization: Text | None` (ORDER, rendered in the modal **only when present**).
-No storefront input field this pass, so nothing is advertised. Wiring the storefront input is a
-todo. See open question Q3.
-
-### D11 — Category management moves into the Add popup
-The manage quick-nav is `[Products, Customers, Feed]` — categories is not a page any more.
-MANAGE extracts the CRUD from `manage/categories/page.tsx` into a `<CategoryManager/>`
-component used inside the Add popup, and leaves the route as a redirect to `/admin/manage`
-rather than deleting a deep-linkable URL out from under a bookmark.
-
-### D12 — "Custom" is a label change, not a route change
-`SectionSwitch` shows **Custom**; the route stays `/admin/orders/commissions`. Renaming the
-folder is churn across imports, tests and bookmarks for zero user-visible gain.
-
-### D13 — Soft-delete never leaks to the storefront
-`GET /orders/track/{token}` and `POST /orders/find` must **not** filter on `hidden_at`. Hiding
-an order is an admin view preference; the customer who is waiting for their package still
-tracks it.
-
-### D14 — Feed stat-model and the Data door are `todo.md` only
-Both are genuinely interesting and neither is a table this week. Written down, not built.
-
-### D15 — Shared-file protocol
-`primitives.tsx`, `console.css`, `AdminShell.tsx` — **MANAGE writes, ORDER requests.** If ORDER
-needs a primitive, ORDER writes it locally inside `admin/orders/` and notes it in the summary
-for later promotion. The one exception, pre-agreed here so ORDER is not blocked: ORDER may
-append the single rule `.console-row-cancelled { color: var(--danger); }` to `console.css`,
-at the end of the file, and nothing else.
-`types.ts` and `api.ts` are append-only for both: MANAGE appends at the **top** of the
-catalog/customer sections, ORDER appends at the **bottom** of the file. Never reorder, never
-reformat, never touch a line you did not add.
+### D16 — Deferred to `todo.md`, not built
+The feed's auto-rotating statistical cohorts, and the Data door's incremental backup. Both are
+real ideas; neither is a table this month.
 
 ---
 
-## 3. Phasing
+## 4. The four sessions
 
-**Phase 0 — MANAGE, first, small.** `ConsoleHeader` + `DateRangeFilter` + `Swatch` +
-`WideModal` primitives, the Logs door in the rail, the new `console.css` scoped rules. Land it
-before the Products rewrite so ORDER's import lands on real code. ORDER does not wait — the
-D1 signature is the contract.
-
-**Phase 1 — backend, both, in the D9 migration order.**
-
-**Phase 2 — door frontends, fully parallel.**
-
-**Phase 3 — storefront ripples.** MANAGE: hearts/saves, discount display, colour circles,
-block popup. ORDER: "arrives by / X days left" on the tracking page.
-
-**Phase 4 — `todo.md` + summary blocks.**
+Each is a vertical slice: schema, API and UI for one area, ending in something that works.
+Migrations chain in session order — each session's migration sits on the previous one's head.
 
 ---
 
-## 4. Backend — the whole data model in one table
+### Session 1 — Catalog spine and the Products table
+*The biggest session. Everything else reads what this builds.*
 
-### CLAUDEMANAGDOOR — `models/catalog.py`, new `models/security.py` (migrations M1, M2)
+**Backend** — `models/catalog.py`, migration `M1` (`down_revision = "c3f1a8b52d64"`)
 
-| Change | Detail |
+| Add | Shape |
 |---|---|
 | `Product.discount_kind` | `Enum(percent, fixed)`, nullable |
 | `Product.discount_value` | `Numeric(10,2)`, nullable |
 | `Product.discount_active` | `Boolean`, default `False` |
-| `Product.effective_price()` | method — returns discounted price or `price`; ignores an inactive/null discount |
-| `Product.delivery_days` | `Integer`, nullable — D4 |
-| `Product.personalizable` | `Boolean`, default `False` — D10 |
-| **`ProductAttribute`** (new) | `id, product_id FK cascade, group Enum(measure|color|material), name String(60) nullable, value String(80), unit String(16) nullable, hex String(7) nullable, display_order Int`. `Product.attributes` relationship, `delete-orphan`. `name` null = a plain value like `M`; `name` set = a typed one like `Height: 180 cm` |
-| **`ProductInteraction`** (new) | `id, product_id FK cascade, kind Enum(like|save), visitor_id String(80), user_id FK nullable, created_at`. Unique `(product_id, visitor_id, kind)` — makes the toggle idempotent |
-| **`SecurityEvent`** (new, `models/security.py`) | `id, created_at, level Enum(info|warn|danger), kind String(40), message Text, ip String(45) nullable, visitor_id nullable, user_id FK nullable, meta JSON`. Index on `(created_at)` and `(level, created_at)` |
-| **`Blocklist`** (new) | `id, created_at, reason Text, ip nullable, visitor_id nullable, active Boolean default True`. At least one of ip/visitor_id non-null (CheckConstraint) |
-| `ProductVariant` | **untouched** — D3 |
+| `Product.effective_price()` | method — discounted price, or `price` when the discount is null or inactive |
+| `Product.delivery_days` | `Integer`, nullable — D5 |
+| `Product.personalizable` | `Boolean`, default `False` — D4 |
+| `Product.personalization_markup_pct` | `Numeric(5,2)`, default `0` — D4 |
+| **`ProductAttribute`** | `id · product_id FK cascade · group Enum(measure\|color\|material) · name String(60) nullable · value String(120) · hex String(7) nullable · display_order Int`. `Product.attributes` relationship, `delete-orphan` |
 
-### CLAUDEORDERDOOR — `models/orders.py`, `models/requests.py` (migrations M3, M4)
+Endpoints:
+- `GET /admin/products` — add `q`, `category_id`, date range, `status`. Response gains
+  `updated_at`, `delivery_days`, the discount fields, `personalizable`,
+  `personalization_markup_pct`, `attributes[]`, `category_name`, `subcategory_name`.
+- `POST | PATCH | DELETE /admin/products/{id}/attributes[/{attr_id}]`
+- `GET /admin/attribute-suggestions` — presets ∪ values already in use, grouped (D1).
+- `GET /admin/products/{id}/analytics` — views, clicks, add-to-cart over time, from the
+  existing aggregation in `modules/admin/analytics.py`.
 
-| Change | Detail |
-|---|---|
-| `Order.promised_for` | `Date`, nullable — D4 |
-| `Order.hidden_at` | `DateTime(tz)`, nullable — D6 |
-| `Order.visitor_id` | `String(80)`, nullable, indexed — D5, the join key for guest behaviour |
-| `OrderItem.selection` | `JSON`, nullable — frozen attribute snapshot, D3 |
-| `OrderItem.personalization` | `Text`, nullable — D10 |
-| `CustomRequest.hidden_at` | `DateTime(tz)`, nullable |
+**Frontend**
+- `ConsoleHeader` primitive (D9), plus `DateRangeFilter` and a colour `Swatch`.
+- Manage header: **date range · Add button · search · `[Products, Customers, Feed]`**.
+- **Products page** — `manage/page.tsx` rewritten. Kill `console-split`. One `DataTable`, every
+  header sortable:
 
-### API surface
+  `Photo` · `Created` *(modified date beneath it, small and green, only when it differs)* ·
+  `Name` · `Category` · `Sub-category` · `Price` *(struck original + discounted when active)* ·
+  `Delivery time` · `Saves` · `Likes` · `Actions`
 
-**MANAGE**
-- `GET /admin/products` — extend with `q`, `category_id`, date range, `status`; response gains
-  `updated_at`, `delivery_days`, discount fields, `attributes[]`, `total_likes`, `total_saves`,
-  `category_name`, `subcategory_name`.
-- `POST|PATCH|DELETE /admin/products/{id}/attributes[/{attr_id}]`
-- `GET /admin/products/{id}/analytics` — views, clicks, add-to-cart, likes/saves over time,
-  from the existing `signals` aggregation in `modules/admin/analytics.py`.
-- `POST /products/{id}/like` · `POST /products/{id}/save` — public, toggle, keyed on the
-  visitor fingerprint header the feed already sends; `GET /products/{id}/interactions` returns
-  this visitor's current state + totals.
-- `GET /admin/customers` — extend with `total_saves`, `total_likes`, `total_products`,
-  `created_at`, `city`, `type`.
-- `GET /admin/customers/{id}/analytics` — the behaviour view, joined through D5.
-- `GET /admin/security/logs?level=&since=` · `GET /admin/security/events/{id}` ·
-  `POST /admin/security/block` · `DELETE /admin/security/block/{id}`
-- **Middleware** in `main.py`: an active `Blocklist` match on ip **or** visitor → `403` with a
-  stable machine-readable code (`blocked`) the storefront turns into the block popup.
-- **Alerting**: a `danger` event calls the existing `send_email` to
-  `yassinsinif4@gmail.com` **and** `Yassine.Sinif@emsi-edu.ma`. Debounce per `(kind, ip)` —
-  a flood must not become an email flood. Reuse `client_ip()` from `core/limits.py`; hook the
-  rate-limiter's 429 path so a burst is recorded.
-
-**ORDER**
-- `GET /admin/orders` — add `city`, date range, and `hidden` (defaults to excluding hidden).
-- `GET /admin/orders/cities` — distinct cities across non-hidden active orders (feeds the
-  dynamic City filter).
-- `POST /admin/orders/{reference}/promise` — set/modify `promised_for`.
-- `POST /admin/orders/{reference}/hide` · `/unhide`
-- `OrderResponse` gains `promised_for`, `has_account`, `hidden`, `visitor_id` is **not**
-  exposed. `OrderItemResponse` gains `category`, `subcategory`, `selection`, `personalization`.
-- `GET /admin/requests` — add `category_id`, date range, `hidden`. `RequestOut` gains
-  `category_name`, `hidden`. `POST /admin/requests/{id}/hide` · `/unhide`.
-- Status change keeps the existing auto-email (`notify/service.py`) and the one-tap `wa.me`
-  link. Optionally add `promised_for` to the email copy. **A real WhatsApp Business API
-  auto-send is a todo, not this pass.**
-
----
-
-## 5. Frontend — Manage door (CLAUDEMANAGDOOR)
-
-### Header
-`ConsoleHeader`: **Date range (from → to)** · **Add** button · **Search** ·
-`[Products, Customers, Feed]`. Nothing else.
-
-### Products — rewrite `manage/page.tsx`
-Kill the `console-split`. One `DataTable`, every header sortable via `useTableSort`:
-
-`Photo` · `Created` *(with the modified date beneath it, small and green, only when it differs)*
-· `Name` · `Category` · `Sub-category` · `Price` *(struck original + discounted when active)* ·
-`Delivery time` · `Saves` · `Likes` · `Actions`
-
-Actions, each opening a popup portaled into `.console`:
-- **Open** — a wide centred modal, Aptiv-shaped:
+  Saves and Likes render as `0` this session — session 2 fills them.
+- **Open popup** — wide, centred, portaled into `.console`:
   - *Photos* — add / delete / per-image alt text. Lift the working logic from
     [PieceInspector.tsx:271-375](frontend/src/app/admin/manage/PieceInspector.tsx#L271-L375).
-  - *Words* — a **language dropdown** (EN/AR) that reveals name + description for that
-    language. The model stays bilingual columns; the dropdown is a UI affordance, not a schema
-    change.
-  - *Commerce* — price, discount (kind · value · on/off), delivery time, personalizable toggle.
-  - *Attributes* — the new pill editor, Aptiv `PartsEditor`-shaped: add a measure (plain `M`,
-    or typed `Height 180 cm`), a colour (label + hex → circular swatch), a material. One or
-    many, each removable, all optional. This is the flexible part the owner asked for twice.
-  - *Reach* — total likes / total saves, read-only.
-  - **Deleted from the inspector: the batch (1 · 2 · 3) section and the variants section.**
-- **Analytics** — per-product behaviour popup.
-- **Delete** — confirm → archive (D6).
+  - *Words* — a **language dropdown** (EN/AR) revealing name + description for that language.
+    The model keeps its bilingual columns; the dropdown is a UI affordance, not a schema change.
+  - *Commerce* — price, discount (kind · value · on/off), delivery time, personalization toggle
+    + markup %.
+  - *Attributes* — the pill editor from D1: pick a group, pick or type a name, type a value,
+    add. Colours get a swatch. Each pill removable.
+  - *Reach* — total likes / saves, read-only (session 2).
+  - **The batch (1 · 2 · 3) section and the variants section are deleted.**
+- **Analytics** action → per-product popup. **Delete** action → confirm → archive.
+- **Add popup** — Category (dropdown + add / modify / delete, with modify and delete emphasised
+  once a category is selected) → Sub-category (identical) → Product. Add/Modify Product opens
+  the *same* Open popup, so there is exactly one product form in the codebase.
 
-**Add popup** — Category (dropdown + add / modify / delete, with modify + delete emphasised
-once a category is selected) → Sub-category (identical) → Product. Add/Modify Product opens the
-same Open popup, so there is exactly one product form in the codebase.
-
-### Customers — rewrite `manage/customers/page.tsx`
-`DataTable`: `Created` · `Name` · `Phone` · `Email` · `Type (Verified/Guest)` · `Total spent` ·
-`Total products` · `Saves` · `Likes` · `Actions`.
-- **Open** → centred popup (not a side panel): full profile — address, city, email, phone,
-  type, order history, totals.
-- **Analytics** → behaviour popup: visits, funnel, dwell, liked/saved pieces — works for guests
-  thanks to D5.
-- **Block** → confirm → account `is_active=false` and/or a `Blocklist` entry for their device.
-
-### Feed
-Untouched. The auto-rotating cohort model goes to `todo.md`.
-
-### Logs — new `admin/logs/` (deliberately plain)
-`DataTable`: `Time` · `Level` · `Kind` · `Message` · `IP`. **Danger rows in red.** Row → event
-detail with the device fingerprint and account, and a **Block device** action (confirm → popup).
-No cards, no charts, no chrome — the owner asked for simple.
+**Done when** Manage · Products fully works: sort every column, open a product, edit photos,
+words, price, discount, delivery, personalization and attributes, and drive
+category → sub-category → product from the Add popup.
 
 ---
 
-## 6. Frontend — Order door (CLAUDEORDERDOOR)
+### Session 2 — The storefront side, and the buyer's choices
+*What session 1 built becomes visible and buyable.*
 
-### Header
-`ConsoleHeader` on all three sub-pages. Filters are contextual; **Messages passes no `filters`
-prop at all**, which hides zone 1. Quick-nav `[Orders, Custom, Messages]`.
+**Backend** — migration `M2` (on M1's head)
 
-### Orders — `orders/page.tsx` + `OrderDrawer.tsx`
-Columns: `Date` · `Ref` · `Customer` · `City` · `Product` *(all items consolidated in one cell,
-one row per order)* · `Qty` *(summed)* · `Total` · `Delivery countdown` · `Status` ·
-`Actions (Open, Delete)`. All headers sortable.
+| Add | Shape |
+|---|---|
+| **`ProductInteraction`** | `id · product_id FK cascade · kind Enum(like\|save) · visitor_id String(80) · user_id FK nullable · created_at`. Unique `(product_id, visitor_id, kind)` — makes the toggle idempotent |
+| `Order.visitor_id` | `String(80)`, nullable, indexed — D6 |
+| `OrderItem.selection` | `JSON`, nullable — the frozen attribute snapshot, D3 |
+| `OrderItem.personalization` | `String(20)`, nullable — D4 |
 
-- **Cancelled → the whole row's text turns red** (`.console-row-cancelled`, D15).
-- Filters: date range · status (incl. Cancelled) · dynamic City from `/admin/orders/cities` ·
-  Hidden/Archived toggle.
-- **Invoice** — printable view (order, items, totals, customer) via a scoped `@media print`
-  block + `window.print()`, reachable from the row and the modal.
-- **Modal** — customer profile incl. Guest/Verified; per item Category · Sub-category ·
-  **selected attributes** (D3); personalization block *only if present* (D10); editable
-  `promised_for` with live countdown; `SetStatus` (already auto-emails) + the one-tap WhatsApp
-  link.
+- Public: `POST /products/{id}/like` · `POST /products/{id}/save` (toggle, keyed on the
+  fingerprint the feed already sends) · `GET /products/{id}/interactions` (this visitor's state
+  + totals).
+- `total_likes` / `total_saves` join into the admin product list — session 1's zeroes go live.
+- Checkout: accept `selection` and `personalization` per line; compute the line price as
+  `effective_price()` then `× (1 + markup/100)` when personalization is on (D4); store
+  `visitor_id`.
 
-### Custom — `orders/commissions/page.tsx`
-Columns: `Date` · `Ref` · `Customer` · `City` · `Category` · `Status` · `Actions (Open, Delete)`.
-Filters: custom category · status · date range. Modal in the Aptiv intervention shape — pill row,
-key/value detail list (customer desires, email / phone / WhatsApp), reference-photo grid, the
-existing `QuoteForm` for price + "Ready in X days", and the WhatsApp/call triggers.
+**Frontend — storefront**, `frontend/src/app/[lang]/`
+- **Discount** on `piece/[slug]/PieceView.tsx` and product cards: struck original, reduced
+  price, badge — **only when `discount_active`**.
+- **Attributes** rendered exactly as entered: colours as circles, measures and materials as
+  labelled chips. Nothing inferred.
+- **Personalization**: optional field, 20-character limit, with the price change shown honestly
+  before it is added to the cart.
+- **Heart and Save** buttons, optimistic toggle, using the existing fingerprint.
+- Checkout sends the selection, the personalization text and the fingerprint.
 
-### Messages
-Unchanged, per spec. Header only.
-
----
-
-## 7. Storefront ripples
-
-**MANAGE** — `frontend/src/app/[lang]/`
-- Discount on `piece/[slug]/PieceView.tsx` and product cards: struck original + reduced price +
-  badge, **only when `discount_active`**.
-- Heart (like) and Save buttons, optimistic toggle, posting with the existing fingerprint.
-- Attributes rendered: colours as circles, measures and materials as labelled chips.
-- The block popup on a `403 blocked`: *"You are blocked for security reasons — contact support
-  on 0623842535, or email mostyle.service@gmail.com."*
-
-**ORDER**
-- "Arrives by · X days left" from `promised_for` on the order-tracking page.
-- Checkout sends the visitor fingerprint so `Order.visitor_id` is populated (D5).
+**Done when** a buyer can see a discounted price, pick attributes, add their name, and heart or
+save a piece — and all of it survives a reload and lands on the order.
 
 ---
 
-## 8. `todo.md` (repo root — MANAGE creates it, ORDER appends)
+### Session 3 — Order door
+**Backend** — migration `M3` (on M2's head)
+
+| Add | Shape |
+|---|---|
+| `Order.promised_for` | `Date`, nullable — D5 |
+| `Order.hidden_at` | `DateTime(tz)`, nullable — D8 |
+| `CustomRequest.hidden_at` | `DateTime(tz)`, nullable |
+
+- `GET /admin/orders` — add `city`, date range, `hidden` (default excludes hidden).
+- `GET /admin/orders/cities` — distinct cities across non-hidden active orders, feeding the
+  dynamic City filter.
+- `POST /admin/orders/{reference}/promise` · `/hide` · `/unhide`.
+- `OrderResponse` gains `promised_for`, `has_account`, `hidden`. `OrderItemResponse` gains
+  `category`, `subcategory`, `selection`, `personalization`. `visitor_id` is **never** exposed.
+- `GET /admin/requests` — add `category_id`, date range, `hidden`. `RequestOut` gains
+  `category_name`, `hidden`. `POST /admin/requests/{id}/hide` · `/unhide`.
+- Status change keeps the existing auto-email and the one-tap `wa.me` link. Optionally add
+  `promised_for` to the email copy.
+
+**Frontend**
+- `ConsoleHeader` on all three sub-pages. **Messages passes no `filters` prop at all**, which
+  hides zone 1 — that is the spec's "hides them if not applicable". Quick-pages
+  `[Orders, Custom, Messages]`.
+- **Orders table**: `Date` · `Ref` · `Customer` · `City` · `Product` *(all items consolidated
+  into one cell — one row per order)* · `Qty` *(summed)* · `Total` · `Delivery countdown` ·
+  `Status` · `Actions (Open, Delete)`. Every header sortable.
+- **A cancelled order's whole row turns red** — one scoped rule,
+  `.console-row-cancelled { color: var(--danger); }`.
+- Filters: date range · status incl. Cancelled · dynamic City · Hidden/Archived toggle.
+- **Invoice**: printable view (order, items, totals, customer) via a scoped `@media print`
+  block and `window.print()`, from the row and from the modal.
+- **Order modal**: customer profile with Guest/Verified; per item Category · Sub-category ·
+  **selected attributes**; the personalization text **only when present**; editable
+  `promised_for` with a live countdown; `SetStatus` (already auto-emails) and the WhatsApp link.
+- **Custom page**: `Date` · `Ref` · `Customer` · `City` · `Category` · `Status` ·
+  `Actions (Open, Delete)`. Filters: custom category · status · date range. Modal in the Aptiv
+  intervention shape — pill row, key/value detail list (desires, email / phone / WhatsApp),
+  reference-photo grid, the existing `QuoteForm` for price and "Ready in X days", and the
+  WhatsApp/call triggers.
+- **Messages**: unchanged apart from the header.
+- Storefront: "Arrives by · X days left" from `promised_for` on the tracking page.
+
+**Done when** the orders table sorts, filters by city and date, shows a countdown, turns a
+cancelled row red, hides and restores an order, prints an invoice, and the modal shows the
+buyer's attribute choices and their personalization.
+
+---
+
+### Session 4 — Customers, Logs, and the todo
+**Backend** — new `models/security.py`, `modules/security/`, migration `M4` (on M3's head)
+
+| Add | Shape |
+|---|---|
+| **`SecurityEvent`** | `id · created_at · level Enum(info\|warn\|danger) · kind String(40) · message Text · ip String(45) nullable · visitor_id nullable · user_id FK nullable · meta JSON`. Indexed on `created_at` and `(level, created_at)` |
+| **`Blocklist`** | `id · created_at · reason Text · ip nullable · visitor_id nullable · expires_at nullable · active Boolean default True`. CheckConstraint: at least one of ip / visitor_id |
+
+- `GET /admin/customers` extended with `total_saves`, `total_likes`, `total_products`,
+  `created_at`, `city`, `type` — joined through `Order.visitor_id` (D6).
+- `GET /admin/customers/{id}/analytics` — the behaviour view, same join.
+- `GET /admin/security/logs?level=&since=` · `GET /admin/security/events/{id}` ·
+  `POST /admin/security/block` · `DELETE /admin/security/block/{id}`.
+- **Middleware** in `main.py`: an active, unexpired `Blocklist` match on IP or fingerprint →
+  `403` with a stable code (`blocked`) the storefront turns into the block screen.
+- **Alerting**: a `danger` event sends via the existing `send_email` to
+  `yassinsinif4@gmail.com` **and** `Yassine.Sinif@emsi-edu.ma`. **Debounce per `(kind, ip)`** —
+  a flood must not become an email flood. Reuse `client_ip()` from `core/limits.py`, and hook
+  the rate limiter's 429 path so a burst is what gets recorded.
+- Retention pruning per D12.
+
+**Frontend**
+- **Customers page** rewritten to a `DataTable`: `Created` · `Name` · `Phone` · `Email` ·
+  `Type` · `Total spent` · `Total products` · `Saves` · `Likes` · `Actions`.
+  - **Open** → centred popup, not a side panel: full profile — address, city, email, phone,
+    type, order history, totals.
+  - **Analytics** → behaviour popup: visits, funnel, dwell, liked and saved pieces. Works for
+    guests because of D6.
+  - **Block** → confirm → account `is_active = false` and/or a `Blocklist` entry.
+- **Logs door** — new `admin/logs/`, deliberately plain: `Time` · `Level` · `Kind` · `Message` ·
+  `IP`. **Danger rows red.** Row → event detail with the device fingerprint and account, and a
+  **Block device** action. No cards, no charts, no chrome — the owner asked for simple.
+- Logs added to the rail as the fifth door (D15).
+- Storefront: the block screen on a `403 blocked`.
+- **Feed page is untouched.**
+
+**Done when** the customers table shows real totals for a guest, Block works, and the logs page
+lists events with danger in red and can block a device.
+
+---
+
+## 5. `todo.md` — created in session 4, at the repo root
 
 1. **Feed auto-rotating statistical cohorts** — 5 behavioural stats, 20% buckets, rotating
-   weekly. Cold-start first week. Weibull/ML forecast of next-7-day visitors. **Ads-period
-   declaration** so the model separates ads traffic from organic and stops hallucinating when
-   the owner buys reach.
-2. **Data door** — incremental, query-based daily backup. One evolving backup that new queries
+   weekly. Cold-start first week. Weibull or ML forecast of next-7-day visitors.
+   **Ads-period declaration**, so the model separates paid traffic from organic and stops
+   hallucinating when the owner buys reach.
+2. **Data door** — incremental, query-based daily backup: one evolving backup that new queries
    are pushed into, not sixty full dumps.
 3. **Drop `ProductVariant`** once no live order references it (D3).
-4. **Storefront personalization input** (D10) — plumbing exists, UI doesn't. Not live, do not
-   advertise.
-5. **Real WhatsApp Business API auto-send** — today it is a click-to-chat link.
-6. **Dashboard density** — the owner finds the Board dense with low-value numbers. Not this pass.
+4. **Real WhatsApp Business API auto-send** — today it is a click-to-chat link.
+5. **Dashboard density** — the owner finds the Board dense with low-value numbers.
 
 ---
 
-## 9. Handoff protocol
+## 6. Verification — for whoever runs Docker and the tests
 
-Add these two blocks to the end of `requirementMOdification.md` — they are referenced by both
-plans but do not actually exist in the file yet:
-
-```
-messages of CLAUDEMANAGDOOR{{{ }}}
-messages of CLAUDEORDERDOOR{{{ }}}
-```
-
-Each summary, in this order: **what I did** · **what I did not do** (and why) · **every shared
-file I touched, with the exact symbols added** · **anything the other door must rebase onto** ·
-**what I could not verify** because neither of us ran Docker.
-
----
-
-## 10. Verification — for whichever agent the owner picks
-
-1. `alembic upgrade head` applies M1→M4 cleanly; `downgrade` back to `c3f1a8b52d64` also works.
-2. `backend/tests/` still green. New focused tests: attribute CRUD; like/save toggle
-   idempotency against the unique constraint; `effective_price()` with percent, fixed, inactive
-   and null; blocklist 403; customer aggregation returns non-zero likes/saves **for a guest**
-   (the D5 path — this is the one most likely to be silently broken); order hide/unhide; the
-   city filter; `promised_for` default at checkout.
-3. `npm run build` in `frontend/` — the prod build enforces TypeScript, and that is where
-   `types.ts` merge damage between the two agents will surface first.
-4. Manual admin pass: every Products column sorts; the Open popup saves photos, words,
-   attributes and discount; the Add popup drives category → sub-category → product; Customers
-   Open/Analytics/Block work; a cancelled order's row is red; delete → Hidden → restore; an
-   invoice prints; a danger log row is red and Block-device works.
-5. Manual storefront pass: discount shows only when active; heart/save survive a reload with the
-   same fingerprint; a blocked device sees the support popup.
-6. Use the `browser-automation` skill on `/admin/manage` and one product page to confirm no
-   `.console` portal regressions — a popup rendering as raw unstyled text is the signature
-   failure of this codebase.
+1. `alembic upgrade head` applies M1 → M4 cleanly, and `downgrade` back to `c3f1a8b52d64` works.
+2. `backend/tests/` still green, plus focused cases: attribute CRUD; like/save toggle
+   idempotency against the unique constraint; `effective_price()` across percent, fixed,
+   inactive and null; personalization markup applied **after** the discount; the block 403;
+   order hide/unhide; the city filter; the `promised_for` default at checkout; and — the one
+   most likely to be silently broken — **customer aggregation returning non-zero likes and
+   saves for a guest** (the D6 path).
+3. `npm run build` in `frontend/` — the production build enforces TypeScript, which is where
+   type drift surfaces first.
+4. Admin pass: every Products column sorts; the Open popup saves photos, words, attributes,
+   discount and personalization; the Add popup drives category → sub-category → product; a
+   cancelled row is red; delete → Hidden → restore; an invoice prints; Customers
+   Open/Analytics/Block work; a danger log row is red and Block device works.
+5. Storefront pass: the discount shows only when active; attributes render as entered, colours
+   as circles; personalization caps at 20 characters and moves the price; heart and save survive
+   a reload on the same fingerprint; a blocked device sees the support screen.
+6. Run the `browser-automation` skill on `/admin/manage` and one product page to confirm no
+   `.console` portal regressions — a popup rendering as raw unstyled text is the failure this
+   codebase produces most often.
 
 ---
 
-## 11. Open questions for the owner
+## 7. Open, and deliberately so
 
-These change the work materially. Everything else in this plan proceeds without an answer.
+Nothing is blocking. Two calls in §3 are mine rather than the owner's — **D11** (IP blocks
+expire after 24 hours) and **D12** (log retention). Both are one-line changes if the owner
+disagrees later.
 
-- **Q1 — Attributes and price.** Can a colour or size change the price (a large costs more than
-  a medium), or is the price always per-product? This plan assumes **per-product**; making
-  attributes price-bearing is a different schema.
-- **Q2 — Attributes and stock.** For a shelf piece with four physical `pieces` rows, does
-  picking "red / M" need to check that a red M actually exists? This plan assumes **no** —
-  attributes are chosen freely and stock stays a count of pieces. If yes, that is a real
-  inventory feature and needs its own pass.
-- **Q3 — Personalization.** D10 builds the plumbing and shows it in the admin, but adds no
-  storefront input, so the feature is invisible to buyers. Confirm that is what you want for
-  now, or say the word and it ships end-to-end.
-- **Q4 — Block scope.** Blocking a device blocks a browser fingerprint, which the person clears
-  by opening a private window. Do you also want the IP blocked, accepting that this can catch a
-  whole household or café on a shared address?
-- **Q5 — Logs volume.** `SecurityEvent` grows forever. Should it self-prune (say, keep 90 days
-  of `info`, forever for `danger`), or do you want to keep everything?
+---
+
+## 8. Session log
+
+*Each session appends here before it stops: what I did · what I did not do and why · anything
+the next session must know.*
+
+### Session 0 — planning
+**Did:** committed and pushed the entire uncommitted console rebuild (96 files) so nothing was
+at risk; wrote this plan against `requirementMOdification.md` and the real code.
+**Did not:** write any feature code. No schema, no UI, no migrations exist yet from this plan.
+**Next session starts at:** Session 1, on a clean tree at
+`ecomerce/claude/monolith-rebuild-5xzsfl`.
