@@ -68,6 +68,7 @@ class ProductCard(BaseModel):
     price_max: float | None = None
     image: str | None = None
     category_slug: str | None = None
+    category_name: str | None = None
     #: Shelf: pieces still available. Workshop: null — nothing to run out of.
     available: int | None = None
     #: Workshop: days until it is ready. Shelf: null — it already is.
@@ -197,6 +198,26 @@ class VariantWrite(BaseModel):
     option_en: str = Field(min_length=1, max_length=160)
     option_ar: str = Field(default="", max_length=160)
     price: float | None = Field(default=None, gt=0)
+
+
+class VariantPatch(BaseModel):
+    """Correcting a variant that already exists. Everything optional — an
+    unset field is left alone rather than nulled."""
+
+    sku: str | None = Field(default=None, min_length=1, max_length=60)
+    option_en: str | None = Field(default=None, min_length=1, max_length=160)
+    option_ar: str | None = Field(default=None, max_length=160)
+    price: float | None = Field(default=None, gt=0)
+    display_order: int | None = None
+    is_active: bool | None = None
+
+
+class MediaPatch(BaseModel):
+    """Alt text and the process-footage flag, after the fact."""
+
+    alt_en: str | None = Field(default=None, max_length=300)
+    alt_ar: str | None = Field(default=None, max_length=300)
+    is_process_footage: bool | None = None
     display_order: int = 0
     is_active: bool = True
 

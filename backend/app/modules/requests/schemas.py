@@ -61,6 +61,10 @@ class RequestEventOut(BaseModel):
     status: RequestStatus
     note: str | None
     created_at: datetime
+    #: Whether the workshop moved this or the customer did. Approval is the
+    #: customer's action, so without this the timeline reads as if the owner
+    #: approved their own quote.
+    actor: str = "system"
 
     model_config = {"from_attributes": True}
 
@@ -76,6 +80,12 @@ class RequestOut(BaseModel):
     description: str
     budget: float | None
     references: list[str]
+    #: What kind of thing was asked for, and where the ask came from. Both are
+    #: stored and neither was returned, so the console could not group twenty
+    #: unrelated requests into "eleven people asked for a lamp this month" —
+    #: which is the whole point of collecting the category.
+    category_id: str | None = None
+    source: str | None = None
     status: RequestStatus
     quote_price: float | None
     quote_note: str = ""

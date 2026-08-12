@@ -30,3 +30,8 @@ class ContactMessage(Base):
         DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
     )
     read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    #: Filed away rather than deleted. Without this the inbox only grows: there
+    #: was no delete and no archive, so one run of spam left the unread badge
+    #: permanently meaningless. Archiving keeps the message — a lead is still a
+    #: lead — while taking it out of the queue the owner works from.
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

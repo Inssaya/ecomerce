@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category, Product, Signal, SignalType
 from app.models.requests import CustomRequest
-from app.modules.admin.metrics import Period, _within
+from app.modules.admin.metrics import WHOLE_SHOP, Period, Scope, _scoped, _within
 
 #: Below this, someone landed and left. Above it, they read something.
 #:
@@ -55,7 +55,7 @@ def _pct(part: int, whole: int) -> float:
 # ── Who is here ───────────────────────────────────────────────────────────────
 
 
-async def audience(db: AsyncSession, period: Period) -> dict:
+async def audience(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
     """Unique visitors, how many came back, and the shape of the days.
 
     "Returning" is measured against all of history rather than the previous
@@ -72,23 +72,28 @@ async def audience(db: AsyncSession, period: Period) -> dict:
 
     row = (
         await db.execute(
-            select(
-                func.count(func.distinct(Signal.visitor_id)).label("visitors"),
-                func.count(func.distinct(Signal.visitor_id))
-                .filter(Signal.visitor_id.in_(select(seen_before.c.visitor_id)))
-                .label("returning"),
-                func.count().label("actions"),
-            ).where(_within(Signal.created_at, period))
+            _scoped(
+                select(
+                    func.count(func.distinct(Signal.visitor_id)).label("visitors"),
+                    func.count(func.distinct(Signal.visitor_id))
+                    .filter(Signal.visitor_id.in_(select(seen_before.c.visitor_id)))
+                    .label("returning"),
+                    func.count().label("actions"),
+                ).where(_within(Signal.created_at, period)),
+                scope,
+            )
         )
     ).one()
 
     daily = (
         await db.execute(
-            select(
-                func.date(Signal.created_at).label("day"),
-                func.count(func.distinct(Signal.visitor_id)).label("visitors"),
+            _scoped(
+                select(
+                    func.date(Signal.created_at).label("day"),
+                    func.count(func.distinct(Signal.visitor_id)).label("visitors"),
+                ).where(_within(Signal.created_at, period)),
+                scope,
             )
-            .where(_within(Signal.created_at, period))
             .group_by(func.date(Signal.created_at))
             .order_by(func.date(Signal.created_at))
         )
@@ -123,25 +128,33 @@ def _fill_days(period: Period, counts: dict[str, int]) -> list[dict]:
 # ── The funnel ────────────────────────────────────────────────────────────────
 
 
-async def funnel(db: AsyncSession, period: Period) -> dict:
+async def funnel(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
     """Where people stop.
 
     Each step is the people who reached it, so the drop between two rows is
     the number of people the shop lost there. The largest drop is the most
     valuable sentence on the whole dashboard.
+
+    Scoped to a piece, the first step changes meaning: "came to the shop"
+    becomes "touched this piece at all", because a visitor who never saw it
+    generated no signal carrying its id. That is the honest reading and the
+    screen labels it.
     """
     row = (
         await db.execute(
-            select(
-                _people().label("visited"),
-                _people(Signal.type == SignalType.impression).label("saw_a_piece"),
-                _people(Signal.type == SignalType.click).label("opened_one"),
-                _people(
-                    Signal.type == SignalType.dwell, Signal.value >= STAYED_SECONDS
-                ).label("stayed"),
-                _people(Signal.type == SignalType.add_to_cart).label("added_to_cart"),
-                _people(Signal.type == SignalType.purchase).label("ordered"),
-            ).where(_within(Signal.created_at, period))
+            _scoped(
+                select(
+                    _people().label("visited"),
+                    _people(Signal.type == SignalType.impression).label("saw_a_piece"),
+                    _people(Signal.type == SignalType.click).label("opened_one"),
+                    _people(
+                        Signal.type == SignalType.dwell, Signal.value >= STAYED_SECONDS
+                    ).label("stayed"),
+                    _people(Signal.type == SignalType.add_to_cart).label("added_to_cart"),
+                    _people(Signal.type == SignalType.purchase).label("ordered"),
+                ).where(_within(Signal.created_at, period)),
+                scope,
+            )
         )
     ).one()
 
@@ -350,17 +363,22 @@ async def unmet_demand(db: AsyncSession, period: Period, limit: int = 20) -> dic
     }
 
 
-async def overview(db: AsyncSession, period: Period) -> dict:
+async def overview(db: AsyncSession, period: Period, limit: int | None = None) -> dict:
     """Everything the dashboard needs, in one call.
 
     The panel is opened on a phone on mobile data. Five round trips to draw
     one screen is the thing that makes a dashboard feel broken.
+
+    `limit` reaches the two tables that silently truncate — the per-piece
+    table at 60 rows and the unmet lists at 20. Before this it was a parameter
+    on the service functions that nothing ever passed, so a shop with more
+    than sixty pieces lost the tail with no indication.
     """
     return {
         "period": period.as_dict(),
         "audience": await audience(db, period),
         "funnel": await funnel(db, period),
         "pages": await by_page(db, period),
-        "products": await by_product(db, period),
-        "unmet": await unmet_demand(db, period),
+        "products": await by_product(db, period, **({"limit": limit} if limit else {})),
+        "unmet": await unmet_demand(db, period, **({"limit": limit} if limit else {})),
     }

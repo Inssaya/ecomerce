@@ -247,8 +247,8 @@ async def test_checkout_prices_from_the_database_not_the_request(
     assert order.status_code == 201, order.text
     body = order.json()
     assert body["subtotal"] == 360.0
-    assert body["delivery_fee"] == 30.0
-    assert body["total"] == 390.0
+    assert body["delivery_fee"] == 0.0
+    assert body["total"] == 360.0
 
 
 async def test_buying_a_shelf_piece_reserves_specific_objects(

@@ -43,3 +43,10 @@ def conflict(detail: str) -> HTTPException:
 
 def bad_request(detail: str) -> HTTPException:
     return HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=detail)
+
+
+def not_found(detail: str) -> HTTPException:
+    """For the case `get_or_404` cannot cover: an identifier that is the wrong
+    shape to look up at all. Handing a phone number to a UUID column raises a
+    database error, which surfaces as a 500 for what is really a 404."""
+    return HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=detail)

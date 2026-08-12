@@ -109,6 +109,7 @@ def to_card(product: Product, lang: str, available: int | None) -> ProductCard:
         price_max=float(product.price_max) if product.price_max is not None else None,
         image=primary_image(product),
         category_slug=product.category.slug if product.category else None,
+        category_name=product.category.name(lang) if product.category else None,
         available=(available or 0) if shelf else None,
         lead_time_days=product.lead_time_days if not shelf else None,
     )

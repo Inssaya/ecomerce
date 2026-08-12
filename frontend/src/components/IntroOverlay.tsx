@@ -7,7 +7,7 @@ const WORD_MS = 70;
 /** How long a finished line sits, fully revealed, before it steps aside. */
 const HOLD_MS = 1300;
 /** The cross-fade between one line leaving and the next arriving. */
-const FADE_MS = 380;
+const FADE_MS = 260;
 
 /**
  * The shop introducing itself out loud before it hands you the page.
@@ -22,6 +22,12 @@ const FADE_MS = 380;
  * visitor without JavaScript never sees a curtain that JavaScript was
  * supposed to lift and didn't — they just see the page. Reduced-motion and
  * "skip" both take the same exit: straight to `onDone`.
+ *
+ * The cream sheet holds still. Only the sentence on it fades. Fading the whole
+ * fixed container between lines — which is what this used to do — took the
+ * background with it, so the real page flashed through the gap and vanished
+ * again five times in a row on the way in. That is not a transition, it is a
+ * strobe, and it read as a page failing to load.
  */
 export function IntroOverlay({
   lines,
@@ -75,17 +81,23 @@ export function IntroOverlay({
 
   if (!mounted || closed) return null;
 
+  // The sheet itself only ever fades once: on the way out, after the last line.
+  // Between lines it stays put, which is the whole point.
+  const lifting = leaving && step >= lines.length - 1;
+
   return (
     <div
-      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-10
-                  bg-cream px-6 transition-opacity duration-[380ms] ease-gentle
-                  ${leaving ? "opacity-0" : "opacity-100"}`}
+      className={`fixed inset-0 z-50 flex flex-col items-center justify-center gap-10 bg-cream px-6
+                  transition-opacity duration-[260ms] ease-gentle
+                  ${lifting ? "opacity-0" : "opacity-100"}`}
       role="status"
       aria-live="polite"
     >
       <p
         key={step}
-        className="stamp max-w-[30ch] text-center text-[clamp(20px,3.2vw,32px)] leading-[1.45] text-ink"
+        className={`stamp max-w-[30ch] text-center text-[clamp(20px,3.2vw,32px)] leading-[1.45]
+                    text-ink transition-opacity duration-[260ms] ease-gentle
+                    ${leaving ? "opacity-0" : "opacity-100"}`}
       >
         {lines[step].split(" ").map((word, index) => (
           <span

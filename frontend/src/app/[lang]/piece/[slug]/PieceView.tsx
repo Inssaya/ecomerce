@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 
 import { useCart } from "@/components/CartProvider";
 import { api, type PieceDetail } from "@/lib/api";
-import { useDelivery } from "@/lib/delivery";
+import { alwaysFree, useDelivery } from "@/lib/delivery";
 import { type Lang, money, translator } from "@/lib/i18n";
 import { track, trackDwell } from "@/lib/signals";
 
@@ -71,6 +71,17 @@ export function PieceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [piece?.id]);
 
+  // A variant switch or a background stock refresh can drop the cap below
+  // whatever quantity was already picked — nothing else pulls it back down,
+  // and "add to cart" does not otherwise notice.
+  useEffect(() => {
+    if (!piece) return;
+    const activeVariant = piece.variants.find((option) => option.id === variantId) ?? null;
+    const avail = piece.kind === "shelf" ? (activeVariant?.available ?? piece.available) : null;
+    const cap = avail ?? 20;
+    setQuantity((n) => Math.min(n, Math.max(cap, 1)));
+  }, [piece, variantId]);
+
   if (!piece) {
     return <p className="page-wide pt-20 text-center text-ink-soft">{t("notFound")}</p>;
   }
@@ -112,7 +123,7 @@ export function PieceView({
           <>
             <span aria-hidden> · </span>
             <Link href={`/${lang}?category=${piece.category_slug}`} className="hover:text-ink">
-              {piece.category_slug}
+              {piece.category_name || piece.category_slug}
             </Link>
           </>
         ) : null}
@@ -255,9 +266,13 @@ export function PieceView({
             {terms ? (
               <>
                 <span aria-hidden> · </span>
-                {ar
-                  ? `توصيل مجاني فوق ${money(terms.freeOver, lang)}`
-                  : `free over ${money(terms.freeOver, lang)}`}
+                {alwaysFree(terms)
+                  ? ar
+                    ? "توصيل مجاني"
+                    : "free delivery"
+                  : ar
+                    ? `توصيل مجاني فوق ${money(terms.freeOver, lang)}`
+                    : `free over ${money(terms.freeOver, lang)}`}
               </>
             ) : null}
             <span aria-hidden> · </span>

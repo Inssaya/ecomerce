@@ -37,6 +37,8 @@ interface CartValue {
   total: number;
   add: (line: Omit<CartLine, "quantity">, quantity?: number) => void;
   setQuantity: (productId: string, variantId: string | null, quantity: number) => void;
+  /** Refresh what a line thinks is available and clamp its quantity to match. */
+  sync: (productId: string, variantId: string | null, available: number | null) => void;
   remove: (productId: string, variantId: string | null) => void;
   clear: () => void;
   ready: boolean;
@@ -68,10 +70,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const add = useCallback((line: Omit<CartLine, "quantity">, quantity = 1) => {
     setLines((previous) => {
-      const existing = previous.find((item) => same(item, line.productId, line.variantId));
-      if (!existing) return [...previous, { ...line, quantity }];
-      // Never past what exists. "Three left" means we made three.
+      // Never past what exists. "Three left" means we made three — a brand-new
+      // line needs this clamp exactly as much as one merging into an existing
+      // line does, since the caller's quantity can be stale (a variant switch,
+      // a stock refresh) by the time this runs.
       const ceiling = line.available ?? Number.MAX_SAFE_INTEGER;
+      const existing = previous.find((item) => same(item, line.productId, line.variantId));
+      if (!existing) return [...previous, { ...line, quantity: Math.min(quantity, ceiling) }];
       return previous.map((item) =>
         same(item, line.productId, line.variantId)
           ? { ...item, quantity: Math.min(item.quantity + quantity, ceiling) }
@@ -98,6 +103,22 @@ export function CartProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // What the cart line was told at add-to-cart time can go stale — someone
+  // else buys the last one while it sits in a bag nobody has paid for yet.
+  // The cart page calls this after asking the shop what is true right now.
+  const sync = useCallback(
+    (productId: string, variantId: string | null, available: number | null) => {
+      setLines((previous) =>
+        previous.map((item) =>
+          same(item, productId, variantId)
+            ? { ...item, available, quantity: Math.min(item.quantity, available ?? Number.MAX_SAFE_INTEGER) }
+            : item,
+        ),
+      );
+    },
+    [],
+  );
+
   const remove = useCallback((productId: string, variantId: string | null) => {
     setLines((previous) => previous.filter((item) => !same(item, productId, variantId)));
   }, []);
@@ -109,11 +130,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       total: lines.reduce((sum, line) => sum + line.price * line.quantity, 0),
       add,
       setQuantity,
+      sync,
       remove,
       clear: () => setLines([]),
       ready,
     }),
-    [lines, add, setQuantity, remove, ready],
+    [lines, add, setQuantity, sync, remove, ready],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

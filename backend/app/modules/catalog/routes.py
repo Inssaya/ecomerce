@@ -28,6 +28,7 @@ from app.modules.catalog.schemas import (
     CategoryAdmin,
     CategoryNode,
     CategoryWrite,
+    MediaPatch,
     MediaResponse,
     PieceAdmin,
     PieceBatchWrite,
@@ -37,6 +38,7 @@ from app.modules.catalog.schemas import (
     ProductPatch,
     ProductWrite,
     VariantOut,
+    VariantPatch,
     VariantWrite,
 )
 from app.modules.feed import embeddings
@@ -409,6 +411,43 @@ async def add_variant(
     )
 
 
+@router.patch("/admin/variants/{variant_id}", response_model=VariantOut)
+async def update_variant(
+    variant_id: str, body: VariantPatch, db: DbSession, owner: Owner
+) -> VariantOut:
+    """Correct a variant.
+
+    Variants could only be created or retired, so a typo in "Matte black" was
+    permanent — the only fix was to retire the variant and make another, which
+    orphans it from the order lines that already point at it.
+    """
+    variant = await get_or_404(db, ProductVariant, variant_id, detail="Variant not found")
+    product = await get_or_404(db, Product, variant.product_id, detail="Product not found")
+
+    changes = body.model_dump(exclude_unset=True)
+    if "sku" in changes and changes["sku"] != variant.sku:
+        clash = await db.scalar(
+            select(ProductVariant.id).where(
+                ProductVariant.sku == changes["sku"], ProductVariant.id != variant_id
+            )
+        )
+        if clash:
+            raise conflict(f"SKU '{changes['sku']}' is already used")
+
+    for field, value in changes.items():
+        setattr(variant, field, value)
+    await db.commit()
+    await db.refresh(variant)
+
+    return VariantOut(
+        id=variant.id,
+        sku=variant.sku,
+        option=variant.option_en,
+        price=float(variant.price if variant.price is not None else product.price),
+        available=0 if product.kind is ProductKind.shelf else None,
+    )
+
+
 @router.delete(
     "/admin/variants/{variant_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
 )
@@ -623,6 +662,24 @@ async def upload_product_photo(
         sort_order=len(product.media),
     )
     db.add(media)
+    await db.commit()
+    await db.refresh(media)
+    return service.media_out(media, "en")
+
+
+@router.patch("/admin/media/{media_id}", response_model=MediaResponse)
+async def update_photo(
+    media_id: str, body: MediaPatch, db: DbSession, owner: Owner
+) -> MediaResponse:
+    """Alt text, after the upload.
+
+    Alt text could only be set as a query parameter at upload time and the
+    console never sent it, so every photograph in the shop has none — which is
+    a real accessibility hole on a site whose entire product *is* the picture.
+    """
+    media = await get_or_404(db, ProductMedia, media_id, detail="Photo not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(media, field, value)
     await db.commit()
     await db.refresh(media)
     return service.media_out(media, "en")

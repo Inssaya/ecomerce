@@ -19,6 +19,7 @@ export interface Piece {
   price_max: number | null;
   image: string | null;
   category_slug: string | null;
+  category_name: string | null;
   available: number | null;
   lead_time_days: number | null;
 }
@@ -159,7 +160,10 @@ async function request<T>(
   const separator = path.includes("?") ? "&" : "?";
   const headers = new Headers(init.headers);
   headers.set("accept-language", lang);
-  if (init.body && !headers.has("content-type")) {
+  // FormData is the exception: the browser has to set its own `multipart/…`
+  // content type, boundary and all, and stamping JSON over it makes the server
+  // read the upload as a malformed body.
+  if (init.body && !headers.has("content-type") && !(init.body instanceof FormData)) {
     headers.set("content-type", "application/json");
   }
   // Server-rendered requests have no browser to fingerprint.
@@ -249,6 +253,21 @@ export const api = {
 
   ask: (lang: Lang, body: unknown) =>
     request<RequestView>("/requests", { lang, method: "POST", body: JSON.stringify(body) }),
+
+  /**
+   * A photo attached to a custom request, stored before the request is sent.
+   *
+   * Uploaded one at a time as they are chosen rather than all at once on
+   * submit: on a Moroccan phone connection a four-photo upload takes long
+   * enough that a customer who pressed send and saw nothing happen presses it
+   * again, and the second press is the one that fails.
+   */
+  uploadReference: async (lang: Lang, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    // No JSON content type: the browser must set its own multipart boundary.
+    return request<{ url: string }>("/requests/references", { lang, method: "POST", body });
+  },
 
   /** A personal message, so it always lands somewhere the workshop will see
    *  it — the WhatsApp/email links beside this form are drafts the visitor

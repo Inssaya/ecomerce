@@ -69,11 +69,31 @@ export default async function DeliveryAndReturns({
 
   const list = await fromApi<{ items: Place[] }>("/places", lang, { revalidate: 3600 });
   const places = list?.items ?? [];
-  const fee = places[0]?.delivery_fee ?? 30;
-  const freeOver = places[0]?.free_delivery_over ?? 500;
+  // A threshold of zero is cleared by every order, so delivery is simply free
+  // and there is no figure to print. Falling back to free rather than to an
+  // invented 30 matters: if `/places` is unreachable this page must not quote
+  // a fee the till would never charge.
+  const fee = places[0]?.delivery_fee ?? 0;
+  const freeOver = places[0]?.free_delivery_over ?? 0;
+  const free = freeOver <= 0;
 
-  const questions = ar
+  // The free-delivery answer is only listed while it is true. A FAQ entry is
+  // also structured data Google will quote, so one left behind after a policy
+  // change would be published in search results long after the page changed.
+  const freeQuestion: [string, string][] = free
     ? [
+        ar
+          ? ["كم يكلّف التوصيل؟", "لا شيء. التوصيل مجاني على كل شيء، في كل مدينة، مهما كان المبلغ."]
+          : [
+              "How much is delivery?",
+              "Nothing. Delivery is free on everything, to every city, whatever the order comes to.",
+            ],
+      ]
+    : [];
+
+  const questions: [string, string][] = ar
+    ? [
+        ...freeQuestion,
         [
           "متى أخلّص؟",
           "عند الباب، نقداً، بعد أن يصل الطرد. لا شيء قبل ذلك — لا بطاقة، ولا تحويل، ولا عربون.",
@@ -104,6 +124,7 @@ export default async function DeliveryAndReturns({
         ],
       ]
     : [
+        ...freeQuestion,
         [
           "When do I pay?",
           "At the door, in cash, after the parcel reaches you. Nothing before — no card, no transfer, no deposit.",
@@ -175,10 +196,16 @@ export default async function DeliveryAndReturns({
         <div className="card p-4 shadow-soft">
           <p className="text-[13px] text-ink-soft">{ar ? "التوصيل" : "Delivery"}</p>
           <p className="stamp mt-1 text-[22px] font-semibold tabular-nums">
-            {money(fee, lang)}
+            {free ? (ar ? "مجاناً" : "Free") : money(fee, lang)}
           </p>
           <p className="mt-0.5 text-[12px] text-ink-soft">
-            {ar ? `مجاناً فوق ${freeOver}` : `free over ${freeOver}`}
+            {free
+              ? ar
+                ? "على كل شيء"
+                : "on everything"
+              : ar
+                ? `مجاناً فوق ${freeOver}`
+                : `free over ${freeOver}`}
           </p>
         </div>
         <div className="card p-4 shadow-soft">

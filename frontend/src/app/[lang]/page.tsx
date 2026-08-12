@@ -58,6 +58,11 @@ export default async function Shop({
   ]);
 
   const pieces = first?.items ?? [];
+  // `fromApi` collapses every failure to null on purpose, so an empty array
+  // here is ambiguous by itself: it means either "nothing matches" or "the
+  // shop could not be reached." Only the second is worth telling a visitor
+  // about — the first is a normal, honest state.
+  const broken = first === null;
 
   return (
     <div className="px-2.5 pt-2.5 sm:px-4 sm:pt-4 lg:px-6 lg:pt-6">
@@ -73,6 +78,7 @@ export default async function Shop({
       <ProductFeed
         lang={lang}
         initial={pieces}
+        initialBroken={broken}
         hasMore={first?.has_more ?? false}
         seed={seed}
         categories={categoryList ?? []}

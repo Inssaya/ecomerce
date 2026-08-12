@@ -15,9 +15,12 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
+import { ApiError } from "./api";
+import { problemFrom } from "./detail";
 import { readSession, writeSession, type Session } from "./session-store";
 
 export type { Session };
+export { ApiError };
 
 async function post<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`/api${path}`, {
@@ -25,34 +28,107 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(String(response.status));
+  // The server already says exactly what went wrong — wrong password, an email
+  // already registered, a password too short — and swallowing that into a bare
+  // status code is what forced every failure on the sign-in form to look the
+  // same.
+  if (!response.ok) throw new ApiError(response.status, await problemFrom(response));
   return (await response.json()) as T;
+}
+
+export interface Profile {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  avatar_url?: string | null;
 }
 
 interface AuthReply {
   access_token: string;
-  user?: { full_name?: string; email?: string; avatar_url?: string | null };
+  user?: Profile;
+}
+
+/** The server's own view of the account, in the shape this app stores. */
+function sessionFrom(token: string, user: Profile | undefined, email: string): Session {
+  return {
+    token,
+    name: user?.full_name || email.split("@")[0],
+    email: user?.email || email,
+    avatar: user?.avatar_url ?? null,
+    phone: user?.phone ?? null,
+    address: user?.address_line1 ?? null,
+    city: user?.city ?? null,
+  };
 }
 
 export async function signIn(email: string, password: string): Promise<Session> {
   const reply = await post<AuthReply>("/auth/login", { email, password });
-  const session: Session = {
-    token: reply.access_token,
-    name: reply.user?.full_name || email.split("@")[0],
-    email: reply.user?.email || email,
-    avatar: reply.user?.avatar_url ?? null,
-  };
+  const session = sessionFrom(reply.access_token, reply.user, email);
   writeSession(session);
   return session;
 }
 
 export async function signUp(
-  fullName: string,
-  email: string,
-  password: string,
+  details: {
+    fullName: string;
+    email: string;
+    password: string;
+    phone?: string;
+    address?: string;
+    city?: string;
+  },
 ): Promise<Session> {
-  await post<unknown>("/auth/register", { full_name: fullName, email, password });
-  return signIn(email, password);
+  // Everything asked for on the sign-up form goes with the registration, so
+  // that the very first checkout after making an account is already filled in.
+  // Sending it on the follow-up sign-in instead would leave a window where the
+  // account exists and knows nothing about the person who just typed it all.
+  await post<unknown>("/auth/register", {
+    full_name: details.fullName,
+    email: details.email,
+    password: details.password,
+    phone: details.phone || null,
+    address_line1: details.address || null,
+    city: details.city || null,
+  });
+  return signIn(details.email, details.password);
+}
+
+/**
+ * Save a correction the customer made somewhere else — the checkout form, most
+ * of the time — back onto the account.
+ *
+ * Deliberately quiet: it runs after the order is already placed, and a profile
+ * that failed to update is not worth interrupting a confirmed sale to report.
+ * The order itself carries the address that was actually used either way.
+ */
+export async function saveProfile(changes: {
+  phone?: string;
+  address_line1?: string;
+  city?: string;
+}): Promise<void> {
+  const current = readSession();
+  if (!current) return;
+  try {
+    const response = await fetch("/api/auth/me", {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${current.token}`,
+      },
+      body: JSON.stringify(changes),
+    });
+    if (!response.ok) return;
+    const user = (await response.json()) as Profile;
+    patchSession({
+      phone: user.phone ?? null,
+      address: user.address_line1 ?? null,
+      city: user.city ?? null,
+    });
+  } catch {
+    /* offline, or the token expired — the order is placed regardless */
+  }
 }
 
 export function signOut(): void {

@@ -125,8 +125,8 @@ async def test_the_order_raised_on_approval_charges_the_quoted_price(
     )
     assert order.status_code == 200, order.text
     assert order.json()["subtotal"] == 260.0
-    assert order.json()["delivery_fee"] == 30.0
-    assert order.json()["total"] == 290.0
+    assert order.json()["delivery_fee"] == 0.0
+    assert order.json()["total"] == 260.0
 
 
 async def test_approving_something_never_quoted_is_refused(client: AsyncClient) -> None:

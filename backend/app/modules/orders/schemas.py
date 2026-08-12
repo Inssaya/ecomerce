@@ -96,6 +96,10 @@ class OrderEventResponse(BaseModel):
     status: OrderStatus
     note: str | None
     created_at: datetime
+    #: Who moved it — "workshop", "customer" or "system". Stored since the
+    #: table was written and never returned, which left the timeline unable to
+    #: tell an order the owner cancelled from one the 48-hour sweep released.
+    actor: str = "system"
 
     model_config = {"from_attributes": True}
 

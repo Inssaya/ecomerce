@@ -18,7 +18,7 @@ from app.core.errors import get_or_404
 from app.core.limits import ContactLimit
 from app.deps import DbSession, Owner, Paging
 from app.models.contact import ContactMessage
-from app.modules.contact.schemas import ContactCreate, ContactMessageOut
+from app.modules.contact.schemas import ContactCreate, ContactMessageOut, ContactMessagePatch
 
 router = APIRouter(tags=["contact"])
 
@@ -33,14 +33,37 @@ async def send_message(body: ContactCreate, db: DbSession, _: ContactLimit) -> C
 
 
 @router.get("/admin/contact-messages", response_model=list[ContactMessageOut])
-async def list_messages(db: DbSession, owner: Owner, paging: Paging) -> list[ContactMessage]:
+async def list_messages(
+    db: DbSession,
+    owner: Owner,
+    paging: Paging,
+    unread: bool = False,
+    archived: bool = False,
+) -> list[ContactMessage]:
+    """The inbox. Archived messages are out of the way by default — they are
+    kept, not deleted, so a lead that looked like nothing stays findable."""
+    query = select(ContactMessage)
+    query = query.where(
+        ContactMessage.archived_at.is_not(None) if archived else ContactMessage.archived_at.is_(None)
+    )
+    if unread:
+        query = query.where(ContactMessage.read_at.is_(None))
     rows = await db.scalars(
-        select(ContactMessage)
-        .order_by(ContactMessage.created_at.desc())
-        .offset(paging.offset)
-        .limit(paging.size)
+        query.order_by(ContactMessage.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
     return list(rows)
+
+
+@router.patch("/admin/contact-messages/{message_id}", response_model=ContactMessageOut)
+async def archive_message(
+    message_id: str, body: ContactMessagePatch, db: DbSession, owner: Owner
+) -> ContactMessage:
+    """File a message away, or bring it back."""
+    message = await get_or_404(db, ContactMessage, message_id, detail="Message not found")
+    message.archived_at = datetime.now(UTC) if body.archived else None
+    await db.commit()
+    await db.refresh(message)
+    return message
 
 
 @router.post("/admin/contact-messages/{message_id}/read", response_model=ContactMessageOut)

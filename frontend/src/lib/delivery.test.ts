@@ -11,7 +11,7 @@
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 
-import { feeFor, loadDelivery, matchCity, type Delivery } from "./delivery";
+import { alwaysFree, feeFor, loadDelivery, matchCity, type Delivery } from "./delivery";
 import type { Place } from "./api";
 
 const place = (over: Partial<Place> = {}): Place => ({
@@ -57,6 +57,20 @@ describe("what delivery costs", () => {
     expect(feeFor(500, terms(), "Dakhla")).toBe(0);
     expect(feeFor(1200, terms(), "Dakhla")).toBe(0);
     expect(feeFor(499, terms(), "Dakhla")).toBe(75);
+  });
+
+  it("costs nothing anywhere once the threshold is zero", () => {
+    // The shop's live policy: free on everything. A threshold of zero is
+    // cleared by every basket, so an expensive city's own override — left in
+    // the database from the days of paid delivery — must never reach a total.
+    const free = terms({ fee: 0, freeOver: 0 });
+    expect(alwaysFree(free)).toBe(true);
+    expect(feeFor(0, free)).toBe(0);
+    expect(feeFor(40, free, "Dakhla")).toBe(0);
+    expect(feeFor(40, free, "Ait Ourir")).toBe(0);
+
+    // And the wording is not "free over 0" — there is no threshold to name.
+    expect(alwaysFree(terms())).toBe(false);
   });
 
   it("matches a city however a person typed it", () => {

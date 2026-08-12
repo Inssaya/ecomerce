@@ -53,16 +53,14 @@ export default async function ContactPage({
 
   return (
     <div className="page-wide pt-8 pb-16">
-      <h1 className="text-[clamp(34px,4.8vw,58px)] leading-[0.98] font-semibold tracking-[-0.05em] max-w-[12ch]">
-        {ar ? "أرسل رسالتك مباشرة إلى الورشة." : "Send your message straight to the workshop."}
-      </h1>
-      <p className="mt-4 max-w-[60ch] text-[16px] leading-[1.75] text-ink-soft">
-        {ar
-          ? "هذه الصفحة ليست للروبوت فقط. اكتب ما تحتاجه، ثم اختر WhatsApp أو البريد الإلكتروني — أو اترك المساعد يساعدك في صياغة الفكرة إذا احتجت ذلك."
-          : "This page is not for the assistant alone. Write what you need, then choose WhatsApp or email — or let the assistant help you shape the message if you want."}
-      </p>
+      {/* No headline, no standfirst. A page reached by clicking "Contact" does
+          not need half a screen explaining that it is the contact page, and the
+          paragraph that stood here was three lines of narration about what the
+          three panels below it already are. The name stays for screen readers
+          and for the page outline, and nowhere else. */}
+      <h1 className="sr-only">{t("navContact")}</h1>
 
-      <div className="mt-9 grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
+      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
         <ContactComposer lang={lang} whatsappNumber={digits} />
 
         <aside className="space-y-4">

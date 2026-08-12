@@ -1,10 +1,14 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { PieceCard } from "@/components/PieceCard";
 import type { Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 import { fromApi } from "@/lib/server";
+
+import { SearchResults } from "./SearchResults";
+
+/** Matches the shelf's own page size, so a search page never feels slower. */
+const PAGE = 30;
 
 /**
  * Search results, on their own route.
@@ -56,8 +60,8 @@ export default async function SearchPage({
   const term = (q ?? "").trim();
 
   const found = term
-    ? await fromApi<{ items: Piece[] }>(
-        `/products?q=${encodeURIComponent(term)}&size=60`,
+    ? await fromApi<{ items: Piece[]; total: number; has_more: boolean }>(
+        `/products?q=${encodeURIComponent(term)}&page=1&size=${PAGE}`,
         lang,
         { revalidate: 0 },
       )
@@ -91,16 +95,13 @@ export default async function SearchPage({
           </Link>
         </div>
       ) : (
-        <>
-          <p className="mt-2.5 text-[14px] text-ink-soft">
-            {t("searchFound", { n: pieces.length })}
-          </p>
-          <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 md:gap-5">
-            {pieces.map((piece, index) => (
-              <PieceCard key={piece.id} piece={piece} lang={lang} priority={index < 4} />
-            ))}
-          </div>
-        </>
+        <SearchResults
+          lang={lang}
+          term={term}
+          initial={pieces}
+          total={found?.total ?? pieces.length}
+          hasMore={found?.has_more ?? false}
+        />
       )}
     </div>
   );

@@ -89,3 +89,16 @@ export function feeFor(subtotal: number, terms: Delivery, city?: string | null):
   if (subtotal >= terms.freeOver) return 0;
   return matchCity(terms.cities, city)?.delivery_fee ?? terms.fee;
 }
+
+/**
+ * Free on everything, whatever the basket holds.
+ *
+ * A threshold of zero is cleared by every possible order, so there is no
+ * "spend 500 to unlock it" to advertise — just a flat promise. The pages that
+ * used to print "free over 500" ask this instead of comparing the number
+ * themselves, so the day the shop reintroduces a threshold, they all start
+ * naming it again from one edit.
+ */
+export function alwaysFree(terms: Delivery): boolean {
+  return terms.freeOver <= 0;
+}

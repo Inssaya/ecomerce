@@ -21,8 +21,8 @@ const copy = {
   // The position itself.
   tagline: ["Made, not resold.", "نصنع، لا نعيد البيع"],
   taglineSupport: [
-    "Everything else online came from a container. Ours came from a workshop. Free shipping over 500 DH.",
-    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة. توصيل مجاني فوق 500 درهم.",
+    "Everything else online came from a container. Ours came from a workshop. Free delivery on everything.",
+    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة. التوصيل مجاني على كل شيء.",
   ],
   ifWeDontHaveIt: ["If we don't have it, we make it.", "إن لم نجده لك، صنعناه لك."],
 
@@ -56,6 +56,24 @@ const copy = {
   haveAccount: ["Already have an account?", "لديك حساب بالفعل؟"],
   needAccount: ["Need an account?", "تحتاج حساباً؟"],
   signInFailed: ["That email and password do not match.", "البريد وكلمة السر غير متطابقين."],
+
+  // An account is a delivery address you only type once.
+  signUpLead: [
+    "Fill this in once and checkout is already done — we keep your number and address so you never type them again.",
+    "املأ هذا مرة واحدة ولن تحتاج إلى ملء صفحة الطلب بعدها — نحتفظ برقمك وعنوانك فلا تكتبهما مجدداً.",
+  ],
+  whereWeDeliver: ["Where we deliver to you", "أين نوصّل إليك"],
+  yourDetails: ["Your details", "معلوماتك"],
+  editDetails: ["Change", "تغيير"],
+  saveDetails: ["Save", "احفظ"],
+  detailsSaved: ["Saved.", "تم الحفظ."],
+  deliverTo: ["Delivering to", "التوصيل إلى"],
+  notYou: ["Send this one somewhere else", "أرسل هذا الطلب إلى مكان آخر"],
+  useMyDetails: ["Use my saved details", "استعمل معلوماتي المحفوظة"],
+  addressMissing: [
+    "Add your address so checkout fills itself in next time.",
+    "أضف عنوانك ليملأ نفسه في المرة القادمة.",
+  ],
 
   // The assistant lives on one page, behind a sign-in.
   chatGateTitle: ["Talk to the workshop", "تحدّث مع الورشة"],

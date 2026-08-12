@@ -8,6 +8,7 @@ would have to invent a fact say nothing instead.
 """
 from __future__ import annotations
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 
@@ -16,6 +17,20 @@ from app.models import Order, OrderStatus
 from app.models.local import City
 from app.modules.local.seed import CITIES, SERVICES, seed
 from tests.test_shop_flow import CASABLANCA, shelf_piece
+
+
+@pytest.fixture
+def charging_for_delivery(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The shop back on paid delivery, for the tests about how a fee is chosen.
+
+    Delivery is free on everything today, which makes every fee zero and would
+    make those tests pass without testing anything. The machinery underneath —
+    a city's own override, the flat fee for a town we have not named, the
+    threshold beating both — has to keep working for the day the shop turns
+    charging back on, so it is exercised here against a shop that charges.
+    """
+    monkeypatch.setattr(settings, "delivery_fee", 30.0)
+    monkeypatch.setattr(settings, "free_delivery_over", 500.0)
 
 
 async def test_the_shop_knows_where_it_delivers(client: AsyncClient, db_session) -> None:
@@ -53,7 +68,7 @@ async def test_a_city_page_carries_what_can_be_made_there(
     page = (await client.get("/api/places/marrakesh")).json()
 
     assert page["name"] == "Marrakesh"
-    assert page["delivery_fee"] > 0
+    assert page["delivery_fee"] == 0
     assert {item["slug"] for item in page["services"]} == {row["slug"] for row in SERVICES}
 
 
@@ -169,7 +184,7 @@ async def test_there_is_no_french_anywhere_in_the_content(
 
 
 async def test_an_order_is_charged_the_fee_that_citys_page_publishes(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
+    client: AsyncClient, owner_headers: dict[str, str], db_session, charging_for_delivery: None
 ) -> None:
     """The City model carries a delivery fee "where a city genuinely costs more
     to reach", and the city page has always printed it. The till used to ignore
@@ -200,7 +215,7 @@ async def test_an_order_is_charged_the_fee_that_citys_page_publishes(
 
 
 async def test_a_town_we_have_not_named_pays_the_shops_own_fee(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
+    client: AsyncClient, owner_headers: dict[str, str], db_session, charging_for_delivery: None
 ) -> None:
     """Checkout takes the city as free text on purpose. Somewhere we have made
     no promise about is not refused — it is simply charged the ordinary fee."""
@@ -220,7 +235,7 @@ async def test_a_town_we_have_not_named_pays_the_shops_own_fee(
 
 
 async def test_the_city_is_matched_however_it_was_typed(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
+    client: AsyncClient, owner_headers: dict[str, str], db_session, charging_for_delivery: None
 ) -> None:
     """A person types it, so "casablanca", "Casablanca" and " CASABLANCA " are
     one place — and the Arabic name is the real one, not a transliteration."""
@@ -239,7 +254,7 @@ async def test_the_city_is_matched_however_it_was_typed(
 
 
 async def test_free_delivery_still_beats_a_citys_own_fee(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
+    client: AsyncClient, owner_headers: dict[str, str], db_session, charging_for_delivery: None
 ) -> None:
     """Over the threshold nothing is charged, expensive city or not. The
     threshold is the promise the shop makes; the fee is a detail below it."""
@@ -267,3 +282,36 @@ async def test_the_places_list_states_the_shops_own_terms(client: AsyncClient, d
     body = (await client.get("/api/places")).json()
     assert body["default"]["delivery_fee"] == settings.delivery_fee
     assert body["default"]["free_delivery_over"] == settings.free_delivery_over
+
+
+async def test_delivery_is_free_on_everything(
+    client: AsyncClient, owner_headers: dict[str, str], db_session
+) -> None:
+    """The shop's actual policy today, asserted rather than assumed.
+
+    Not only that the totals come out right — that no page anywhere publishes a
+    number nobody will be asked for. A city carrying an override from the days
+    of paid delivery must still print zero, because the page a customer reads
+    and the amount the courier collects have to be the same figure.
+    """
+    await seed(db_session)
+    place = await db_session.scalar(select(City).where(City.slug == "dakhla"))
+    place.delivery_fee = 75
+    await db_session.commit()
+
+    assert (await client.get("/api/places/dakhla")).json()["delivery_fee"] == 0
+    assert (await client.get("/api/places")).json()["default"]["delivery_fee"] == 0
+
+    piece = await shelf_piece(client, owner_headers, price=40)
+    order = await client.post(
+        "/api/orders",
+        json={
+            "full_name": "Aya B.",
+            "phone": "0611111111",
+            "address": {"line1": "3 Rue du Port", "city": "Dakhla"},
+            "items": [{"product_id": piece["id"], "quantity": 1}],
+        },
+    )
+    assert order.status_code == 201, order.text
+    assert order.json()["delivery_fee"] == 0
+    assert order.json()["total"] == 40

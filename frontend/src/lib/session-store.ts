@@ -14,6 +14,19 @@ export interface Session {
   name: string;
   email: string;
   avatar?: string | null;
+  /**
+   * What checkout would otherwise ask for a second time.
+   *
+   * Held here, beside the token, rather than fetched from `/auth/me` when the
+   * form mounts: the fields have to be filled in on first paint or the customer
+   * starts typing over them, and an empty input that fills itself half a second
+   * later is worse than one that was never going to. `/auth/me` is still the
+   * truth — this is refreshed from it whenever the account page loads and
+   * whenever an order is placed with a corrected address.
+   */
+  phone?: string | null;
+  address?: string | null;
+  city?: string | null;
 }
 
 export function readSession(): Session | null {

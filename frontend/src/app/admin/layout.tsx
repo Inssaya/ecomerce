@@ -1,47 +1,53 @@
 import type { Metadata } from "next";
-import { Instrument_Serif, Schibsted_Grotesk } from "next/font/google";
+import { Inter, JetBrains_Mono, Space_Grotesk } from "next/font/google";
 import type { ReactNode } from "react";
 
-import "@/app/globals.css";
+import "./console.css";
 
 import { AdminShell } from "./AdminShell";
 
 /**
- * The control room's own root.
+ * The console's own root.
  *
  * A sibling of `[lang]/layout.tsx`, not nested inside it — this owns its own
- * `<html>`/`<body>` because the real root layout (`app/layout.tsx`) is just a
- * passthrough. The owner is one account and this screen is never bilingual,
- * so none of the storefront's Chrome, CartProvider, AmbientProvider, or
- * Arabic font loads here — carrying them would be dead weight on the one
- * screen that never needs them.
+ * `<html>`/`<body>` because the real root layout is a passthrough. The owner
+ * is one account and this screen is never bilingual, so none of the
+ * storefront's Chrome, CartProvider, AmbientProvider, or Arabic font loads
+ * here. Nor does the storefront's Tailwind theme — the console's palette and
+ * type scale come entirely from `console.css`'s own custom properties.
  */
-const text = Schibsted_Grotesk({
+const display = Space_Grotesk({
   subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-text",
+  weight: ["500", "600", "700"],
+  variable: "--console-font-display",
   display: "swap",
 });
 
-const stamp = Instrument_Serif({
+const body = Inter({
   subsets: ["latin"],
-  weight: ["400"],
-  style: ["normal", "italic"],
-  variable: "--font-stamp",
+  weight: ["400", "500", "600"],
+  variable: "--console-font-body",
+  display: "swap",
+});
+
+const mono = JetBrains_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--console-font-mono",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "The workshop — control room",
-  // Never listed, never followed. The sign-in is what protects it; this is
-  // about it never appearing in a search result at all.
+  title: "M-Style — owner console",
+  // Never listed, never followed. Sign-in is what protects it; this is about
+  // it never appearing in a search result at all.
   robots: { index: false, follow: false, nocache: true },
 };
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" dir="ltr" className={`${text.variable} ${stamp.variable}`}>
-      <body className={text.className}>
+    <html lang="en" dir="ltr" className={`${display.variable} ${body.variable} ${mono.variable}`}>
+      <body>
         <AdminShell>{children}</AdminShell>
       </body>
     </html>

@@ -1,121 +1,254 @@
 "use client";
 
+/**
+ * The shell: four doors and the page beneath them.
+ *
+ * Aptiv's whole admin is four dock items covering eight areas, and it stays
+ * simple because a door can carry two faces and one door holds everything
+ * administrative. This is the same shape: Board · Orders · Assistant ·
+ * Manage. Sections inside them are real routes — deep-linkable — they just
+ * are not doors.
+ *
+ * Nav adapts rather than picking a side: a labelled rail on a laptop, an
+ * icon rail on a tablet, a bottom bar on a phone. Four items fits all three
+ * without a "More".
+ */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 
-import { ownerToken, signIn, signOut } from "@/lib/admin/session";
+import { ownerToken, signIn, signOut, SIGNED_OUT_EVENT } from "@/lib/console/auth";
+import { clearAllDrafts } from "@/lib/console/draft";
 
-const NAV = [
-  { href: "/admin", label: "Dashboard" },
-  { href: "/admin/management", label: "Management" },
-  { href: "/admin/orders", label: "Orders" },
-  { href: "/admin/users", label: "Users" },
-  { href: "/admin/assistant", label: "AI Assistant" },
-] as const;
+import { Button, ConfirmProvider, Field } from "./ui/primitives";
+import { Icon, type IconName } from "./ui/icons";
+import { ConsoleThemeProvider, useConsoleTheme } from "./ui/theme";
+
+const DOORS: { href: string; label: string; icon: IconName; owns: string[] }[] = [
+  { href: "/admin", label: "Board", icon: "board", owns: ["/admin", "/admin/make"] },
+  { href: "/admin/orders", label: "Orders", icon: "orders", owns: ["/admin/orders"] },
+  { href: "/admin/assistant", label: "Assistant", icon: "assistant", owns: ["/admin/assistant"] },
+  { href: "/admin/manage", label: "Manage", icon: "manage", owns: ["/admin/manage"] },
+];
 
 export function AdminShell({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
+  const [expired, setExpired] = useState(false);
 
   useEffect(() => setSignedIn(Boolean(ownerToken())), []);
 
-  if (signedIn === null) return <div className="page-wide pt-10" aria-hidden />;
-  if (!signedIn) return <SignIn onDone={() => setSignedIn(true)} />;
+  // The session died mid-task. Overlay sign-in; do not unmount the page.
+  useEffect(() => {
+    const onSignedOut = () => setExpired(true);
+    window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
+    return () => window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
+  }, []);
 
   return (
-    <div className="flex min-h-screen flex-col lg:flex-row">
-      <Sidebar onSignOut={() => setSignedIn(false)} />
-      <main className="flex-1 min-w-0 px-5 py-6 lg:px-10 lg:py-8">{children}</main>
+    <ConsoleThemeProvider>
+      <ConsoleRoot>
+        <ConfirmProvider>
+          {signedIn === null ? null : signedIn ? (
+            <>
+              <div className="console-shell">
+                <Rail
+                  onSignOut={() => {
+                    clearAllDrafts();
+                    setSignedIn(false);
+                    void signOut();
+                  }}
+                />
+                <main className="console-main">
+                  <div className="console-page">{children}</div>
+                </main>
+              </div>
+              {expired ? <SignIn resuming onDone={() => setExpired(false)} /> : null}
+            </>
+          ) : (
+            <SignIn onDone={() => setSignedIn(true)} />
+          )}
+        </ConfirmProvider>
+      </ConsoleRoot>
+    </ConsoleThemeProvider>
+  );
+}
+
+function ConsoleRoot({ children }: { children: ReactNode }) {
+  const { theme } = useConsoleTheme();
+  return (
+    <div className="console" data-console-theme={theme}>
+      {children}
     </div>
   );
 }
 
-function Sidebar({ onSignOut }: { onSignOut: () => void }) {
-  const pathname = usePathname();
-
+function Wordmark() {
   return (
-    <aside className="shrink-0 border-b border-sand px-5 py-4 lg:w-56 lg:border-b-0 lg:border-e lg:px-4 lg:py-6">
-      <div className="flex items-center justify-between lg:block">
-        <p className="stamp text-[18px] font-semibold">The workshop</p>
-        <button
-          type="button"
-          onClick={() => {
-            // Sign out of this device immediately, and revoke the session on
-            // the server on the way — clearing storage alone leaves a refresh
-            // token that stays good for a month.
-            onSignOut();
-            void signOut();
-          }}
-          className="tap text-[13px] text-ink-soft lg:mt-4"
-        >
-          Sign out
-        </button>
-      </div>
-      <nav className="mt-4 flex gap-1 overflow-x-auto lg:mt-6 lg:flex-col lg:overflow-visible">
-        {NAV.map((item) => {
-          const active = item.href === "/admin" ? pathname === "/admin" : pathname?.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={`tap shrink-0 rounded-xl px-3 py-2 text-[14px] font-medium transition-colors duration-gentle ${
-                active ? "bg-clay text-white" : "text-ink hover:bg-clay-soft"
-              }`}
-            >
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-    </aside>
+    <span className="console-wordmark">
+      <span>M-STYLE</span>
+      <span className="dot" aria-hidden />
+    </span>
   );
 }
 
-function SignIn({ onDone }: { onDone: () => void }) {
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+function Rail({ onSignOut }: { onSignOut: () => void }) {
+  const pathname = usePathname() ?? "";
+  const { theme, toggle } = useConsoleTheme();
+  const [moreOpen, setMoreOpen] = useState(false);
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setProblem(null);
-    const form = new FormData(event.currentTarget);
-    try {
-      await signIn(String(form.get("email")), String(form.get("password")));
-      onDone();
-    } catch (error) {
-      setProblem(error instanceof Error ? error.message : "Sign in failed");
-      setBusy(false);
-    }
-  }
+  // Moving between doors should never leave a menu hanging open behind you.
+  useEffect(() => setMoreOpen(false), [pathname]);
+
+  const isActive = (door: (typeof DOORS)[number]) =>
+    door.owns.some((path) => (path === "/admin" ? pathname === "/admin" || pathname === "/admin/make" : pathname.startsWith(path)));
 
   return (
-    <form onSubmit={submit} className="page pt-16">
-      <h1 className="text-[24px] font-semibold">The workshop</h1>
-      <div className="mt-6 space-y-4">
-        <input
-          name="email"
-          type="email"
-          required
-          autoComplete="email"
-          placeholder="you@mostyle.ma"
-          className="field"
-        />
-        <input name="password" type="password" required autoComplete="current-password" className="field" />
+    <nav className="console-rail" aria-label="Console">
+      <div className="console-rail-brand">
+        <Wordmark />
       </div>
+
+      {DOORS.map((door) => {
+        const active = isActive(door);
+        return (
+          <Link key={door.href} href={door.href} className={`console-nav-item${active ? " active" : ""}`} aria-current={active ? "page" : undefined}>
+            <Icon name={door.icon} size={19} />
+            <span className="console-nav-label">{door.label}</span>
+          </Link>
+        );
+      })}
+
+      {/* On a phone these two fold behind "More", so the bar stays at five
+          targets and no label has to wrap. On wider screens they are just
+          two more rows at the bottom of the rail. */}
+      <div className="console-rail-foot">
+        <button
+          type="button"
+          onClick={() => setMoreOpen((was) => !was)}
+          className={`console-nav-item console-rail-more${moreOpen ? " active" : ""}`}
+          aria-expanded={moreOpen}
+          aria-label="More"
+        >
+          <Icon name="manage" size={19} />
+          <span className="console-nav-label">More</span>
+        </button>
+
+        <div className={`console-rail-utils${moreOpen ? " open" : ""}`}>
+          <button type="button" onClick={toggle} className="console-nav-item" aria-label={theme === "light" ? "Switch to dark" : "Switch to light"}>
+            <Icon name={theme === "light" ? "moon" : "sun"} size={19} />
+            <span className="console-nav-label">{theme === "light" ? "Dark" : "Light"}</span>
+          </button>
+          <button type="button" onClick={onSignOut} className="console-nav-item" aria-label="Sign out">
+            <Icon name="logout" size={19} />
+            <span className="console-nav-label">Sign out</span>
+          </button>
+        </div>
+      </div>
+    </nav>
+  );
+}
+
+/**
+ * Sign in. `resuming` is the session-expired case: the page is still live
+ * underneath, so this says so and hands the owner back exactly where they
+ * were rather than pretending they just arrived.
+ */
+function SignIn({ onDone, resuming }: { onDone: () => void; resuming?: boolean }) {
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const emailRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
+
+  const submit = useCallback(
+    async (event: React.FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setProblem(null);
+      const form = new FormData(event.currentTarget);
+      try {
+        await signIn(String(form.get("email")), String(form.get("password")));
+        onDone();
+      } catch (failure) {
+        // A wrong password and an unreachable server are different problems
+        // and deserve different sentences.
+        const message = failure instanceof Error ? failure.message : "";
+        setProblem(message.includes("fetch") || message.includes("network") ? "Can't reach the shop. Check the connection and try again." : message || "Sign in failed");
+        setBusy(false);
+      }
+    },
+    [busy, onDone],
+  );
+
+  const form = (
+    <form onSubmit={submit} className="console-signin-box">
+      {resuming ? (
+        <p className="console-note brand">
+          Your session expired. Sign in and you&apos;ll land back exactly where you were — nothing you typed has been lost.
+        </p>
+      ) : null}
+
+      <Field label="Email" htmlFor="console-email">
+        <input ref={emailRef} id="console-email" name="email" type="email" required autoComplete="email" placeholder="you@mostyle.ma" />
+      </Field>
+
+      <Field label="Password" htmlFor="console-password">
+        <div className="console-row" style={{ gap: 8, flexWrap: "nowrap" }}>
+          <input id="console-password" name="password" type={showPassword ? "text" : "password"} required autoComplete="current-password" />
+          <Button
+            iconOnly
+            icon={showPassword ? "eye-off" : "eye"}
+            onClick={() => setShowPassword((was) => !was)}
+            aria-label={showPassword ? "Hide password" : "Show password"}
+          />
+        </div>
+      </Field>
+
       {problem ? (
-        <p role="alert" className="mt-4 text-[15px] text-warn">
+        <p className="console-error" role="alert">
           {problem}
         </p>
       ) : null}
-      <button type="submit" disabled={busy} className="btn-primary w-full mt-6">
-        Sign in
-      </button>
-      <p className="mt-5 text-center text-[13px]">
-        <Link href="/en/account/reset" className="text-ink-soft underline underline-offset-4">
+
+      <Button type="submit" variant="primary" block disabled={busy}>
+        {busy ? "Signing in…" : "Sign in"}
+      </Button>
+
+      <p className="console-muted" style={{ textAlign: "center" }}>
+        <Link href="/en/account/reset" style={{ textDecoration: "underline", textUnderlineOffset: 4 }}>
           Forgotten your password?
         </Link>
       </p>
     </form>
+  );
+
+  // Expired mid-task: a modal over the live page, so nothing unmounts.
+  if (resuming) {
+    return (
+      <div className="console-modal-wrap">
+        <div className="console-modal" role="dialog" aria-modal="true" aria-label="Session expired">
+          {form}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="console-signin">
+      <div className="console-signin-hero">
+        <Wordmark />
+        <h1 className="console-signin-headline">
+          The workshop, <em>read at a glance.</em>
+        </h1>
+        <p className="console-muted" style={{ maxWidth: "38ch" }}>
+          Orders, what to make next, the catalogue and the shop&apos;s own numbers — one console.
+        </p>
+      </div>
+      <div className="console-signin-panel">{form}</div>
+    </div>
   );
 }

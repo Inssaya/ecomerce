@@ -120,6 +120,11 @@ ResetLimit = Annotated[None, Depends(RateLimit(4, 3600, name="reset"))]
 ResetPerAccount = Annotated[None, Depends(RateLimit(3, 3600, by="body:email", name="reset-acct"))]
 CheckoutLimit = Annotated[None, Depends(RateLimit(10, 600, name="checkout"))]
 RequestLimit = Annotated[None, Depends(RateLimit(6, 600, name="custom-request"))]
+#: Reference photos on a custom request. Six per request, and a person who
+#: rephotographs a sketch a few times should not be stopped — but this is the
+#: one endpoint a stranger can write bytes to, so it is the one that must not
+#: be a free file host.
+ReferenceUploadLimit = Annotated[None, Depends(RateLimit(20, 900, name="reference-upload"))]
 AssistantLimit = Annotated[None, Depends(RateLimit(30, 600, name="assistant"))]
 SignalLimit = Annotated[None, Depends(RateLimit(120, 60, name="signals"))]
 LookupLimit = Annotated[None, Depends(RateLimit(15, 600, name="lookup"))]

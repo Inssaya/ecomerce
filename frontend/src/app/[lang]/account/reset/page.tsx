@@ -142,11 +142,15 @@ function ChooseNew({ lang, token }: { lang: Lang; token: string }) {
   }
 
   if (state === "done") {
+    // This form is shared by the storefront's sign-in page and the admin
+    // login screen — the emailed link carries no hint of which one asked for
+    // it, so the way back has to work for a customer too. It used to point
+    // straight at `/admin`, which is a dead end for anyone but the owner.
     return (
       <div className="mt-5 flex flex-col gap-4 items-start">
         <p className="text-[15px] leading-relaxed">{t("passwordChanged")}</p>
-        <Link href="/admin" className="btn-primary">
-          {ar ? "ادخل إلى الورشة" : "Go to the workshop"}
+        <Link href={`/${lang}/account`} className="btn-primary">
+          {t("signIn")}
         </Link>
       </div>
     );

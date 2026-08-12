@@ -1,234 +1,202 @@
 "use client";
 
 /**
- * The screen the owner opens on.
+ * Board · Today — the briefing.
  *
- * KPIs and graphs together, not behind a tab each — the panel is read in a
- * spare minute, and five round trips before a screen means anything is what
- * makes a dashboard feel broken. The toggle at the top swaps the same screen
- * into the Forecast: what the shop expects to sell over the next seven days,
- * from `admin/forecast.py`'s decayed-sales-rate calculation. It is a
- * calculation, not a trained model, and is never called "predictive" here.
+ * It opens on one sentence, not on six equal tiles. The old screen showed
+ * numbers and left the owner to work out which one mattered; the lead here is
+ * computed server-side in the same order the problems cost money — a refusal
+ * rate over target outranks a queue, a queue outranks revenue.
+ *
+ * The strip above scopes the screen. Narrow to a category or a piece and the
+ * money, the behaviour and the funnel are about that thing. Three blocks
+ * cannot narrow — the work queue, the lead and the shelf are questions about
+ * the whole shop, and narrowing them would hide work rather than focus it —
+ * so the server names them and they say "whole shop" out loud.
  */
-import { useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
-import { Confidence, Funnel, Sparkline, Stat } from "@/components/charts";
-import { admin, type Analytics, type Forecast, type ForecastRow, type Money, type Pulse } from "@/lib/admin/client";
-import { NotSignedIn, bounceToSignIn } from "@/lib/admin/session";
-import { money } from "@/lib/i18n";
+import { api } from "@/lib/console/api";
+import { useConsoleQuery } from "@/lib/console/query";
 
-export default function Dashboard() {
-  const [view, setView] = useState<"kpis" | "forecast">("kpis");
+import { BoardStrip, ShopWide, useBoardQuery } from "./BoardControls";
+import { Funnel, Meter, RankedBars, Sparkline, TrendArea } from "./ui/charts";
+import {
+  Card,
+  CardHead,
+  EmptyState,
+  HelpToggle,
+  LoadError,
+  Money,
+  Num,
+  Skeleton,
+  Stale,
+  Stat,
+} from "./ui/primitives";
 
-  return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-[24px] font-semibold tracking-tight">Dashboard</h1>
-        <div className="flex gap-1 rounded-2xl bg-clay-soft p-1">
-          {(["kpis", "forecast"] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setView(option)}
-              aria-pressed={view === option}
-              className={`tap rounded-xl px-3 py-1.5 text-[13px] font-medium transition-colors duration-gentle ${
-                view === option ? "bg-clay text-white" : "text-ink"
-              }`}
-            >
-              {option === "kpis" ? "Today" : "Forecast"}
-            </button>
-          ))}
-        </div>
-      </div>
+export default function Board() {
+  const query = useBoardQuery();
+  const [openHelp, setOpenHelp] = useState<string | null>(null);
 
-      {view === "kpis" ? <Kpis /> : <ForecastView />}
-    </div>
-  );
-}
+  const load = useCallback(() => api.today(query.range, query.scope), [query.range, query.scope]);
+  const { data, error, loading, stale, reload } = useConsoleQuery(`today:${query.key}`, load);
 
-function Kpis() {
-  const [pulse, setPulse] = useState<Pulse | null>(null);
-  const [moneyData, setMoneyData] = useState<Money | null>(null);
-  const [analytics, setAnalytics] = useState<Analytics | null>(null);
-  const [failed, setFailed] = useState(false);
+  const help = (key: string) =>
+    data?.explain?.[key] ? (
+      <HelpToggle open={openHelp === key} onToggle={() => setOpenHelp(openHelp === key ? null : key)} label={`What "${key}" means`} />
+    ) : null;
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([admin.pulse(), admin.money(), admin.analytics(30)])
-      .then(([p, m, a]) => {
-        if (cancelled) return;
-        setPulse(p);
-        setMoneyData(m);
-        setAnalytics(a);
-      })
-      .catch((error) => {
-        if (cancelled) return;
-        if (error instanceof NotSignedIn) bounceToSignIn();
-        else setFailed(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (failed) return <p className="text-[14px] text-warn">Could not load the dashboard.</p>;
-  if (!pulse || !moneyData || !analytics) {
-    return <div className="h-64 rounded-3xl bg-clay-soft/50 animate-pulse" aria-hidden />;
-  }
-
-  const overTarget = moneyData.refusals.refusal_rate_pct > moneyData.refusals.target_pct;
+  // The server decides which blocks it could not scope; the screen only
+  // reports it. Deciding again here is how the two drift apart.
+  const shopWide = (block: string) => Boolean(data?.scope?.shop_wide?.includes(block));
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Stat label="Orders today" value={String(pulse.orders_today)} />
-        <Stat label="Collected today" value={money(pulse.collected_today_mad, "en")} />
-        <Stat label="Visitors today" value={String(pulse.visitors_today)} />
-        <Stat
-          label="Open orders"
-          value={String(pulse.open_orders)}
-          note={pulse.requests_waiting_on_a_quote ? `${pulse.requests_waiting_on_a_quote} waiting on a price` : undefined}
-        />
-      </div>
+    <>
+      <BoardStrip view="today" />
 
-      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Stat
-          label="Revenue (30 days)"
-          value={money(moneyData.revenue.collected_mad, "en")}
-          note={`${moneyData.revenue.orders_delivered} orders delivered`}
-        />
-        <div className={`card p-4 shadow-soft ${overTarget ? "border border-warn/40" : ""}`}>
-          <p className="text-[13px] text-ink-soft">Refusal rate</p>
-          <p className={`stamp mt-1 text-[24px] font-semibold ${overTarget ? "text-warn" : "text-good"}`}>
-            {moneyData.refusals.refusal_rate_pct}%
-          </p>
-          <p className="text-[12px] text-ink-soft">
-            {moneyData.refusals.refused} / {moneyData.refusals.delivered_or_attempted} · target{" "}
-            {moneyData.refusals.target_pct}%
-          </p>
-        </div>
-      </div>
+      {error && !data ? <LoadError message={error} onRetry={reload} /> : null}
+      {loading ? <Skeleton height={280} /> : null}
 
-      <section className="card p-5 shadow-soft">
-        <h2 className="text-[16px] font-semibold">Visitors, last 30 days</h2>
-        <div className="mt-4">
-          <Sparkline points={analytics.audience.daily} label="Visitors" />
-        </div>
-      </section>
+      {data ? (
+        <Stale stale={stale}>
+          <div className="console-stack">
+            {/* The lead. One sentence, before anything else. */}
+            <Card>
+              <div className="console-row-between">
+                <p className="console-hero">
+                  {data.lead.value} <span style={{ fontWeight: 400, color: "var(--ink2)" }}>{data.lead.sentence}</span>
+                </p>
+                <ShopWide active={shopWide("lead")} />
+              </div>
+            </Card>
 
-      <section className="card p-5 shadow-soft">
-        <h2 className="text-[16px] font-semibold">Where people stop</h2>
-        <div className="mt-4">
-          <Funnel steps={analytics.funnel.steps} lang="en" />
-        </div>
-      </section>
-    </div>
-  );
-}
+            {/* The queue — every number goes somewhere. */}
+            <div className="console-stack-sm">
+              {shopWide("queue") ? (
+                <div className="console-row" style={{ gap: 8 }}>
+                  <span className="console-caps">What needs you</span>
+                  <ShopWide active />
+                  <span className="console-muted">work does not narrow — hiding it would not focus it</span>
+                </div>
+              ) : null}
+              <div className="console-stat-grid cols-4">
+                <Stat label="Open orders" value={<Num value={data.queue.open_orders} />} href="/admin/orders?status=open" caption="still moving" />
+                <Stat
+                  label="Quotes to send"
+                  value={<Num value={data.queue.quotes_to_send} />}
+                  href="/admin/orders/commissions?status=requested"
+                  caption="waiting on a price"
+                />
+                <Stat label="Unread messages" value={<Num value={data.queue.unread_messages} />} href="/admin/orders/messages?unread=1" />
+                {/* This one had no link, while the comment above claimed they all
+                    did. Today's orders are the ones most likely to need confirming. */}
+                <Stat
+                  label="Orders today"
+                  value={<Num value={data.pulse.orders_today} />}
+                  href="/admin/orders?status=placed"
+                  caption={<>collected <Money value={data.pulse.collected_today_mad} /></>}
+                />
+              </div>
+            </div>
 
-function ForecastView() {
-  const [data, setData] = useState<Forecast | null>(null);
-  const [open, setOpen] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    admin
-      .forecast()
-      .then((result) => !cancelled && setData(result))
-      .catch((error) => error instanceof NotSignedIn && bounceToSignIn());
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!data) return <div className="h-64 rounded-3xl bg-clay-soft/50 animate-pulse" aria-hidden />;
-
-  const selling = data.items.filter((row) => row.expected > 0);
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div className="grid grid-cols-2 gap-3">
-        <Stat label="Pieces expected" value={roughly(data.expected_units)} note="over 7 days" />
-        <Stat label="If it lands" value={money(data.expected_revenue, "en")} />
-      </div>
-
-      {data.make_now.length > 0 ? (
-        <section className="card p-5 shadow-soft border border-warn/40">
-          <h2 className="text-[16px] font-semibold">Make these now</h2>
-          <p className="mt-1 text-[13px] text-ink-soft leading-relaxed">
-            The shelf will not cover next week at the top of the range.
-          </p>
-          <ul className="mt-3 flex flex-col gap-2.5">
-            {data.make_now.map((row) => (
-              <li key={row.product_id} className="flex items-baseline justify-between gap-3">
-                <span className="text-[15px] font-medium">{row.title}</span>
-                <span className="stamp text-[15px] font-semibold tabular-nums text-warn">+{row.make}</span>
-              </li>
-            ))}
-          </ul>
-        </section>
-      ) : null}
-
-      <section className="card p-5 shadow-soft">
-        <h2 className="text-[16px] font-semibold">Piece by piece</h2>
-        <p className="mt-1 text-[13px] text-ink-soft leading-relaxed">
-          From the last {data.based_on_days} days, with recent days weighted far more. Tap a row for why.
-        </p>
-        <ul className="mt-4 flex flex-col gap-1">
-          {selling.length === 0 ? (
-            <p className="text-[14px] text-ink-soft">Not enough has sold yet to say.</p>
-          ) : (
-            selling.map((row) => (
-              <ForecastRowItem
-                key={row.product_id}
-                row={row}
-                open={open === row.product_id}
-                onToggle={() => setOpen(open === row.product_id ? null : row.product_id)}
+            {/* The number that decides whether the business works. */}
+            <Card>
+              <CardHead
+                title={<span className="console-row" style={{ gap: 6 }}>Refusal rate {help("refusal_rate")}</span>}
+                sub={`${data.refusals.refused} of ${data.refusals.delivered_or_attempted} parcels came back`}
               />
-            ))
-          )}
-        </ul>
-      </section>
+              <Meter
+                value={data.refusals.refusal_rate_pct}
+                target={data.refusals.target_pct}
+                denominator={data.refusals.delivered_or_attempted}
+                lowerIsBetter
+              />
+              {openHelp === "refusal_rate" ? <p className="console-note">{data.explain.refusal_rate}</p> : null}
+              {data.refusals.worst_cities.length > 0 ? (
+                <>
+                  <p className="console-caps">Where they come back</p>
+                  <RankedBars
+                    tone="status"
+                    rows={[...data.refusals.worst_cities]
+                      .sort((a, b) => b.refused / Math.max(b.attempted, 1) - a.refused / Math.max(a.attempted, 1))
+                      .slice(0, 6)
+                      .map((city) => ({
+                        label: city.city,
+                        value: city.attempted ? (city.refused / city.attempted) * 100 : 0,
+                        sub: `${city.refused} of ${city.attempted}`,
+                        tone: "danger" as const,
+                      }))}
+                    formatValue={(value) => <span>{value.toFixed(0)}%</span>}
+                    max={100}
+                  />
+                </>
+              ) : null}
+            </Card>
 
-      <p className="px-1 text-[12.5px] text-ink-soft leading-relaxed">
-        This is a calculation from the recent rate of selling, not a promise. The range is the part that matters.
-      </p>
-    </div>
-  );
-}
+            {/* The period's money and movement. */}
+            <div className="console-stat-grid cols-4">
+              <Stat
+                label={`Collected · ${query.short}`}
+                value={<Money value={data.revenue.collected_mad} />}
+                delta={{ value: data.revenue.change_mad, suffix: " MAD" }}
+                caption={`${data.revenue.orders_delivered} delivered`}
+              >
+                {/* Only visitors had a daily series, so the shape of the money
+                    itself — the thing an owner actually watches — was invisible. */}
+                <Sparkline
+                  points={(data.revenue.daily ?? []).map((day) => ({ date: day.date, value: day.mad }))}
+                  label={`Revenue across ${query.label}`}
+                />
+              </Stat>
+              <Stat label="Average order" value={<Money value={data.revenue.average_order_mad} />} help={help("average_order")} />
+              <Stat
+                label="Visitors → orders"
+                // The server computes this and the screen used to compute it
+                // again from two other fields. Two sources of one truth is one
+                // rounding rule away from the Board contradicting the copilot.
+                value={
+                  data.conversion.visitors ? (
+                    <span className="console-num">{data.conversion.visitor_to_order_pct}%</span>
+                  ) : (
+                    <span>—</span>
+                  )
+                }
+                caption={`${data.conversion.orders_placed} of ${data.conversion.visitors}`}
+                help={help("visitor_to_order")}
+              />
+              <Stat
+                label="Returning"
+                value={
+                  data.audience.visitors ? <span className="console-num">{data.audience.returning_pct}%</span> : <span>—</span>
+                }
+                caption={`${data.audience.actions_per_visitor} actions each`}
+              />
+            </div>
 
-function ForecastRowItem({ row, open, onToggle }: { row: ForecastRow; open: boolean; onToggle: () => void }) {
-  const [low, high] = row.range;
-  return (
-    <li className="border-t border-sand first:border-t-0">
-      <button type="button" onClick={onToggle} aria-expanded={open} className="w-full py-3 text-start flex items-baseline justify-between gap-3">
-        <span className="flex-1">
-          <span className="block text-[15px] font-medium">{row.title}</span>
-          <span className="block mt-0.5 text-[12.5px] text-ink-soft">
-            {row.kind === "workshop" ? "made to order" : `${row.on_the_shelf} on the shelf`}
-          </span>
-        </span>
-        <span className="text-end">
-          <span className="block stamp text-[15px] font-semibold tabular-nums">{roughly(row.expected)}</span>
-          <span className="block stamp text-[12px] tabular-nums text-ink-soft">
-            {low}–{high}
-          </span>
-        </span>
-      </button>
-      {open ? (
-        <div className="pb-3 flex flex-col gap-1.5">
-          <p className="text-[13px] text-ink-soft leading-relaxed">{row.because}</p>
-          <Confidence level={row.confidence} lang="en" />
-        </div>
+            {openHelp && openHelp !== "refusal_rate" ? <p className="console-note">{data.explain[openHelp]}</p> : null}
+
+            <div className="console-grid console-grid-2">
+              <Card>
+                <CardHead title="Visitors" sub={`${data.audience.visitors} people over ${query.label}`} />
+                {data.audience.daily.length > 1 ? (
+                  <TrendArea points={data.audience.daily.map((day) => ({ date: day.date, value: day.visitors }))} label="Visitors" />
+                ) : (
+                  <EmptyState title="Not enough days yet." hint={`Nothing was recorded across ${query.label}.`} />
+                )}
+              </Card>
+
+              <Card>
+                <CardHead title="Where people stop" sub="The biggest drop is the sentence worth acting on." />
+                {data.funnel.steps.length ? (
+                  <Funnel steps={data.funnel.steps} />
+                ) : (
+                  <EmptyState title="Nobody has visited yet." hint={`Nothing was recorded across ${query.label}.`} />
+                )}
+              </Card>
+            </div>
+          </div>
+        </Stale>
       ) : null}
-    </li>
+    </>
   );
-}
-
-function roughly(expected: number): string {
-  if (expected >= 1.5) return String(Math.round(expected));
-  if (expected >= 0.7) return "about 1";
-  if (expected >= 0.35) return "1 per 2 weeks";
-  if (expected > 0) return "less often";
-  return "none expected";
 }

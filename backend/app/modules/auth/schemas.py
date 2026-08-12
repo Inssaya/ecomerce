@@ -23,6 +23,11 @@ class RegisterRequest(_PasswordRule):
     password: str
     full_name: str | None = None
     phone: str | None = Field(default=None, max_length=30)
+    #: Asked once, at sign-up, so checkout never asks again. Optional here
+    #: because an account is also a way to talk to the concierge, and somebody
+    #: who only wants that should not be made to type a street.
+    address_line1: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
     lang: str = "en"
 
 
@@ -54,6 +59,8 @@ class UserResponse(BaseModel):
     email: str
     full_name: str | None
     phone: str | None
+    address_line1: str | None = None
+    city: str | None = None
     role: UserRole
     lang: str
     avatar_url: str | None = None
@@ -65,6 +72,8 @@ class UserResponse(BaseModel):
 class UserUpdate(BaseModel):
     full_name: str | None = None
     phone: str | None = Field(default=None, max_length=30)
+    address_line1: str | None = Field(default=None, max_length=255)
+    city: str | None = Field(default=None, max_length=120)
     lang: str | None = None
 
     @field_validator("lang")

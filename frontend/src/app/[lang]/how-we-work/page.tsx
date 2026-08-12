@@ -129,33 +129,19 @@ export default async function HowWeWork({ params }: { params: Promise<{ lang: st
           dangerouslySetInnerHTML={{ __html: jsonLd(schema(lang)) }}
         />
 
-        <header>
-          <p className="text-[15px] font-medium text-ink-soft">
-            {ar ? "أهلاً بك في متجرنا." : "Hey — welcome to our shop."}
-          </p>
-          <h1 className="mt-2 max-w-[16ch] text-[clamp(36px,5.6vw,68px)] leading-[1.0] font-semibold tracking-[-0.045em]">
-            {ar ? "ورشة، لا متجر." : "A workshop, not a shop."}
-          </h1>
-          <p className="mt-5 max-w-[52ch] text-[17px] leading-[1.6] text-ink-soft">
-            {ar
-              ? "لا نعيد بيع ما صنعه غيرنا. كل قطعة هنا خرجت من ورشة صغيرة، لا من مصنع، ونصل بها إليك أينما كنت في المغرب."
-              : "We don't resell what someone else made. Every piece here came out of a small workshop, not a factory, and we get it to you anywhere in the country."}
-          </p>
+        {/* No banner. The greeting, the "a workshop, not a shop" headline and
+            the two buttons under it were a screenful of the page repeating what
+            the intro had just said out loud, above a set of links that appear
+            again at the foot of the page. The page starts on the photographs.
 
-          <div className="mt-7 flex flex-wrap gap-2">
-            <Link href={`/${lang}`} className="btn-primary">
-              {ar ? "شاهد الرف" : "See the shelf"}
-            </Link>
-            <Link href={`/${lang}/ask`} className="btn-quiet">
-              {ar ? "اطلب قطعة" : "Ask for a piece"}
-            </Link>
-          </div>
-        </header>
+            The `h1` survives as a hidden one. A page still needs exactly one —
+            it is not decoration, it is what a screen reader announces and what
+            an outline tool reads as the name of the page — but here it has
+            nothing to say that the sections below do not say better. */}
+        <h1 className="sr-only">{ar ? "من نحن" : "About us"}</h1>
 
-        {/* What we make, proven by the shelf itself rather than a hand-typed
-            list — if a line has no photograph yet it still gets its name. */}
         {lines.length > 0 ? (
-          <section className="mt-16 sm:mt-20">
+          <section>
             <h2 className="text-[13px] font-medium uppercase tracking-widest text-ink-soft">
               {ar ? "ماذا نصنع" : "What we make"}
             </h2>
@@ -238,8 +224,8 @@ export default async function HowWeWork({ params }: { params: Promise<{ lang: st
           </h2>
           <p className="mt-4 max-w-[54ch] text-[16.5px] leading-[1.65] text-ink-soft">
             {ar
-              ? "تُدفع بالدرهم، عند وصول الطرد، في أي مدينة بالمغرب. لا شيء يُدفع مقدماً لما هو جاهز على الرف — الثمن والتاريخ مذكوران على الصفحة قبل أن تطلب. والتوصيل نفسه مجاني إن تجاوز طلبك 500 درهم."
-              : "Paid in dirhams, when it arrives, anywhere in Morocco. Nothing upfront for what's already on the shelf — the price and the date are both on the page before you order. Delivery itself is free once your order passes 500 DH."}
+              ? "تُدفع بالدرهم، عند وصول الطرد، في أي مدينة بالمغرب. لا شيء يُدفع مقدماً لما هو جاهز على الرف — الثمن والتاريخ مذكوران على الصفحة قبل أن تطلب. والتوصيل مجاني، على كل شيء، مهما كان المبلغ."
+              : "Paid in dirhams, when it arrives, anywhere in Morocco. Nothing upfront for what's already on the shelf — the price and the date are both on the page before you order. Delivery is free, on everything, whatever the order comes to."}
           </p>
           <div className="mt-7 flex flex-wrap gap-2">
             <Link href={`/${lang}`} className="btn-primary">

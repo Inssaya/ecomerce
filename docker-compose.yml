@@ -99,8 +99,10 @@ services:
       LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
       LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
-      DELIVERY_FEE: ${DELIVERY_FEE:-30}
-      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-500}
+      # Delivery is free on everything. A threshold of zero is cleared by every
+      # order, so nothing is ever charged whatever a city's own override says.
+      DELIVERY_FEE: ${DELIVERY_FEE:-0}
+      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-0}
     depends_on:
       postgres:
         condition: service_healthy

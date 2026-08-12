@@ -83,7 +83,14 @@ async def delivered_to(db: AsyncSession, name: str) -> dict:
 
 
 def fee_for(place: City) -> float:
-    """What delivery costs there — the city's own price, or the shop's."""
+    """What delivery costs there — the city's own price, or the shop's.
+
+    Zero while delivery is free everywhere, because a city override that is
+    printed on a page and never charged at the door is the same bug as two
+    hardcoded fees: the customer reads one number and hands over another.
+    """
+    if settings.delivery_is_free:
+        return 0.0
     return float(place.delivery_fee) if place.delivery_fee is not None else settings.delivery_fee
 
 
@@ -100,6 +107,8 @@ async def fee_for_name(db: AsyncSession, name: str | None) -> float:
     `fee_for`, the order charged the flat setting, and the override the City
     model documents was honoured on the page and ignored by the till.
     """
+    if settings.delivery_is_free:
+        return 0.0
     if not name or not name.strip():
         return settings.delivery_fee
     place = await db.scalar(

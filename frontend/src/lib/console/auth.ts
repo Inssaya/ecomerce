@@ -1,12 +1,10 @@
 /**
  * The owner's session.
  *
- * Ported from the deleted `lib/admin.ts` — the design was already correct and
- * only needed to move: the access token lives in sessionStorage, not a cookie,
- * because this is one person on their own phone and a token that dies with the
- * tab is one less thing to leak. It expires after an hour, so the refresh
- * token sits beside it and is spent automatically — otherwise the panel would
- * throw the owner back to the sign-in form mid-quote, and the day is long.
+ * One person, one device at a time — the access token lives in
+ * sessionStorage, not a cookie, so it dies with the tab. It expires after an
+ * hour; the refresh token sits beside it and is spent automatically so the
+ * console never throws the owner back to sign-in mid-task.
  */
 const TOKEN_KEY = "mostyle_owner_token";
 const REFRESH_KEY = "mostyle_owner_refresh";
@@ -31,9 +29,8 @@ function forgetSession(): void {
   if (typeof window !== "undefined") sessionStorage.removeItem(REFRESH_KEY);
 }
 
-/** One renewal at a time. The panel fires several requests at once when a tab
- *  opens, and without this they would each spend a refresh token — which the
- *  server rotates, so all but one of them would be spending a dead one. */
+/** One renewal at a time. Several requests can fire on mount, and the server
+ *  rotates refresh tokens — without this, all but one would spend a dead one. */
 let renewing: Promise<boolean> | null = null;
 
 function renew(): Promise<boolean> {
@@ -60,17 +57,19 @@ function renew(): Promise<boolean> {
 
 export class NotSignedIn extends Error {}
 
+export const SIGNED_OUT_EVENT = "mostyle:signed-out";
+
 /**
- * Thrown back to the sign-in form from wherever a page happened to be.
+ * The session died — say so without destroying what the owner was doing.
  *
- * `call()` already clears the stored tokens before throwing `NotSignedIn`, so
- * a reload is enough — `AdminShell`'s own mount check finds no token and
- * shows the sign-in form. Simple, and correct for a panel one person opens a
- * few times a day; a page-level event bus would be solving a problem this
- * screen does not have.
+ * This used to call `window.location.reload()`. That threw away every
+ * unsaved edit on the screen: a half-written quote, an edited description,
+ * a filled-in batch count. The token is gone either way, but the work is
+ * not, so the shell overlays sign-in on top of the live page and takes it
+ * away again once the session is back. Nothing unmounts.
  */
 export function bounceToSignIn(): void {
-  if (typeof window !== "undefined") window.location.reload();
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(SIGNED_OUT_EVENT));
 }
 
 /** What the server said went wrong, in words a person can act on. */
@@ -85,11 +84,7 @@ async function problemFrom(response: Response): Promise<string> {
   return `Request failed (${response.status})`;
 }
 
-export async function call<T>(
-  path: string,
-  init: RequestInit = {},
-  mayRenew = true,
-): Promise<T> {
+export async function call<T>(path: string, init: RequestInit = {}, mayRenew = true): Promise<T> {
   const token = ownerToken();
   if (!token) throw new NotSignedIn();
 
@@ -102,8 +97,7 @@ export async function call<T>(
   const response = await fetch(`/api${path}${separator}lang=en`, { ...init, headers });
   if (response.status === 401 || response.status === 403) {
     // 401 is an expired hour, not a refusal — try the refresh token once and
-    // replay. 403 is the server saying no to *this* account, and no amount of
-    // fresh tokens changes that.
+    // replay. 403 is the server saying no to *this* account, unrecoverable.
     if (mayRenew && response.status === 401 && (await renew())) {
       return call<T>(path, init, false);
     }
@@ -112,6 +106,24 @@ export async function call<T>(
   }
   if (!response.ok) throw new Error(await problemFrom(response));
   return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+}
+
+/** For endpoints that take a multipart body (photo/icon uploads) — `call()`
+ *  assumes JSON, so uploads bypass it but share its token/error handling. */
+export async function callUpload<T>(path: string, body: FormData): Promise<T> {
+  const token = ownerToken();
+  if (!token) throw new NotSignedIn();
+  const response = await fetch(`/api${path}${path.includes("?") ? "&" : "?"}lang=en`, {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+    body,
+  });
+  if (response.status === 401 || response.status === 403) {
+    forgetSession();
+    throw new NotSignedIn();
+  }
+  if (!response.ok) throw new Error(await problemFrom(response));
+  return response.json() as Promise<T>;
 }
 
 export async function signIn(email: string, password: string): Promise<void> {
@@ -126,16 +138,9 @@ export async function signIn(email: string, password: string): Promise<void> {
   keepSession(body);
 }
 
-/**
- * Leave properly.
- *
- * Clearing sessionStorage only removes the tokens from this browser; the
- * refresh token stays valid on the server for thirty days, so anything that
- * got a copy of it could still mint access tokens long after the owner
- * thought they had signed out. `/auth/logout` revokes it. The local clear
- * happens first and unconditionally: whatever the network says, pressing sign
- * out signs you out of this phone.
- */
+/** Clearing sessionStorage only signs this browser out; the refresh token
+ *  stays valid on the server for thirty days, so `/auth/logout` revokes it.
+ *  The local clear happens first and unconditionally regardless of the network. */
 export async function signOut(): Promise<void> {
   const token = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
   forgetSession();

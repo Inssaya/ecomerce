@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 
+import { DeliveryDetails } from "@/components/DeliveryDetails";
 import { patchSession, signOut, useSession } from "@/lib/session";
 import { type Lang, isLang, money, statusLabel, translator } from "@/lib/i18n";
 
@@ -179,6 +180,13 @@ export default function ProfilePage({ params }: { params: Promise<{ lang: string
         <Link href={`/${lang}`} className="block">
           <Stat icon={<PlusIcon />} label={t("browse")} value="" action />
         </Link>
+      </div>
+
+      {/* High up, above the order history, because it is the one thing on this
+          page that changes what happens next — a stale address here is a parcel
+          the courier cannot hand over. */}
+      <div className="mt-8">
+        <DeliveryDetails lang={lang} />
       </div>
 
       {open.length > 0 ? (

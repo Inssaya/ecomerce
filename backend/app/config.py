@@ -59,8 +59,26 @@ class Settings(BaseSettings):
 
     # Cash on delivery is the only payment method; Morocco, MAD.
     currency: str = "MAD"
-    delivery_fee: float = 30.0
-    free_delivery_over: float = 500.0
+    #: Delivery is free on everything. Both numbers are kept as settings rather
+    #: than deleted because the shop may want to charge again one day, and a
+    #: threshold is a cheaper thing to change than a code path — but while
+    #: `free_delivery_over` is zero, every order clears it and nobody is ever
+    #: charged for delivery, whatever a city's own override says.
+    delivery_fee: float = 0.0
+    free_delivery_over: float = 0.0
+
+    @property
+    def delivery_is_free(self) -> bool:
+        """True while every possible order clears the free-delivery threshold.
+
+        The per-city override exists for places that genuinely cost more to
+        reach, and it is published on that city's page. Under a free-for-
+        everything policy it would be published and never charged — the page
+        saying 30 and the courier asking for nothing. One number, so it is
+        suppressed at the source rather than in each of the five places that
+        print it.
+        """
+        return self.free_delivery_over <= 0
 
     @property
     def is_production(self) -> bool:

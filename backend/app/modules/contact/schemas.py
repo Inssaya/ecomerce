@@ -34,5 +34,14 @@ class ContactMessageOut(BaseModel):
     message: str
     created_at: datetime
     read_at: datetime | None
+    archived_at: datetime | None = None
 
     model_config = {"from_attributes": True}
+
+
+class ContactMessagePatch(BaseModel):
+    """Filing a message away. Read state stays separate — a message can be
+    read and still sitting in the queue, or archived without ever being read
+    (which is what happens to spam)."""
+
+    archived: bool

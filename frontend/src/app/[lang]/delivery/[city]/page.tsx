@@ -129,12 +129,20 @@ export default async function CityLanding({
         <div className="card p-4 shadow-soft">
           <p className="text-[13px] text-ink-soft">{ar ? "التوصيل" : "Delivery"}</p>
           <p className="stamp mt-1 text-[22px] font-semibold tabular-nums">
-            {money(place.delivery_fee, lang)}
+            {place.free_delivery_over <= 0
+              ? ar
+                ? "مجاناً"
+                : "Free"
+              : money(place.delivery_fee, lang)}
           </p>
           <p className="mt-0.5 text-[12px] text-ink-soft">
-            {ar
-              ? `مجاناً فوق ${place.free_delivery_over}`
-              : `free over ${place.free_delivery_over}`}
+            {place.free_delivery_over <= 0
+              ? ar
+                ? "على كل شيء"
+                : "on everything"
+              : ar
+                ? `مجاناً فوق ${place.free_delivery_over}`
+                : `free over ${place.free_delivery_over}`}
           </p>
         </div>
       </section>

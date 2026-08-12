@@ -17,13 +17,14 @@ this is the function to rewrite, not the one to have over-optimised early.
 """
 from __future__ import annotations
 
+import re
 from collections import OrderedDict
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.core.errors import get_or_404
+from app.core.errors import get_or_404, not_found
 from app.models import Order, OrderStatus, Signal, SignalType, User
 from app.modules.admin.metrics import PAID_STATUSES, REFUSED_STATUSES
 
@@ -123,9 +124,21 @@ async def list_customers(db: AsyncSession, q: str | None = None) -> list[dict]:
     return out
 
 
+#: A customer's `id` is a real account UUID, or — for a guest — their phone
+#: number, because a guest has no row in `users` to be identified by.
+_UUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE)
+
+
 async def set_customer_active(db: AsyncSession, user_id: str, active: bool) -> User:
     """Ban or unban an account. Guests have none to flip — this only ever
-    touches `users`, never an order."""
+    touches `users`, never an order.
+
+    The identifier is checked before it reaches the query: a guest's "id" is a
+    phone number, and handing a phone number to a UUID column raises a database
+    error rather than a 404, so a mis-aimed call used to come back as a 500.
+    """
+    if not _UUID.match(user_id):
+        raise not_found("That customer checked out as a guest — there is no account to change")
     user = await get_or_404(db, User, user_id, detail="Customer not found")
     user.is_active = active
     await db.commit()

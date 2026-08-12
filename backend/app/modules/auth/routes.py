@@ -67,6 +67,8 @@ async def register(body: RegisterRequest, db: DbSession, _: RegisterLimit) -> To
         password_hash=hash_password(body.password),
         full_name=body.full_name,
         phone=body.phone,
+        address_line1=body.address_line1,
+        city=body.city,
         lang=body.lang if body.lang in ("en", "ar") else "en",
         role=UserRole.customer,
     )

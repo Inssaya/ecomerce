@@ -1,12 +1,13 @@
 """Tell us what you need, and follow what happens to it."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
-from app.core.errors import get_or_404
-from app.core.limits import RequestLimit
+from app.core.errors import bad_request, get_or_404
+from app.core.limits import ReferenceUploadLimit, RequestLimit
+from app.core.storage import sniff_image, upload_image
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging
 from app.models import Order
 from app.models.requests import CustomRequest, RequestStatus
@@ -21,6 +22,11 @@ from app.modules.requests.schemas import (
 )
 
 router = APIRouter(tags=["requests"])
+
+#: A photo of a sketch off a phone, not a print master. Smaller than the 12 MB
+#: catalogue limit because nothing here is ever printed — it is looked at once,
+#: by the person who will make the thing.
+MAX_REFERENCE_BYTES = 8 * 1024 * 1024
 
 
 class Approval(BaseModel):
@@ -55,6 +61,37 @@ async def create_request(
     """
     request = await service.raise_request(db, body, user)
     return await _out(db, request, lang)
+
+
+@router.post("/requests/references", status_code=status.HTTP_201_CREATED)
+async def upload_reference(file: UploadFile, _: ReferenceUploadLimit) -> dict[str, str]:
+    """A photo of the thing they want, uploaded before the request is sent.
+
+    `CustomRequest.references` has always existed and the form has always shown
+    an "attach a sketch" box, but there was no endpoint behind it: the files
+    were read into browser memory and their *filenames* were pasted into the
+    description. The workshop received "Files: IMG_4471.jpg" and no image, and
+    the customer believed they had sent one — which is the worst version of
+    this, because a picture is usually the whole brief.
+
+    Unauthenticated, because asking for a price must not require an account.
+    That makes it the only endpoint on the shop a stranger can write bytes to,
+    so it is rate limited, size capped, and the format is decided from the
+    file's own first bytes rather than from the content type the client typed —
+    otherwise anything at all can be labelled `image/jpeg` and served back from
+    our own domain.
+    """
+    data = await file.read()
+    if not data:
+        raise bad_request("That file is empty")
+    if len(data) > MAX_REFERENCE_BYTES:
+        raise HTTPException(status_code=413, detail="That photo is larger than 8 MB")
+
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
+
+    return {"url": await upload_image(data, content_type, prefix="requests")}
 
 
 @router.get("/requests/track/{tracking_token}", response_model=RequestOut)
