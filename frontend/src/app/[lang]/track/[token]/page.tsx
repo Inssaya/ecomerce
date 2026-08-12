@@ -41,6 +41,14 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
         {statusLabel(lang, "orderStatus", order.status)}
       </p>
 
+      {/* A real date, not "soon" — BRAND.md §8. Only while it is still
+          meaningful: once the order is delivered or has gone wrong in some
+          way, a countdown to a promise that already happened or no longer
+          applies reads as a mistake, not as information. */}
+      {!wentWrong && order.status !== "delivered" && order.promised_for ? (
+        <PromiseLine lang={lang} promisedFor={order.promised_for} />
+      ) : null}
+
       {wentWrong ? null : (
         <ol className="mt-6 space-y-0">
           {STEPS.map((step, index) => {
@@ -96,5 +104,37 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
         </a>
       ) : null}
     </div>
+  );
+}
+
+function PromiseLine({ lang, promisedFor }: { lang: Lang; promisedFor: string }) {
+  const days = Math.ceil((new Date(promisedFor).getTime() - Date.now()) / 86_400_000);
+  const date = new Date(promisedFor).toLocaleDateString(lang === "ar" ? "ar" : "en-GB", {
+    day: "numeric",
+    month: "short",
+  });
+  const left =
+    days > 1
+      ? lang === "ar"
+        ? `بعد ${days} أيام`
+        : `${days} days left`
+      : days === 1
+        ? lang === "ar"
+          ? "غداً"
+          : "tomorrow"
+        : days === 0
+          ? lang === "ar"
+            ? "اليوم"
+            : "today"
+          : lang === "ar"
+            ? "تأخر قليلاً"
+            : "running a little late";
+
+  return (
+    <p className="mt-1.5 text-[14px] text-ink-soft">
+      {lang === "ar" ? `تصل في ${date}` : `Arrives by ${date}`}
+      <span aria-hidden> · </span>
+      {left}
+    </p>
   );
 }

@@ -546,6 +546,7 @@ export function DataTable<Row>({
   onSort,
   empty,
   minWidth = 640,
+  rowClassName,
 }: {
   columns: Column<Row>[];
   rows: Row[];
@@ -556,6 +557,9 @@ export function DataTable<Row>({
   onSort?: (key: string) => void;
   empty?: ReactNode;
   minWidth?: number;
+  /** An extra class per row — e.g. `.console-row-cancelled` on a cancelled
+   *  order. Composed alongside `clickable`/`selected`, never replacing them. */
+  rowClassName?: (row: Row) => string | undefined;
 }) {
   if (rows.length === 0 && empty) return <>{empty}</>;
   return (
@@ -599,7 +603,13 @@ export function DataTable<Row>({
             return (
               <tr
                 key={key}
-                className={[onRowClick ? "clickable" : "", selectedKey === key ? "selected" : ""].filter(Boolean).join(" ")}
+                className={[
+                  onRowClick ? "clickable" : "",
+                  selectedKey === key ? "selected" : "",
+                  rowClassName?.(row) ?? "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
                 {columns.map((column) => (

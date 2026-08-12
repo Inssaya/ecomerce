@@ -10,10 +10,10 @@ Ported from order-service. Two things changed in the move:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -89,6 +89,17 @@ class Order(Base, TimestampMixin):
         Enum(OrderStatus, name="order_status"), default=OrderStatus.placed, nullable=False, index=True
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    #: The date the countdown on the order page counts to. Defaulted at
+    #: checkout from the items' delivery promise (see `orders/service.py`),
+    #: and admin-editable afterwards — a promise made on day one sometimes
+    #: has to move, and the customer should see the number that is still true.
+    promised_for: Mapped[date | None] = mapped_column(Date, nullable=True)
+    #: Soft-delete. An order is never actually deleted — it is an accounting
+    #: record — so "Delete" in the console archives it out of the default
+    #: view. Never filtered on by the customer-facing tracking endpoints: a
+    #: hidden order still has to track for the person waiting on it.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     items: Mapped[list[OrderItem]] = relationship(
         back_populates="order", cascade="all, delete-orphan", lazy="selectin"

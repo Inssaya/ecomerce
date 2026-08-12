@@ -190,6 +190,14 @@ export interface OrderEvent {
   actor: string;
 }
 
+/** What the buyer picked, frozen at checkout. */
+export interface OrderItemSelection {
+  group: "measure" | "color" | "material";
+  name: string | null;
+  value: string;
+  hex: string | null;
+}
+
 export interface AdminOrder {
   id: string;
   reference: string;
@@ -208,6 +216,13 @@ export interface AdminOrder {
     unit_price: number;
     subtotal: number;
     image_url: string | null;
+    /** Resolved from the product; null once it is archived or gone. */
+    category: string | null;
+    subcategory: string | null;
+    /** The buyer's own measures/colours/materials, if any. */
+    selection: OrderItemSelection[] | null;
+    /** Their name on the piece, when personalization was on. */
+    personalization: string | null;
   }[];
   events: OrderEvent[];
   subtotal: number;
@@ -217,6 +232,12 @@ export interface AdminOrder {
   note: string | null;
   created_at: string;
   whatsapp_url: string;
+  /** The date the countdown counts to. Admin-editable. */
+  promised_for: string | null;
+  /** Guest vs Verified — derived, never stored. */
+  has_account: boolean;
+  /** Archived out of the default queue. Recoverable from the Hidden view. */
+  hidden: boolean;
 }
 
 /**
@@ -266,6 +287,8 @@ export interface AdminRequest {
   /** The customer's own photos — the entire basis for pricing the job. */
   references: string[];
   category_id: string | null;
+  /** Resolved from `category_id`, so the table has a real column. */
+  category_name: string | null;
   source: string | null;
   status: string;
   quote_price: number | null;
@@ -276,6 +299,8 @@ export interface AdminRequest {
   events: { status: string; note: string | null; created_at: string; actor: string }[];
   created_at: string;
   whatsapp_url: string;
+  /** Archived out of the default queue. Recoverable from the Hidden view. */
+  hidden: boolean;
 }
 
 export interface ContactMessage {

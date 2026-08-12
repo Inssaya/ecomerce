@@ -152,6 +152,9 @@ export interface OrderView {
   status: string;
   created_at: string;
   whatsapp_url: string;
+  /** The date the countdown counts to, set by the workshop and editable
+   *  after the fact if a promise has to move. */
+  promised_for: string | null;
 }
 
 export interface RequestView {

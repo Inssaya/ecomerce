@@ -1,6 +1,8 @@
 """Tell us what you need, and follow what happens to it."""
 from __future__ import annotations
 
+from datetime import date, timedelta
+
 from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -9,7 +11,7 @@ from app.core.errors import bad_request, get_or_404
 from app.core.limits import ReferenceUploadLimit, RequestLimit
 from app.core.storage import sniff_image, upload_image
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging
-from app.models import Order
+from app.models import Category, Order
 from app.models.requests import CustomRequest, RequestStatus
 from app.modules.notify.service import whatsapp_url
 from app.modules.orders.schemas import Address
@@ -37,17 +39,43 @@ class Approval(BaseModel):
     note: str | None = Field(default=None, max_length=500)
 
 
-async def _out(db: DbSession, request: CustomRequest, lang: str) -> RequestOut:
+async def _out(
+    db: DbSession,
+    request: CustomRequest,
+    lang: str,
+    *,
+    category_names: dict[str, str] | None = None,
+) -> RequestOut:
     response = RequestOut.model_validate(request, from_attributes=True)
     response.quote_note = (
         request.quote_note_ar or request.quote_note_en
     ) if lang == "ar" else request.quote_note_en
     response.whatsapp_url = whatsapp_url(request)
+    response.hidden = request.hidden_at is not None
+    if request.category_id:
+        response.category_name = (
+            category_names.get(request.category_id)
+            if category_names is not None
+            else await db.scalar(select(Category.name_en).where(Category.id == request.category_id))
+        )
     if request.order_id:
         response.order_reference = await db.scalar(
             select(Order.reference).where(Order.id == request.order_id)
         )
     return response
+
+
+async def _out_many(db: DbSession, requests: list[CustomRequest], lang: str) -> list[RequestOut]:
+    """A page of requests, with every category name resolved in one query
+    rather than one per row."""
+    category_ids = {request.category_id for request in requests if request.category_id}
+    names: dict[str, str] = {}
+    if category_ids:
+        rows = await db.execute(
+            select(Category.id, Category.name_en).where(Category.id.in_(category_ids))
+        )
+        names = dict(rows.all())
+    return [await _out(db, request, lang, category_names=names) for request in requests]
 
 
 @router.post("/requests", response_model=RequestOut, status_code=status.HTTP_201_CREATED)
@@ -151,14 +179,28 @@ async def list_requests(
     paging: Paging,
     lang: Lang,
     status_filter: RequestStatus | None = Query(default=None, alias="status"),
+    category_id: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    hidden: bool = Query(default=False, description="Show the archived view instead of the live one"),
 ) -> list[RequestOut]:
     query = select(CustomRequest)
+    if hidden:
+        query = query.where(CustomRequest.hidden_at.is_not(None))
+    else:
+        query = query.where(CustomRequest.hidden_at.is_(None))
     if status_filter is not None:
         query = query.where(CustomRequest.status == status_filter)
+    if category_id:
+        query = query.where(CustomRequest.category_id == category_id)
+    if date_from:
+        query = query.where(CustomRequest.created_at >= date_from)
+    if date_to:
+        query = query.where(CustomRequest.created_at < date_to + timedelta(days=1))
     rows = await db.scalars(
         query.order_by(CustomRequest.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
-    return [await _out(db, request, lang) for request in rows.unique()]
+    return await _out_many(db, list(rows.unique()), lang)
 
 
 @router.get("/admin/requests/{reference}", response_model=RequestOut)
@@ -190,4 +232,24 @@ async def move_request(
         db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
     )
     request = await service.change_status(db, request, body.status, body.note, actor="workshop")
+    return await _out(db, request, lang)
+
+
+@router.post("/admin/requests/{reference}/hide", response_model=RequestOut)
+async def hide_request(reference: str, db: DbSession, owner: Owner, lang: Lang) -> RequestOut:
+    """"Delete", in a shop where every lead is worth keeping: it leaves the
+    working queue and stays reachable from the Hidden view."""
+    request = await get_or_404(
+        db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
+    )
+    request = await service.hide_request(db, request)
+    return await _out(db, request, lang)
+
+
+@router.post("/admin/requests/{reference}/unhide", response_model=RequestOut)
+async def unhide_request(reference: str, db: DbSession, owner: Owner, lang: Lang) -> RequestOut:
+    request = await get_or_404(
+        db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
+    )
+    request = await service.unhide_request(db, request)
     return await _out(db, request, lang)

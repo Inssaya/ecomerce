@@ -7,7 +7,7 @@ exist to be collected at the door.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -172,4 +172,23 @@ async def change_status(
     await db.commit()
     await db.refresh(request)
     await notify_request_status(request)
+    return request
+
+
+async def hide_request(db: AsyncSession, request: CustomRequest) -> CustomRequest:
+    """Archive a lead out of the console's default view. Reversible — a
+    request that looked like nothing today may not be nothing next month,
+    which is the same reasoning contact-message archiving already uses."""
+    if request.hidden_at is None:
+        request.hidden_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(request)
+    return request
+
+
+async def unhide_request(db: AsyncSession, request: CustomRequest) -> CustomRequest:
+    if request.hidden_at is not None:
+        request.hidden_at = None
+        await db.commit()
+        await db.refresh(request)
     return request

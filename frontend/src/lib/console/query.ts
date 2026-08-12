@@ -51,8 +51,10 @@ export function invalidate(...keys: string[]): void {
  */
 export const INVALIDATES: Record<string, string[]> = {
   orderMoved: ["orders", "today", "customers", "commissions"],
+  orderChanged: ["orders", "today"],
   quoteSent: ["commissions", "today"],
   commissionMoved: ["commissions", "today", "orders"],
+  commissionChanged: ["commissions", "today"],
   messageRead: ["messages", "today"],
   messageArchived: ["messages", "today"],
   pieceChanged: ["pieces", "today", "make"],

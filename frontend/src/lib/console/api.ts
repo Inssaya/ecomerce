@@ -62,19 +62,57 @@ export const api = {
     call<Analytics>(`/admin/analytics?${query(range)}${limit ? `&limit=${limit}` : ""}`),
 
   // ── Orders ─────────────────────────────────────────────────────────────────
-  orders: (status?: string, query?: string, size = 30) =>
-    call<AdminOrder[]>(
-      `/admin/orders?size=${size}${status ? `&status=${status}` : ""}${query ? `&q=${encodeURIComponent(query)}` : ""}`,
-    ),
+  /** The queue. `hidden: true` is the archive view, not "everything
+      including hidden" — see the server's own note on the same choice. */
+  orders: (
+    options: {
+      status?: string;
+      q?: string;
+      city?: string;
+      range?: Range | null;
+      hidden?: boolean;
+      size?: number;
+    } = {},
+  ) => {
+    const parts = [`size=${options.size ?? 30}`];
+    if (options.status) parts.push(`status=${options.status}`);
+    if (options.q) parts.push(`q=${encodeURIComponent(options.q)}`);
+    if (options.city) parts.push(`city=${encodeURIComponent(options.city)}`);
+    if (options.range) parts.push(`date_from=${options.range.from}&date_to=${options.range.to}`);
+    if (options.hidden) parts.push("hidden=true");
+    return call<AdminOrder[]>(`/admin/orders?${parts.join("&")}`);
+  },
+  orderCities: () => call<string[]>("/admin/orders/cities"),
   order: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}`),
   moveOrder: (reference: string, status: string, note?: string) =>
     call<AdminOrder>(`/admin/orders/${reference}/status`, {
       method: "POST",
       body: JSON.stringify({ status, note: note || null }),
     }),
+  setOrderPromise: (reference: string, promisedFor: string) =>
+    call<AdminOrder>(`/admin/orders/${reference}/promise`, {
+      method: "POST",
+      body: JSON.stringify({ promised_for: promisedFor }),
+    }),
+  hideOrder: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}/hide`, { method: "POST" }),
+  unhideOrder: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}/unhide`, { method: "POST" }),
 
-  requests: (status?: string, size = 30) =>
-    call<AdminRequest[]>(`/admin/requests?size=${size}${status ? `&status=${status}` : ""}`),
+  requests: (
+    options: {
+      status?: string;
+      categoryId?: string;
+      range?: Range | null;
+      hidden?: boolean;
+      size?: number;
+    } = {},
+  ) => {
+    const parts = [`size=${options.size ?? 30}`];
+    if (options.status) parts.push(`status=${options.status}`);
+    if (options.categoryId) parts.push(`category_id=${options.categoryId}`);
+    if (options.range) parts.push(`date_from=${options.range.from}&date_to=${options.range.to}`);
+    if (options.hidden) parts.push("hidden=true");
+    return call<AdminRequest[]>(`/admin/requests?${parts.join("&")}`);
+  },
   request: (reference: string) => call<AdminRequest>(`/admin/requests/${reference}`),
   quote: (reference: string, price: number, leadTimeDays: number, note = "") =>
     call<AdminRequest>(`/admin/requests/${reference}/quote`, {
@@ -86,6 +124,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ status, note: note || null }),
     }),
+  hideRequest: (reference: string) => call<AdminRequest>(`/admin/requests/${reference}/hide`, { method: "POST" }),
+  unhideRequest: (reference: string) => call<AdminRequest>(`/admin/requests/${reference}/unhide`, { method: "POST" }),
 
   messages: (options: { unread?: boolean; archived?: boolean } = {}) =>
     call<ContactMessage[]>(

@@ -624,3 +624,83 @@ Nothing was run against a database — M1 and now M2 are written, not applied.
 - No test was added; the plan puts the test pass with whoever runs Docker.
 
 **Next session starts at:** Session 3 (order door — table, countdown, invoice, custom modal).
+
+### Session 3 — the order door
+
+**Did — backend**
+- `models/orders.py`: `Order.promised_for` (Date, nullable) and `Order.hidden_at` (soft-delete).
+  `models/requests.py`: `CustomRequest.hidden_at`, same shape.
+- Migration `f6923ea18b24` on `e58b2d0f7a13`. Hand-written, up and down.
+- `orders/service.py`: `place_order` now defaults `promised_for` at checkout to the slowest
+  promise among the order's lines (mixed carts are only as fast as their slowest item), left
+  null when nothing on the order carries a promise. New `set_promise`, `hide_order`,
+  `unhide_order`. New `item_categories(db, orders)` batches category/sub-category resolution
+  for a whole page of orders in one query, reusing `catalog.service.category_names` so an
+  order line and the product table describe a category identically.
+- `orders/routes.py`: `GET /admin/orders` gains `city`, `date_from`/`date_to`, and `hidden`
+  (— `hidden=true` is the **archive view**, not "including hidden"; the two are never mixed).
+  New `GET /admin/orders/cities` (distinct, non-hidden), `POST .../promise`, `.../hide`,
+  `.../unhide`. `OrderResponse` gains `promised_for`, `has_account` (derived from
+  `customer_id`), `hidden`. `OrderItemResponse` gains `category`, `subcategory`, `selection`,
+  `personalization` (the last two ride straight off session 2's columns via
+  `from_attributes`). **`visitor_id` is not on the schema at all** — deliberately, per D — an
+  admin-internal join key, not something either side of the API needs to see on an order.
+  `/orders/track/{token}` and `/orders/find` are explicitly **not** filtered on `hidden_at` —
+  the docstring says why at the call site, not just in the plan.
+- `requests/schemas.py` + `requests/service.py` + `requests/routes.py`: `RequestOut` gains
+  `category_name` (batched via a new `_out_many`) and `hidden`. `GET /admin/requests` gains
+  `category_id`, date range, `hidden` with the same archive-view semantics as orders.
+  `hide_request` / `unhide_request` + their endpoints.
+
+**Did — frontend**
+- `primitives.tsx`: `DataTable` gains an additive `rowClassName?: (row) => string` prop —
+  what makes the cancelled-red row possible without a table rewrite.
+- `console.css`: `.console-row-cancelled` (the one exception D15 pre-approved), a
+  `.console-detail-list` key/value pattern for the Custom modal's Aptiv shape, and a
+  `.console-invoice-sheet` print block — always in the DOM, hidden on screen, and everything
+  else is hidden under `@media print` so `window.print()` needs no new tab and no
+  server-rendered PDF.
+- `console/types.ts` + `api.ts`: `orders()`/`requests()` moved from positional args to an
+  options object (matching session 1's `products()`); `orderCities`, `setOrderPromise`,
+  `hideOrder`/`unhideOrder`, `hideRequest`/`unhideRequest`. One existing call site
+  (`manage/customers` → order history) updated for the new signature.
+- **Orders** (`orders/page.tsx`, rewritten): `ConsoleHeader` (date range · status · city ·
+  archive toggle · search · `[Orders, Custom, Messages]`). `DataTable`: Date · Ref · Customer
+  · City · Product (all items consolidated into one cell) · Qty (summed) · Total · Delivery
+  countdown · Status · Actions. Every header sorts. Cancelled rows render in red via
+  `rowClassName`.
+- **`OrderPopup.tsx`** (new, replaces `OrderDrawer.tsx`): wide centred popup — Guest/Verified
+  pill from `has_account`, editable `promised_for` with a live "Nd left / overdue" readout,
+  per-item Category · Sub-category · selected attributes (as chips with swatches) ·
+  personalization shown **only when present**, the existing `SetStatus` moves and WhatsApp
+  link, an **Archive/Restore** action, and **Print invoice** (`window.print()` against the
+  always-present, screen-hidden `.console-invoice-sheet`).
+- **Custom** (`commissions/page.tsx`, rewritten): table Date · Ref · Customer · City ·
+  Category · Status · Actions; filters custom category (flat, from `api.categories()`) ·
+  status · date range · archive toggle. Modal in the Aptiv shape: pill row (status +
+  category) → `.console-detail-list` (phone, WhatsApp, email, desires, budget) → reference
+  photo grid → the existing `QuoteForm`, unchanged. No Approve button, per the original note —
+  that move is the customer's.
+- **Messages**: header only, moved to `ConsoleHeader` with **no `filters` prop** (hides zone
+  1, per spec); Unread/All/Archived moved into `trailing` as a view switch rather than a
+  filter, since the page is otherwise untouched.
+- `SectionSwitch.tsx` and `OrderDrawer.tsx` deleted — fully superseded, nothing left
+  referencing either.
+- Storefront: `OrderView.promised_for` on the tracking page renders "Arrives by · Nd left"
+  (or "today"/"tomorrow"/"running a little late"), shown only while the order is open and
+  actually has a promise — hidden once delivered or once something has gone wrong, where a
+  countdown would read as a mistake rather than information.
+
+**Verified:** `npx tsc --noEmit` clean; `npm run build` passes; backend byte-compiles; lint
+clean on every file touched. Nothing was run against a database — M1, M2 and now M3 are
+written, not applied.
+
+**Did not do**
+- Add `promised_for` to the order-status email copy. Genuinely optional per the plan; touching
+  `ORDER_COPY`'s format strings for every status was more churn than this session needed for a
+  line that is already visible on the tracking page the email links to.
+- Rename the `commissions` folder to `custom`. Per D14 — a route rename is churn across
+  imports and bookmarks for zero user-visible gain; the label is "Custom", the path stays.
+- Anything in session 4's scope (Customers page, Logs door, the fifth rail item).
+
+**Next session starts at:** Session 4 (Customers, Logs, `todo.md`).

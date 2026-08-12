@@ -114,6 +114,10 @@ class CustomRequest(Base, TimestampMixin):
         UUID(as_uuid=False), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True
     )
 
+    #: Soft-delete, same shape as `Order.hidden_at`: archived out of the
+    #: console's default view, recoverable, never actually gone.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     events: Mapped[list[RequestEvent]] = relationship(
         back_populates="request",
         cascade="all, delete-orphan",

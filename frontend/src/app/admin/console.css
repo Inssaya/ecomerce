@@ -999,6 +999,29 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
   gap: var(--space-5);
 }
 
+/* A cancelled order's whole row reads differently at a glance — the money
+   did not land, and a queue skimmed top to bottom should say so without a
+   second look at the status column. */
+.console-table tr.console-row-cancelled td { color: var(--danger); }
+.console-table tr.console-row-cancelled td .console-muted,
+.console-table tr.console-row-cancelled td .console-cell-sub { color: color-mix(in srgb, var(--danger) 70%, var(--ink3)); }
+
+/* Key/value pairs — the Aptiv intervention shape (customer desires, contact
+   channels) reused for the Custom modal. Not a table: these are a handful of
+   facts read top to bottom, not a dataset to scan a column of. */
+.console-detail-list { display: flex; flex-direction: column; }
+.console-detail-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-sm);
+}
+.console-detail-list > div:last-child { border-bottom: 0; }
+.console-detail-list dt { color: var(--ink3); flex: none; }
+.console-detail-list dd { text-align: end; }
+
 /* A colour, shown as a colour. */
 .console-swatch {
   width: 14px;
@@ -1081,4 +1104,35 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
 
 @media (prefers-reduced-motion: reduce) {
   .console *, .console *::before, .console *::after { animation: none !important; transition: none !important; }
+}
+
+/* ================================================================
+   Invoice — printed, not screened.
+   ================================================================
+   The sheet is always in the DOM (inside the order popup) but hidden
+   on screen; printing hides everything else instead. That is what
+   makes `window.print()` work with no new tab and no server-rendered
+   PDF — the browser is already printing the page, this just decides
+   what page that is. */
+.console-invoice-sheet { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .console-invoice-sheet, .console-invoice-sheet * { visibility: visible; }
+  .console-invoice-sheet {
+    display: block;
+    position: absolute;
+    inset: 0;
+    padding: 28px;
+    color: #000;
+    background: #fff;
+    font-family: var(--font-body);
+  }
+  .console-invoice-sheet h1 { font-size: 20px; margin: 0 0 4px; }
+  .console-invoice-sheet .console-invoice-meta { font-size: 12px; color: #444; margin-bottom: 18px; }
+  .console-invoice-sheet table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .console-invoice-sheet th, .console-invoice-sheet td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #ccc; }
+  .console-invoice-sheet th:last-child, .console-invoice-sheet td:last-child { text-align: right; }
+  .console-invoice-sheet .console-invoice-totals { margin-top: 14px; width: 260px; margin-inline-start: auto; font-size: 13px; }
+  .console-invoice-sheet .console-invoice-totals div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .console-invoice-sheet .console-invoice-totals .total { font-weight: 700; border-top: 1px solid #000; margin-top: 4px; padding-top: 6px; }
 }

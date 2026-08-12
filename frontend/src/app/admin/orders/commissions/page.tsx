@@ -1,13 +1,12 @@
 "use client";
 
 /**
- * Commissions — someone describing a thing that does not exist yet.
+ * Custom — someone describing a thing that does not exist yet.
  *
- * Two things were badly wrong here. The customer's reference photos were
- * fetched and thrown away, so the owner priced a bespoke job blind. And the
- * lifecycle was half-built: the list could filter to "In production" while
- * the only wired transition was "declined", so there was no button that could
- * reach the state you were looking at.
+ * The modal is in the Aptiv intervention shape: a pill row for status and
+ * category, a key/value list for the facts (desires, contact channels), the
+ * reference photos, then the quote form. Pricing a bespoke job blind — which
+ * is what happened before the photos were actually wired up — is guessing.
  *
  * Note what is *not* here: an Approve button. Approval is the customer
  * accepting the quote — the server records it with `actor="customer"` — so
@@ -17,26 +16,24 @@ import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
 
-import { api, NEXT_REQUEST_STATUSES, type AdminRequest } from "@/lib/console/api";
+import { api, NEXT_REQUEST_STATUSES, type AdminRequest, type Range } from "@/lib/console/api";
 import { useConsoleQuery, useMutation } from "@/lib/console/query";
 import { statusLabel } from "@/lib/i18n";
 
-import { SectionSwitch } from "../SectionSwitch";
 import {
   Age,
   Button,
   Card,
-  Clamp,
-  ControlStrip,
+  ConsoleHeader,
   DataTable,
-  Drawer,
+  DateRangeFilter,
   EmptyState,
   Field,
   LinkButton,
   LoadError,
   Money,
   Pill,
-  Segmented,
+  Popup,
   Skeleton,
   Stale,
   Text,
@@ -45,19 +42,35 @@ import {
 } from "../../ui/primitives";
 import { HEAVY_REQUEST_MOVES, requestTone } from "../../ui/status";
 
-const FILTERS = [
+const PAGES = [
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/orders/commissions", label: "Custom", active: true },
+  { href: "/admin/orders/messages", label: "Messages" },
+];
+
+const STATUSES = [
+  { value: "", label: "All statuses" },
   { value: "requested", label: "Needs a price" },
   { value: "quoted", label: "Waiting on them" },
   { value: "approved", label: "Agreed" },
   { value: "in_production", label: "Being made" },
-  { value: "", label: "All" },
-] as const;
+  { value: "ready", label: "Finished" },
+  { value: "delivered", label: "Delivered" },
+  { value: "declined", label: "Declined" },
+  { value: "withdrawn", label: "Withdrawn" },
+];
 
 export default function Commissions() {
   const router = useRouter();
   const params = useSearchParams();
-  const status = params.get("status") ?? "requested";
+  const confirm = useConfirm();
+  const { mutate, busy } = useMutation();
+
+  const status = params.get("status") ?? "";
   const open = params.get("open");
+  const [categoryId, setCategoryId] = useState("");
+  const [range, setRange] = useState<Range | null>(null);
+  const [hidden, setHidden] = useState(false);
 
   const setParam = useCallback(
     (key: string, value: string | null) => {
@@ -70,99 +83,136 @@ export default function Commissions() {
   );
 
   const { data, error, loading, stale, reload } = useConsoleQuery(
-    `commissions:${status}`,
-    useCallback(() => api.requests(status || undefined), [status]),
+    `commissions:${status}:${categoryId}:${range?.from ?? ""}:${range?.to ?? ""}:${hidden}`,
+    useCallback(
+      () => api.requests({ status: status || undefined, categoryId: categoryId || undefined, range, hidden }),
+      [status, categoryId, range, hidden],
+    ),
   );
+  const categories = useConsoleQuery("categories", useCallback(() => api.categories(), []));
 
   const rows = data ?? [];
   const selected = rows.find((request) => request.reference === open) ?? null;
 
   const columns: Column<AdminRequest>[] = [
-    { key: "age", header: "Waited", align: "right", width: 66, render: (request) => <Age iso={request.created_at} /> },
-    { key: "reference", header: "Reference", render: (request) => <span className="console-num console-strong">{request.reference}</span> },
+    { key: "date", header: "Date", width: 90, render: (request) => <Age iso={request.created_at} /> },
+    { key: "reference", header: "Ref", render: (request) => <span className="console-num console-strong">{request.reference}</span> },
     {
       key: "customer",
-      header: "Who",
+      header: "Customer",
       render: (request) => (
         <>
           <Text>{request.customer_name}</Text>
-          <div className="console-cell-sub">{request.city ?? "no city given"}</div>
         </>
       ),
     },
-    {
-      key: "what",
-      header: "What they asked for",
-      render: (request) => (
-        <span style={{ display: "block", maxWidth: 280 }}>
-          <Text>{request.description.slice(0, 90)}</Text>
-          {request.description.length > 90 ? "…" : ""}
-        </span>
-      ),
-    },
-    {
-      key: "photos",
-      header: "Photos",
-      align: "right",
-      width: 70,
-      render: (request) => (request.references.length ? <span className="console-num">{request.references.length}</span> : <span className="console-muted">—</span>),
-    },
+    { key: "city", header: "City", render: (request) => request.city ?? "—" },
+    { key: "category", header: "Category", render: (request) => request.category_name ?? "—" },
     {
       key: "status",
       header: "Status",
       render: (request) => <Pill tone={requestTone(request.status)}>{statusLabel("en", "requestStatus", request.status)}</Pill>,
     },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      width: 150,
+      render: (request) => (
+        <span className="console-row-actions" onClick={(event) => event.stopPropagation()}>
+          <Button size="sm" onClick={() => setParam("open", request.reference)}>
+            Open
+          </Button>
+          {hidden ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                void mutate(() => api.unhideRequest(request.reference), { invalidates: ["commissionChanged"], onDone: reload })
+              }
+            >
+              Restore
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              iconOnly
+              icon="trash"
+              aria-label={`Archive request ${request.reference}`}
+              disabled={busy}
+              onClick={() =>
+                confirm({
+                  title: `Archive request ${request.reference}?`,
+                  body: "It leaves this queue. Nothing is deleted, and you can bring it back from the Hidden view.",
+                  confirmLabel: "Archive it",
+                  danger: true,
+                  onConfirm: () =>
+                    mutate(() => api.hideRequest(request.reference), { invalidates: ["commissionChanged"], onDone: reload }),
+                })
+              }
+            />
+          )}
+        </span>
+      ),
+    },
   ];
 
   return (
     <>
-      <ControlStrip
-        groups={[
-          {
-            label: "Show",
-            controls: (
-              <Segmented
-                options={FILTERS}
-                value={status as (typeof FILTERS)[number]["value"]}
-                onChange={(next) => setParam("status", next || null)}
-                ariaLabel="Which commissions"
-              />
-            ),
-          },
-        ]}
-        trailing={
+      <ConsoleHeader
+        filters={
           <>
-            <Pill tone="neutral">{rows.length} shown</Pill>
-            <SectionSwitch current="commissions" />
+            <DateRangeFilter value={range} onChange={setRange} ariaLabel="When it was asked" />
+            <select className="console-select" value={status} onChange={(event) => setParam("status", event.target.value || null)} aria-label="Status">
+              {STATUSES.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select className="console-select" value={categoryId} onChange={(event) => setCategoryId(event.target.value)} aria-label="Category">
+              <option value="">All categories</option>
+              {(categories.data ?? []).map((category) => (
+                <option key={category.id} value={category.id}>
+                  {category.parent_id ? "— " : ""}
+                  {category.name_en}
+                </option>
+              ))}
+            </select>
+            <Button size="sm" onClick={() => setHidden((was) => !was)}>
+              {hidden ? "Show live queue" : "Show archived"}
+            </Button>
           </>
         }
+        pages={PAGES}
+        trailing={<Pill tone="neutral">{rows.length} shown</Pill>}
       />
 
       {error && !data ? <LoadError message={error} onRetry={reload} /> : null}
-      {loading ? <Skeleton height={240} /> : null}
+      {loading ? <Skeleton height={260} /> : null}
 
       {data ? (
         <Stale stale={stale}>
-          <Card pad="sm">
+          <Card pad="sm" flush>
             <DataTable
               columns={columns}
               rows={rows}
               rowKey={(request) => request.reference}
               selectedKey={open}
               onRowClick={(request) => setParam("open", request.reference)}
-              minWidth={760}
-              empty={<EmptyState title="Nothing waiting on you." hint="Custom requests from the shop land here." />}
+              minWidth={860}
+              empty={<EmptyState title={hidden ? "Nothing archived." : "Nothing waiting on you."} hint={hidden ? undefined : "Custom requests from the shop land here."} />}
             />
           </Card>
         </Stale>
       ) : null}
 
-      {selected ? <CommissionDrawer request={selected} onClose={() => setParam("open", null)} onChanged={reload} /> : null}
+      {selected ? <CommissionPopup request={selected} onClose={() => setParam("open", null)} onChanged={reload} /> : null}
     </>
   );
 }
 
-function CommissionDrawer({
+function CommissionPopup({
   request,
   onClose,
   onChanged,
@@ -186,8 +236,8 @@ function CommissionDrawer({
         body:
           next === "declined" || next === "withdrawn" ? (
             <>
-              This closes the request and tells {request.customer_name}. There is no way back from it — a new request
-              would have to start again.
+              This closes the request and tells {request.customer_name}. There is no way back from it — a new
+              request would have to start again.
             </>
           ) : (
             <>This tells {request.customer_name} the piece is {label.toLowerCase()}.</>
@@ -202,9 +252,8 @@ function CommissionDrawer({
   }
 
   return (
-    <Drawer
+    <Popup
       open
-      onClose={onClose}
       title={<span className="console-num">{request.reference}</span>}
       sub={
         <>
@@ -212,40 +261,97 @@ function CommissionDrawer({
           {request.city ? ` · ${request.city}` : ""} · waited <Age iso={request.created_at} />
         </>
       }
+      width={780}
+      onClose={onClose}
       actions={
         <>
+          {/* The pill row: status first, category beside it — the two facts
+              the Aptiv intervention header always leads with. */}
+          <Pill tone={requestTone(request.status)}>{statusLabel("en", "requestStatus", request.status)}</Pill>
+          {request.category_name ? <Pill tone="neutral">{request.category_name}</Pill> : null}
           {moves.map((next) => (
             <Button key={next} variant={HEAVY_REQUEST_MOVES.has(next) ? "default" : "primary"} disabled={busy} onClick={() => move(next)}>
               {statusLabel("en", "requestStatus", next)}
             </Button>
           ))}
-          <Pill tone={requestTone(request.status)}>{statusLabel("en", "requestStatus", request.status)}</Pill>
+          {!request.hidden ? (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() =>
+                confirm({
+                  title: `Archive request ${request.reference}?`,
+                  body: "It leaves the working queue. You can bring it back from the Hidden view.",
+                  confirmLabel: "Archive it",
+                  danger: true,
+                  onConfirm: () =>
+                    mutate(() => api.hideRequest(request.reference), { invalidates: ["commissionChanged"], onDone: onChanged }),
+                })
+              }
+            >
+              Archive
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              disabled={busy}
+              onClick={() => void mutate(() => api.unhideRequest(request.reference), { invalidates: ["commissionChanged"], onDone: onChanged })}
+            >
+              Restore
+            </Button>
+          )}
         </>
       }
     >
       {problem ? <p className="console-error">{problem}</p> : null}
 
-      <div className="console-row">
-        <LinkButton href={`tel:${request.customer_phone}`} icon="phone">
-          {request.customer_phone}
-        </LinkButton>
+      {/* Contact channels, as the key/value list. */}
+      <section className="console-detail-list">
+        <div>
+          <dt>Phone</dt>
+          <dd>
+            <LinkButton href={`tel:${request.customer_phone}`} icon="phone" size="sm">
+              {request.customer_phone}
+            </LinkButton>
+          </dd>
+        </div>
         {request.whatsapp_url ? (
-          <LinkButton href={request.whatsapp_url} target="_blank" rel="noreferrer" icon="whatsapp">
-            WhatsApp
-          </LinkButton>
+          <div>
+            <dt>WhatsApp</dt>
+            <dd>
+              <LinkButton href={request.whatsapp_url} target="_blank" rel="noreferrer" icon="whatsapp" size="sm">
+                Message
+              </LinkButton>
+            </dd>
+          </div>
         ) : null}
         {request.customer_email ? (
-          <LinkButton href={`mailto:${request.customer_email}`} icon="external" size="sm">
-            {request.customer_email}
-          </LinkButton>
+          <div>
+            <dt>Email</dt>
+            <dd>
+              <LinkButton href={`mailto:${request.customer_email}`} icon="external" size="sm">
+                {request.customer_email}
+              </LinkButton>
+            </dd>
+          </div>
         ) : null}
-      </div>
+        <div>
+          <dt>What they want</dt>
+          <dd style={{ maxWidth: "60%", textAlign: "start" }}>
+            <Text>{request.description}</Text>
+          </dd>
+        </div>
+        <div>
+          <dt>Budget mentioned</dt>
+          <dd>{request.budget ? <Money value={request.budget} /> : "none given"}</dd>
+        </div>
+      </section>
 
-      {/* The photos. Pricing a bespoke piece without them is guessing. */}
+      {/* The reference photos. Pricing a bespoke piece without them is guessing. */}
       <section className="console-stack-sm">
         <p className="console-caps">What they sent</p>
         {request.references.length === 0 ? (
-          <p className="console-muted">No photos sent — the description is all there is.</p>
+          <p className="console-muted">No photos sent — the description above is all there is.</p>
         ) : (
           <div className="console-row" style={{ gap: 8 }}>
             {request.references.map((url, index) => (
@@ -272,20 +378,6 @@ function CommissionDrawer({
         )}
       </section>
 
-      <section className="console-stack-sm">
-        <p className="console-caps">In their words</p>
-        <p style={{ fontSize: "var(--t-md)", lineHeight: 1.65 }}>
-          <Clamp lines={8}>{request.description}</Clamp>
-        </p>
-        {request.budget ? (
-          <p className="console-muted">
-            Budget mentioned: <Money value={request.budget} />
-          </p>
-        ) : (
-          <p className="console-muted">No budget given.</p>
-        )}
-      </section>
-
       {request.quote_price ? (
         <p className="console-note">
           You sent <Money value={request.quote_price} />
@@ -304,7 +396,7 @@ function CommissionDrawer({
       {request.status === "requested" || request.status === "quoted" ? (
         <QuoteForm request={request} onDone={onChanged} />
       ) : null}
-    </Drawer>
+    </Popup>
   );
 }
 
@@ -320,8 +412,6 @@ function QuoteForm({ request, onDone }: { request: AdminRequest; onDone: () => v
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    // Mirror the server's bounds so a mistake is caught beside the field
-    // rather than after a round trip.
     const nextErrors: { price?: string; days?: string } = {};
     const priceValue = Number(price);
     const dayValue = Number(days);

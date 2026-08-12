@@ -3,11 +3,16 @@
 /**
  * Messages — the contact form, made durable.
  *
- * Two fixes beyond the styling. The email and phone were inert text, so the
- * one thing you want to do with a message — reply to it — took a copy and a
- * paste. And there was no delete and no archive, which meant one run of spam
- * left the unread badge permanently meaningless; archiving files a message
- * away without throwing away a lead.
+ * Retained as-is per spec, apart from the header: it moves to `ConsoleHeader`
+ * with the other two order-door pages, and passes no `filters` at all — the
+ * spec's "hides them if not applicable", since Unread/All/Archived is a view
+ * switch this page keeps in its trailing slot, not a filter.
+ *
+ * Two fixes beyond the styling, from before. The email and phone were inert
+ * text, so the one thing you want to do with a message — reply to it — took a
+ * copy and a paste. And there was no delete and no archive, which meant one
+ * run of spam left the unread badge permanently meaningless; archiving files
+ * a message away without throwing away a lead.
  */
 import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -15,13 +20,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/console/api";
 import { useConsoleQuery, useMutation } from "@/lib/console/query";
 
-import { SectionSwitch } from "../SectionSwitch";
 import {
   Age,
   Button,
   Card,
   Clamp,
-  ControlStrip,
+  ConsoleHeader,
   EmptyState,
   LinkButton,
   LoadError,
@@ -31,6 +35,12 @@ import {
   Stale,
   Text,
 } from "../../ui/primitives";
+
+const PAGES = [
+  { href: "/admin/orders", label: "Orders" },
+  { href: "/admin/orders/commissions", label: "Custom" },
+  { href: "/admin/orders/messages", label: "Messages", active: true },
+];
 
 const VIEWS = [
   { value: "unread", label: "Unread" },
@@ -59,12 +69,13 @@ export default function Messages() {
 
   return (
     <>
-      <ControlStrip
-        groups={[{ label: "Show", controls: <Segmented options={VIEWS} value={view} onChange={setView} ariaLabel="Which messages" /> }]}
+      <ConsoleHeader
+        pages={PAGES}
         trailing={
           <>
+            <Segmented options={VIEWS} value={view} onChange={setView} ariaLabel="Which messages" />
             <Pill tone="neutral">{rows.length} shown</Pill>
-            <SectionSwitch current="messages" unread={view === "archived" ? undefined : unread} />
+            {view !== "archived" && unread > 0 ? <Pill tone="brand">{unread} unread</Pill> : null}
           </>
         }
       />

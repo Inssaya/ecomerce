@@ -85,6 +85,9 @@ class RequestOut(BaseModel):
     #: unrelated requests into "eleven people asked for a lamp this month" —
     #: which is the whole point of collecting the category.
     category_id: str | None = None
+    #: Resolved from `category_id` at read time, so the Custom table has a
+    #: real Category column instead of an id nobody can read.
+    category_name: str | None = None
     source: str | None = None
     status: RequestStatus
     quote_price: float | None
@@ -95,3 +98,6 @@ class RequestOut(BaseModel):
     events: list[RequestEventOut]
     created_at: datetime
     whatsapp_url: str = ""
+    #: True once archived from the console's default view. Never filtered on
+    #: by the customer-facing tracking endpoint.
+    hidden: bool = False

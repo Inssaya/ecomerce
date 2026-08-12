@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -114,6 +114,14 @@ class OrderItemResponse(BaseModel):
     quantity: int
     subtotal: float
     image_url: str | None
+    #: Resolved from the product at read time — null once the product is
+    #: archived, which is why this is not stored on the row itself.
+    category: str | None = None
+    subcategory: str | None = None
+    #: What the buyer picked, frozen at checkout. See `SelectedAttribute`.
+    selection: list[SelectedAttribute] | None = None
+    #: Their name on the piece, when personalization was on.
+    personalization: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -148,6 +156,18 @@ class OrderResponse(BaseModel):
     note: str | None
     created_at: datetime
     whatsapp_url: str = ""
+    #: The countdown's target date. Admin-editable; shown to the customer as
+    #: "arrives by" on their tracking page.
+    promised_for: date | None = None
+    #: Guest vs Verified — derived from whether the order carries an account,
+    #: never stored. `visitor_id` is deliberately absent from this schema: the
+    #: fingerprint is an admin-internal join key, not something either side
+    #: of the API needs to see on an order.
+    has_account: bool = False
+    #: True once archived from the console's default view. The customer-facing
+    #: endpoints (`/orders/track/{token}`, `/orders/find`) never filter on
+    #: this — hiding is an admin view preference, not a change to what tracks.
+    hidden: bool = False
 
     model_config = {"from_attributes": True}
 
@@ -155,6 +175,13 @@ class OrderResponse(BaseModel):
 class StatusChange(BaseModel):
     status: OrderStatus
     note: str | None = Field(default=None, max_length=500)
+
+
+class PromiseChange(BaseModel):
+    """Moving the date the countdown counts to. A real date, same rule as
+    everywhere else in this shop — BRAND.md §8, never "soon"."""
+
+    promised_for: date
 
 
 class MyOrders(BaseModel):

@@ -155,7 +155,7 @@ function CustomerDrawer({
   const confirm = useConfirm();
   const orders = useConsoleQuery(
     `customer-orders:${customer.phone}`,
-    useCallback(() => api.orders(undefined, customer.phone), [customer.phone]),
+    useCallback(() => api.orders({ q: customer.phone }), [customer.phone]),
   );
 
   return (

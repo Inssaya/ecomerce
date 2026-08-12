@@ -19,7 +19,7 @@ reserve nothing — there is nothing yet to reserve, only a promise about when.
 from __future__ import annotations
 
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -208,6 +208,16 @@ async def place_order(
         )
 
     fee = await delivery_fee_for(db, subtotal, body.address.city)
+
+    # The date the countdown counts to, defaulted from the slowest promise on
+    # the order — a mixed cart is only as fast as its slowest line. Left null
+    # when nothing on the order carries a promise at all, rather than
+    # inventing one.
+    promises = [item.lead_time_days for item in lines if item.lead_time_days]
+    promised_for = (
+        (datetime.now(UTC).date() + timedelta(days=max(promises))) if promises else None
+    )
+
     order = Order(
         reference=new_order_reference(),
         tracking_token=new_tracking_token(),
@@ -222,6 +232,7 @@ async def place_order(
         subtotal=subtotal,
         delivery_fee=fee,
         total=subtotal + fee,
+        promised_for=promised_for,
         items=lines,
         events=[OrderEvent(status=OrderStatus.placed, actor="customer")],
     )
@@ -260,3 +271,58 @@ async def change_status(
 
     await notify_order_status(order)
     return order
+
+
+async def set_promise(db: AsyncSession, order: Order, promised_for: date) -> Order:
+    """Move the date the countdown counts to.
+
+    A promise made on the day the order was placed sometimes has to move —
+    a supplier is late, a piece takes longer than expected — and the number
+    on the customer's tracking page should always be the one that is still
+    true, not the one that was true on day one.
+    """
+    order.promised_for = promised_for
+    await db.commit()
+    await db.refresh(order)
+    return order
+
+
+async def hide_order(db: AsyncSession, order: Order) -> Order:
+    """Archive it out of the console's default view. Reversible, and never
+    read by anything the customer can see — see `Order.hidden_at`."""
+    if order.hidden_at is None:
+        order.hidden_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(order)
+    return order
+
+
+async def unhide_order(db: AsyncSession, order: Order) -> Order:
+    if order.hidden_at is not None:
+        order.hidden_at = None
+        await db.commit()
+        await db.refresh(order)
+    return order
+
+
+async def item_categories(db: AsyncSession, orders: list[Order]) -> dict[str, tuple[str | None, str | None]]:
+    """Category · sub-category for every line item across a page of orders,
+    resolved in one query rather than one per item.
+
+    Reuses `catalog.service.category_names` so an order line and the product
+    admin table describe a category the same way. Returns an empty pair for a
+    product that has since been archived or deleted — the order still has to
+    read, it just cannot say what it no longer knows.
+    """
+    from app.models import Category
+    from app.modules.catalog import service as catalog_service
+
+    product_ids = {item.product_id for order in orders for item in order.items}
+    if not product_ids:
+        return {}
+    rows = await db.scalars(
+        select(Product)
+        .where(Product.id.in_(product_ids))
+        .options(selectinload(Product.category).selectinload(Category.parent))
+    )
+    return {product.id: catalog_service.category_names(product) for product in rows.unique()}
