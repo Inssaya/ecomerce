@@ -7,6 +7,8 @@ import type {
   AdminProduct,
   AdminRequest,
   Analytics,
+  AttributeGroup,
+  AttributeSuggestions,
   ContactMessage,
   CopilotAnswer,
   Customer,
@@ -14,6 +16,8 @@ import type {
   FeedPreview,
   FeedWeight,
   Forecast,
+  ProductAnalytics,
+  ProductAttribute,
   ProductMedia,
   Today,
   Variant,
@@ -92,8 +96,23 @@ export const api = {
     call<ContactMessage>(`/admin/contact-messages/${id}`, { method: "PATCH", body: JSON.stringify({ archived }) }),
 
   // ── Catalogue ──────────────────────────────────────────────────────────────
-  products: (status?: string, kind?: string) =>
-    call<AdminProduct[]>(`/admin/products?size=60${status ? `&status=${status}` : ""}${kind ? `&kind=${kind}` : ""}`),
+  /** The catalogue table. Filtering is the server's job — narrowing a page of
+      sixty rows in the browser narrows only that page. */
+  products: (
+    options: { status?: string; kind?: string; q?: string; categoryId?: string; range?: Range | null } = {},
+  ) => {
+    const parts = ["size=60"];
+    if (options.status) parts.push(`status=${options.status}`);
+    if (options.kind) parts.push(`kind=${options.kind}`);
+    if (options.q) parts.push(`q=${encodeURIComponent(options.q)}`);
+    if (options.categoryId) parts.push(`category_id=${options.categoryId}`);
+    if (options.range) parts.push(`date_from=${options.range.from}&date_to=${options.range.to}`);
+    return call<AdminProduct[]>(`/admin/products?${parts.join("&")}`);
+  },
+  productAnalytics: (productId: string, range?: Range | null) =>
+    call<ProductAnalytics>(
+      `/admin/products/${productId}/analytics${range ? `?date_from=${range.from}&date_to=${range.to}` : ""}`,
+    ),
   createProduct: (body: Record<string, unknown>) =>
     call<AdminProduct>("/admin/products", { method: "POST", body: JSON.stringify(body) }),
   updateProduct: (id: string, body: Record<string, unknown>) =>
@@ -128,6 +147,16 @@ export const api = {
     call<ProductMedia>(`/admin/media/${mediaId}`, { method: "PATCH", body: JSON.stringify(body) }),
   setCoverPhoto: (mediaId: string) => call<ProductMedia>(`/admin/media/${mediaId}/primary`, { method: "POST" }),
   removePhoto: (mediaId: string) => call<void>(`/admin/media/${mediaId}`, { method: "DELETE" }),
+
+  // ── Specification: measures, colours, materials ────────────────────────────
+  attributeSuggestions: () => call<AttributeSuggestions>("/admin/attribute-suggestions"),
+  addAttribute: (
+    productId: string,
+    body: { group: AttributeGroup; name?: string | null; value: string; hex?: string | null },
+  ) => call<ProductAttribute>(`/admin/products/${productId}/attributes`, { method: "POST", body: JSON.stringify(body) }),
+  updateAttribute: (attributeId: string, body: Record<string, unknown>) =>
+    call<ProductAttribute>(`/admin/attributes/${attributeId}`, { method: "PATCH", body: JSON.stringify(body) }),
+  removeAttribute: (attributeId: string) => call<void>(`/admin/attributes/${attributeId}`, { method: "DELETE" }),
 
   addVariant: (productId: string, body: { sku: string; option_en: string; option_ar?: string; price?: number | null }) =>
     call<Variant>(`/admin/products/${productId}/variants`, { method: "POST", body: JSON.stringify(body) }),

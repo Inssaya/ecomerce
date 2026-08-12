@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
 from sqlalchemy import String, cast, func, select
@@ -13,10 +14,12 @@ from app.core.slug import unique_slug
 from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
 from app.deps import DbSession, Lang, Owner, Paging
 from app.models import (
+    AttributeGroup,
     Category,
     Piece,
     PieceState,
     Product,
+    ProductAttribute,
     ProductKind,
     ProductMedia,
     ProductStatus,
@@ -25,6 +28,10 @@ from app.models import (
 from app.modules.catalog import alerts, service
 from app.modules.catalog.schemas import (
     AlertRequest,
+    AttributeOut,
+    AttributePatch,
+    AttributeSuggestions,
+    AttributeWrite,
     CategoryAdmin,
     CategoryNode,
     CategoryWrite,
@@ -40,6 +47,7 @@ from app.modules.catalog.schemas import (
     VariantOut,
     VariantPatch,
     VariantWrite,
+    check_discount,
 )
 from app.modules.feed import embeddings
 
@@ -290,7 +298,24 @@ async def _reembed() -> None:
         logger.warning("Could not refresh embeddings: %s", exc)
 
 
-async def _admin_view(db: DbSession, product: Product) -> ProductAdmin:
+async def _admin_view(db: DbSession, product_id: str) -> ProductAdmin:
+    """Read the piece back with everything the console shows.
+
+    Re-queried through `service.LOADED` rather than a hand-listed
+    `refresh(attribute_names=...)`: the admin view now also reads `attributes`
+    and the category's *parent*, and a relationship that was never loaded
+    raises inside an async session rather than quietly emitting a query.
+    `populate_existing` is what makes the eager loaders run again for an
+    instance already sitting in the identity map.
+    """
+    product = (
+        await db.scalars(
+            select(Product)
+            .where(Product.id == product_id)
+            .options(*service.LOADED)
+            .execution_options(populate_existing=True)
+        )
+    ).unique().one()
     left = await service.availability(db, [product.id])
     per_variant = await service.variant_availability(db, product.id)
     return service.to_admin(product, left.get(product.id, 0), per_variant)
@@ -303,12 +328,33 @@ async def list_products_admin(
     paging: Paging,
     status_filter: ProductStatus | None = Query(default=None, alias="status"),
     kind: ProductKind | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=120),
+    category_id: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
 ) -> list[ProductAdmin]:
+    """The catalogue as a table.
+
+    Filtering happens here rather than in the browser because the console's
+    date range and category are the two the owner narrows by hardest, and
+    narrowing a page of sixty rows client-side narrows only that page.
+    """
     query = service.with_relations(select(Product))
     if status_filter is not None:
         query = query.where(Product.status == status_filter)
     if kind is not None:
         query = query.where(Product.kind == kind)
+    if q:
+        query = query.where(service.text_match(q))
+    if category_id:
+        # Choosing a line of work includes what is filed beneath it, the same
+        # way the storefront's category page does.
+        query = query.where(Product.category_id.in_(await service.descendant_ids(db, category_id)))
+    if date_from:
+        query = query.where(Product.created_at >= date_from)
+    if date_to:
+        query = query.where(Product.created_at < date_to + timedelta(days=1))
+
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
@@ -332,9 +378,8 @@ async def create_product(
     )
     db.add(product)
     await db.commit()
-    await db.refresh(product, attribute_names=["media", "variants", "category"])
     background.add_task(_reembed)
-    return await _admin_view(db, product)
+    return await _admin_view(db, product.id)
 
 
 @router.patch("/admin/products/{product_id}", response_model=ProductAdmin)
@@ -364,13 +409,23 @@ async def update_product(
     if product.kind is ProductKind.workshop and changes.get("lead_time_days") is None:
         changes.pop("lead_time_days", None)
 
+    # A reduction is three fields that can arrive in three separate requests,
+    # so the combination worth checking is the one that ends up on the row.
+    try:
+        check_discount(
+            changes.get("discount_kind", product.discount_kind),
+            changes.get("discount_value", product.discount_value),
+            changes.get("price", product.price),
+        )
+    except ValueError as problem:
+        raise bad_request(str(problem)) from problem
+
     for field, value in changes.items():
         setattr(product, field, value)
     await db.commit()
-    await db.refresh(product, attribute_names=["media", "variants", "category"])
     # Publishing, renaming or rewriting a piece all change what it means.
     background.add_task(_reembed)
-    return await _admin_view(db, product)
+    return await _admin_view(db, product.id)
 
 
 @router.delete(
@@ -380,6 +435,102 @@ async def archive_product(product_id: str, db: DbSession, owner: Owner) -> None:
     """Archived, never deleted — order history has to stay reconstructable."""
     product = await get_or_404(db, Product, product_id, detail="Product not found")
     product.status = ProductStatus.archived
+    await db.commit()
+
+
+# ── Specification: measures, colours, materials ───────────────────────────────
+#
+# This is what `product_variants` could not do. A variant is one buyable
+# configuration as a single string, so a piece in four colours and three sizes
+# is twelve rows to type and twelve to correct. These are independent lines of
+# description, added one at a time, in any combination — including none.
+
+
+@router.get("/admin/attribute-suggestions", response_model=AttributeSuggestions)
+async def attribute_suggestions(db: DbSession, owner: Owner) -> AttributeSuggestions:
+    """What to offer in the dropdowns: presets, plus what the shop already says.
+
+    Deliberately not a table the owner has to maintain. The vocabulary grows
+    by being used.
+    """
+    return await service.attribute_suggestions(db)
+
+
+@router.post(
+    "/admin/products/{product_id}/attributes",
+    response_model=AttributeOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_attribute(
+    product_id: str, body: AttributeWrite, db: DbSession, owner: Owner
+) -> AttributeOut:
+    await get_or_404(db, Product, product_id, detail="Product not found")
+
+    existing = list(
+        await db.scalars(
+            select(ProductAttribute).where(ProductAttribute.product_id == product_id)
+        )
+    )
+    # The same measure twice is a slip, not a piece that is "M" twice.
+    written = f"{body.name} {body.value}" if body.name else body.value
+    for item in existing:
+        if item.group is body.group and item.name == body.name and item.value == body.value:
+            raise conflict(f"'{written}' is already on this piece")
+
+    attribute = ProductAttribute(
+        product_id=product_id,
+        group=body.group,
+        name=body.name,
+        value=body.value,
+        hex=body.hex,
+        # Zero means "the caller did not care" — put it at the end rather than
+        # silently tying with whatever is already first.
+        display_order=body.display_order or len(existing),
+    )
+    db.add(attribute)
+    await db.commit()
+    await db.refresh(attribute)
+    return service.attribute_out(attribute)
+
+
+@router.patch("/admin/attributes/{attribute_id}", response_model=AttributeOut)
+async def update_attribute(
+    attribute_id: str, body: AttributePatch, db: DbSession, owner: Owner
+) -> AttributeOut:
+    attribute = await get_or_404(
+        db, ProductAttribute, attribute_id, detail="That line is not on this piece"
+    )
+    changes = body.model_dump(exclude_unset=True)
+    if "name" in changes:
+        changes["name"] = (changes["name"] or "").strip() or None
+    if "value" in changes:
+        changes["value"] = (changes["value"] or "").strip()
+        if not changes["value"]:
+            raise bad_request("A measure, colour or material needs a value")
+    if changes.get("hex") and attribute.group is not AttributeGroup.color:
+        raise bad_request("Only a colour carries a hex")
+
+    for field, value in changes.items():
+        setattr(attribute, field, value)
+    await db.commit()
+    await db.refresh(attribute)
+    return service.attribute_out(attribute)
+
+
+@router.delete(
+    "/admin/attributes/{attribute_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_attribute(attribute_id: str, db: DbSession, owner: Owner) -> None:
+    """Really deleted, unlike a variant.
+
+    Nothing points at these rows: an order stores a *snapshot* of what the
+    buyer picked, not a foreign key, precisely so that correcting a typo here
+    never reaches back into somebody's receipt.
+    """
+    attribute = await get_or_404(
+        db, ProductAttribute, attribute_id, detail="That line is not on this piece"
+    )
+    await db.delete(attribute)
     await db.commit()
 
 

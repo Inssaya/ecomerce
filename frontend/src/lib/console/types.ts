@@ -306,6 +306,45 @@ export interface ProductMedia {
   sort_order: number;
 }
 
+/** measure · color · material — the three things a piece is described by. */
+export type AttributeGroup = "measure" | "color" | "material";
+
+export interface ProductAttribute {
+  id: string;
+  group: AttributeGroup;
+  /** "Width", or null when the value speaks for itself ("M", "Wood"). */
+  name: string | null;
+  value: string;
+  /** Colours only. */
+  hex: string | null;
+  display_order: number;
+  /** Composed on the server so every screen joins the pair the same way. */
+  label: string;
+}
+
+/** What the dropdowns offer: presets, plus what the shop already uses. */
+export interface AttributeSuggestions {
+  measure_names: string[];
+  measure_values: string[];
+  material_names: string[];
+  material_values: string[];
+  colors: { value: string; hex: string | null }[];
+}
+
+/** One piece's own funnel — the same aggregates as the shop-wide table. */
+export interface ProductAnalytics {
+  period: Period;
+  saw: number;
+  opened: number;
+  opened_pct: number;
+  stayed: number;
+  avg_seconds: number;
+  added: number;
+  bought: number;
+  bought_pct: number;
+  daily: { date: string; visitors: number }[];
+}
+
 export interface AdminProduct {
   id: string;
   slug: string;
@@ -320,16 +359,34 @@ export interface AdminProduct {
   price_max: number | null;
   business_boost: number;
   category_id: string | null;
+  /** Resolved from the tree. A piece filed under a subcategory reports both;
+      one filed under a top category reports only `category_name`. */
+  category_name: string | null;
+  subcategory_name: string | null;
   /** The backend enum includes `paused`; the old client's union omitted it. */
   status: "draft" | "active" | "paused" | "archived";
   available: number | null;
   lead_time_days: number | null;
+  /** Days until it is in their hands — set on any piece, shelf or workshop. */
+  delivery_days: number | null;
+  personalizable: boolean;
+  /** How much the price goes up when their name goes on it. */
+  personalization_markup_pct: number;
+  discount_kind: "percent" | "fixed" | null;
+  discount_value: number | null;
+  discount_active: boolean;
+  /** What it costs today. Computed on the server — never recompute it here. */
+  effective_price: number;
+  total_likes: number;
+  total_saves: number;
   made_on: string | null;
   batch_closed: boolean;
   show_piece_numbers: boolean;
   images: ProductMedia[];
   variants: Variant[];
+  attributes: ProductAttribute[];
   created_at: string;
+  updated_at: string;
 }
 
 export interface AdminCategory {

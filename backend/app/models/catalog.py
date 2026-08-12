@@ -72,6 +72,26 @@ class PieceState(str, PyEnum):
     kept = "kept"  # not for sale: a sample, a second, a gift
 
 
+class DiscountKind(str, PyEnum):
+    """How a reduction is expressed. The owner picks whichever they think in."""
+
+    percent = "percent"  # 20 → a fifth off
+    fixed = "fixed"  # 20 → twenty dirhams off
+
+
+class AttributeGroup(str, PyEnum):
+    """The three things a piece is described by.
+
+    Not a facet system (see the module docstring — filters are still the lazy
+    version of the feed). These are *specification*: what the buyer is told
+    about the object, and what they pick when there is a choice.
+    """
+
+    measure = "measure"  # a size: "M", or "Width" → "10 cm"
+    color = "color"
+    material = "material"  # "Wood", or "Fabric" → "Cotton 100%"
+
+
 class Category(Base, TimestampMixin):
     """Self-referencing tree: T-Shirts → Oversize, Slim.
 
@@ -149,6 +169,29 @@ class Product(Base, TimestampMixin, BilingualMixin):
         index=True,
     )
 
+    # ── a reduction, on the pieces that earn one ──
+    #
+    # Three columns rather than one nullable price because the owner asked for
+    # a reduction they can switch off without losing what it was. `active` is
+    # the switch; the kind and the value are remembered while it is off.
+    discount_kind: Mapped[DiscountKind | None] = mapped_column(
+        Enum(DiscountKind, name="discount_kind"), nullable=True
+    )
+    discount_value: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    discount_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # ── both kinds ──
+    # How long until it is in their hands. `lead_time_days` is the workshop's
+    # promise about *making* the thing and still governs its copy; this is the
+    # delivery estimate the console sets on any piece, shelf or workshop.
+    delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Their name on the piece. Off by default, and worth a percentage on top
+    # when it is on, because it is hand work on a specific object.
+    personalizable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    personalization_markup_pct: Mapped[float] = mapped_column(
+        Numeric(5, 2), default=0, nullable=False
+    )
+
     # ── shelf only ──
     made_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     # Closed means we do not intend to make more. What is left is all there
@@ -179,6 +222,11 @@ class Product(Base, TimestampMixin, BilingualMixin):
         cascade="all, delete-orphan",
         order_by="ProductVariant.display_order",
     )
+    attributes: Mapped[list[ProductAttribute]] = relationship(
+        back_populates="product",
+        cascade="all, delete-orphan",
+        order_by="ProductAttribute.display_order",
+    )
     pieces: Mapped[list[Piece]] = relationship(
         back_populates="product", cascade="all, delete-orphan", order_by="Piece.number"
     )
@@ -195,6 +243,39 @@ class Product(Base, TimestampMixin, BilingualMixin):
 
     def story(self, lang: str) -> str:
         return (self.story_ar or self.story_en) if lang == "ar" else self.story_en
+
+    def effective_price(self) -> float:
+        """What it actually costs today.
+
+        Every screen that shows a price reads this one method — the admin
+        table, the piece page, the cart, the order line. A discount computed
+        at four call sites is a discount that will disagree with itself.
+
+        A reduction that is switched off, or has no value, is simply not one.
+        """
+        if not self.discount_active or self.discount_kind is None or self.discount_value is None:
+            return round(float(self.price), 2)
+        value = float(self.discount_value)
+        if self.discount_kind is DiscountKind.percent:
+            reduced = float(self.price) * (1 - value / 100)
+        else:
+            reduced = float(self.price) - value
+        # Never free by arithmetic accident: a 120% reduction or a 200 MAD cut
+        # off a 180 MAD piece is a typo, not a gift.
+        return round(max(reduced, 0.0), 2)
+
+    def discount_amount(self) -> float:
+        """What comes off, in dirhams. Zero when nothing does."""
+        return round(float(self.price) - self.effective_price(), 2)
+
+    def price_with_personalization(self) -> float:
+        """The price once their name goes on it.
+
+        The markup applies to the *reduced* price, not the original — a piece
+        on offer is on offer whatever is written on it.
+        """
+        markup = float(self.personalization_markup_pct or 0)
+        return round(self.effective_price() * (1 + markup / 100), 2)
 
 
 class ProductVariant(Base):
@@ -228,6 +309,53 @@ class ProductVariant(Base):
 
     def unit_price(self) -> float:
         return float(self.price if self.price is not None else self.product.price)
+
+
+class ProductAttribute(Base):
+    """One line of specification: a measure, a colour, a material.
+
+    Deliberately one table for all three rather than three tables or a facet
+    taxonomy, because the owner's own description of the problem was that it
+    is *flexible*: some pieces have a size and nothing else, some have three
+    colours and a material, and the same product can carry all of it or none.
+
+    Two shapes fit in the same row:
+
+    * **typed** — `name` and `value` together: "Width" → "10 cm".
+    * **plain** — `value` alone, `name` null: "M", "Wood", "Cotton 100%".
+
+    `value` is free text on purpose. "10 cm" is a thing to *print*, not a
+    quantity to compute with — there is no unit column because nothing in the
+    shop ever adds two widths together. The moment one does, this is the
+    decision to revisit.
+
+    It carries no price and no stock, and that is a rule, not an omission:
+    the owner sets the price, and availability is a count of `Piece` rows.
+    """
+
+    __tablename__ = "product_attributes"
+    __table_args__ = (
+        Index("ix_product_attributes_product_group", "product_id", "group"),
+    )
+
+    id: Mapped[str] = uuid_pk()
+    product_id: Mapped[str] = uuid_fk("products.id")
+    group: Mapped[AttributeGroup] = mapped_column(
+        Enum(AttributeGroup, name="attribute_group"), nullable=False
+    )
+    #: The label, when there is one. Null means the value speaks for itself.
+    name: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    value: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: Colours only — what the circle on the storefront is filled with.
+    hex: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    display_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+    product: Mapped[Product] = relationship(back_populates="attributes")
+
+    @property
+    def label(self) -> str:
+        """How it reads on a page: "Width 10 cm", or just "M"."""
+        return f"{self.name} {self.value}" if self.name else self.value
 
 
 class Piece(Base):

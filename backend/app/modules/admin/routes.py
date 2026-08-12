@@ -215,6 +215,24 @@ async def analytics(
     return await analytics_service.overview(db, _period(date_from, date_to, 30), limit)
 
 
+@router.get("/products/{product_id}/analytics")
+async def product_analytics(
+    product_id: str,
+    db: DbSession,
+    owner: Owner,
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict:
+    """One piece, on its own.
+
+    Lives here beside the other analytics rather than in the catalogue router,
+    because it reads `signals` and shares the period helper with everything
+    else on this page — the URL is what the console cares about, not which
+    module the function sits in.
+    """
+    return await analytics_service.for_product(db, product_id, _period(date_from, date_to, 30))
+
+
 @router.get("/forecast")
 async def forecast_next_week(db: DbSession, owner: Owner) -> dict:
     """How many of each piece we expect to sell in the next seven days.

@@ -16,16 +16,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import (
+    AttributeGroup,
     Category,
     Piece,
     PieceState,
     Product,
+    ProductAttribute,
     ProductKind,
     ProductMedia,
     ProductStatus,
 )
 from app.modules.catalog.schemas import (
+    AttributeOut,
+    AttributeSuggestions,
     CategoryNode,
+    ColorSuggestion,
     MediaResponse,
     PieceOut,
     ProductAdmin,
@@ -36,8 +41,12 @@ from app.modules.catalog.schemas import (
 
 LOADED = (
     selectinload(Product.media),
-    selectinload(Product.category),
+    # The parent comes along because a product filed under "Oversize" has to
+    # report "T-Shirts · Oversize", and reading `category.parent` lazily inside
+    # an async request raises rather than emitting a query.
+    selectinload(Product.category).selectinload(Category.parent),
     selectinload(Product.variants),
+    selectinload(Product.attributes),
 )
 
 
@@ -174,7 +183,43 @@ def to_detail(
     )
 
 
-def to_admin(product: Product, available: int | None, per_variant: dict[str, int] | None) -> ProductAdmin:
+def attribute_out(attribute: ProductAttribute) -> AttributeOut:
+    return AttributeOut(
+        id=attribute.id,
+        group=attribute.group,
+        name=attribute.name,
+        value=attribute.value,
+        hex=attribute.hex,
+        display_order=attribute.display_order,
+        label=attribute.label,
+    )
+
+
+def category_names(product: Product) -> tuple[str | None, str | None]:
+    """The pair the console's two columns want: line of work, then branch.
+
+    A product is filed under exactly one node. If that node has a parent, the
+    parent is the category and the node is the subcategory; if it does not,
+    there is no subcategory to name — rather than repeating the category in
+    both columns, which reads as a mistake.
+    """
+    node = product.category
+    if node is None:
+        return None, None
+    if node.parent is not None:
+        return node.parent.name_en, node.name_en
+    return node.name_en, None
+
+
+def to_admin(
+    product: Product,
+    available: int | None,
+    per_variant: dict[str, int] | None,
+    *,
+    likes: int = 0,
+    saves: int = 0,
+) -> ProductAdmin:
+    category_name, subcategory_name = category_names(product)
     return ProductAdmin(
         id=product.id,
         slug=product.slug,
@@ -189,15 +234,101 @@ def to_admin(product: Product, available: int | None, per_variant: dict[str, int
         price_max=float(product.price_max) if product.price_max is not None else None,
         business_boost=float(product.business_boost),
         category_id=product.category_id,
+        category_name=category_name,
+        subcategory_name=subcategory_name,
         status=product.status,
         images=[media_out(item, "en") for item in product.media],
         variants=variants_out(product, "en", per_variant),
+        attributes=[attribute_out(item) for item in product.attributes],
         available=available if product.kind is ProductKind.shelf else None,
         lead_time_days=product.lead_time_days,
+        delivery_days=product.delivery_days,
+        personalizable=product.personalizable,
+        personalization_markup_pct=float(product.personalization_markup_pct or 0),
+        discount_kind=product.discount_kind,
+        discount_value=(
+            float(product.discount_value) if product.discount_value is not None else None
+        ),
+        discount_active=product.discount_active,
+        effective_price=product.effective_price(),
+        total_likes=likes,
+        total_saves=saves,
         made_on=product.made_on,
         batch_closed=product.batch_closed,
         show_piece_numbers=product.show_piece_numbers,
         created_at=product.created_at,
+        updated_at=product.updated_at,
+    )
+
+
+# ── Specification suggestions ─────────────────────────────────────────────────
+#
+# Starting points, not a taxonomy. The owner's own words were that these are
+# "only examples" and that they may add them or not — so the dropdown offers
+# these plus everything the shop has already used, and typing something new is
+# always allowed. That is why there is no table of allowed values anywhere: a
+# vocabulary that has to be administered is a vocabulary nobody maintains.
+
+PRESET_MEASURE_NAMES = ("Width", "Height", "Length", "Depth", "Diameter", "Weight")
+PRESET_MEASURE_VALUES = ("S", "M", "L", "XL", "XXL")
+PRESET_MATERIAL_NAMES = ("Fabric", "Frame", "Finish", "Lining")
+PRESET_MATERIAL_VALUES = ("Wood", "Metal", "Cotton 100%", "Leather", "Plastic", "Glass")
+PRESET_COLORS: tuple[tuple[str, str], ...] = (
+    ("Black", "#1A1A1A"),
+    ("White", "#F5F5F0"),
+    ("Cream", "#EFE6D8"),
+    ("Sand", "#D8C7AE"),
+    ("Clay", "#B4785A"),
+    ("Brown", "#6B4A34"),
+    ("Olive", "#6B7355"),
+    ("Navy", "#26364F"),
+    ("Grey", "#8A8A8A"),
+    ("Red", "#A6342E"),
+)
+
+
+async def attribute_suggestions(db: AsyncSession) -> AttributeSuggestions:
+    """The presets, plus whatever this shop already says."""
+    rows = (
+        await db.execute(
+            select(
+                ProductAttribute.group,
+                ProductAttribute.name,
+                ProductAttribute.value,
+                ProductAttribute.hex,
+            ).distinct()
+        )
+    ).all()
+
+    names: dict[AttributeGroup, set[str]] = {group: set() for group in AttributeGroup}
+    values: dict[AttributeGroup, set[str]] = {group: set() for group in AttributeGroup}
+    colors: dict[str, str | None] = {value: hex_ for value, hex_ in PRESET_COLORS}
+
+    for group, name, value, hex_ in rows:
+        if name:
+            names[group].add(name)
+        if group is AttributeGroup.color:
+            # A colour the shop has used wins over the preset of the same name:
+            # if the workshop corrected the swatch, that is the real one.
+            colors[value] = hex_ or colors.get(value)
+        else:
+            values[group].add(value)
+
+    def merged(preset: tuple[str, ...], seen: set[str]) -> list[str]:
+        # Case-insensitive so "wood" typed once does not sit beside "Wood".
+        out = {item.casefold(): item for item in preset}
+        out.update({item.casefold(): item for item in seen})
+        return sorted(out.values(), key=str.casefold)
+
+    return AttributeSuggestions(
+        measure_names=merged(PRESET_MEASURE_NAMES, names[AttributeGroup.measure]),
+        measure_values=merged(PRESET_MEASURE_VALUES, values[AttributeGroup.measure]),
+        material_names=merged(PRESET_MATERIAL_NAMES, names[AttributeGroup.material]),
+        material_values=merged(PRESET_MATERIAL_VALUES, values[AttributeGroup.material]),
+        colors=[
+            ColorSuggestion(value=value, hex=hex_)
+            for value, hex_ in sorted(colors.items(), key=lambda pair: pair[0].casefold())
+        ],
     )
 
 

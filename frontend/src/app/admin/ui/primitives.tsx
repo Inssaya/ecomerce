@@ -148,6 +148,125 @@ export function ControlStrip({
   );
 }
 
+/**
+ * The header: filters · search · pages.
+ *
+ * The strip above groups controls under labels, which suits a page that is
+ * mostly one big control panel. This is the other shape — three fixed zones
+ * reading left to right, no labels, no page title. Both exist while pages
+ * move across; `ControlStrip` is not going anywhere until the last one has.
+ *
+ * A page with nothing to filter passes no `filters` at all, and the zone is
+ * gone rather than empty.
+ */
+export function ConsoleHeader({
+  filters,
+  search,
+  pages,
+  trailing,
+}: {
+  filters?: ReactNode;
+  search?: { value: string; onChange: (value: string) => void; placeholder?: string; ariaLabel?: string };
+  pages: { href: string; label: string; active?: boolean }[];
+  trailing?: ReactNode;
+}) {
+  return (
+    <div className="console-header">
+      {filters ? <div className="console-header-filters">{filters}</div> : null}
+
+      {search ? (
+        <div className="console-header-search">
+          <SearchInput
+            value={search.value}
+            onChange={search.onChange}
+            placeholder={search.placeholder ?? "Search"}
+            ariaLabel={search.ariaLabel ?? "Search"}
+          />
+        </div>
+      ) : null}
+
+      {/* Deliberately the segmented control's own classes rather than a new
+          look: these are the same "pick one of three" the console already
+          has, and they are links so each page stays a real URL. */}
+      <nav className="console-header-pages console-segmented" aria-label="Pages">
+        {pages.map((page) => (
+          <Link
+            key={page.href}
+            href={page.href}
+            className={`console-segmented-option${page.active ? " active" : ""}`}
+            aria-current={page.active ? "page" : undefined}
+          >
+            {page.label}
+          </Link>
+        ))}
+      </nav>
+
+      {trailing ? <div className="console-header-trailing">{trailing}</div> : null}
+    </div>
+  );
+}
+
+export interface DateRange {
+  from: string;
+  to: string;
+}
+
+/**
+ * From and to, as one control.
+ *
+ * `null` means the whole history, which is the useful default for a
+ * catalogue — a shop with forty pieces does not want its list to open
+ * showing the four made this month.
+ */
+export function DateRangeFilter({
+  value,
+  onChange,
+  ariaLabel = "Date range",
+}: {
+  value: DateRange | null;
+  onChange: (value: DateRange | null) => void;
+  ariaLabel?: string;
+}) {
+  const today = new Date().toISOString().slice(0, 10);
+  const from = value?.from ?? "";
+  const to = value?.to ?? "";
+
+  // One end on its own is not a range. Until both are set the filter stays
+  // off rather than silently meaning "since then".
+  const settle = (nextFrom: string, nextTo: string) =>
+    onChange(nextFrom && nextTo ? { from: nextFrom, to: nextTo } : null);
+
+  return (
+    <span className="console-range" role="group" aria-label={ariaLabel}>
+      <input
+        type="date"
+        className="console-date"
+        value={from}
+        max={to || today}
+        aria-label="From"
+        onChange={(event) => settle(event.target.value, to)}
+      />
+      <span>→</span>
+      <input
+        type="date"
+        className="console-date"
+        value={to}
+        min={from || undefined}
+        max={today}
+        aria-label="To"
+        onChange={(event) => settle(from, event.target.value)}
+      />
+      {value ? <Button size="sm" iconOnly icon="close" aria-label="Clear the dates" onClick={() => onChange(null)} /> : null}
+    </span>
+  );
+}
+
+/** A colour, shown as a colour. Falls back to the label when there is no hex. */
+export function Swatch({ hex, label }: { hex?: string | null; label?: string }) {
+  if (!hex) return null;
+  return <span className="console-swatch" style={{ background: hex }} title={label ?? hex} aria-hidden />;
+}
+
 // ── Pills ────────────────────────────────────────────────────────────────────
 
 export type Tone = "success" | "warning" | "danger" | "info" | "brand" | "neutral";
@@ -549,7 +668,37 @@ export function MicroBar({ value, of, children }: { value: number; of: number; c
   );
 }
 
-// ── Drawer — detail over the list, never a separate page ─────────────────────
+// ── Overlays — detail over the list, never a separate page ───────────────────
+
+/**
+ * Where anything that floats has to be portalled.
+ *
+ * The target is the `.console` root, NOT document.body. Every rule in
+ * console.css is scoped under `.console`, so an overlay portalled to the body
+ * escapes the entire stylesheet and renders as raw unstyled text. This is the
+ * single most repeated mistake in this codebase, so it is a named hook rather
+ * than a comment copied into each overlay.
+ */
+function useConsoleHost(): HTMLElement | null {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  useEffect(() => setHost(document.querySelector<HTMLElement>(".console")), []);
+  return host;
+}
+
+/** Escape closes it, and the page beneath it stops scrolling. */
+function useOverlayKeys(open: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
+    document.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open, onClose]);
+}
 
 export function Drawer({
   open,
@@ -566,23 +715,8 @@ export function Drawer({
   onClose: () => void;
   children: ReactNode;
 }) {
-  // The portal target is the `.console` root, NOT document.body. Every rule
-  // in console.css is scoped under `.console`, so a drawer portalled to the
-  // body escapes the entire stylesheet and renders as raw text.
-  const [host, setHost] = useState<HTMLElement | null>(null);
-  useEffect(() => setHost(document.querySelector<HTMLElement>(".console")), []);
-
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    document.addEventListener("keydown", onKey);
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.body.style.overflow = previous;
-    };
-  }, [open, onClose]);
+  const host = useConsoleHost();
+  useOverlayKeys(open, onClose);
 
   if (!open || !host) return null;
 
@@ -602,6 +736,67 @@ export function Drawer({
         <div className="console-drawer-body">{children}</div>
       </aside>
     </>,
+    host,
+  );
+}
+
+/**
+ * A record, centred, with room to work in.
+ *
+ * The drawer is 560px against the side and suits reading one order. Editing a
+ * piece — photos, both languages, price, and a list of measures and colours —
+ * needs the width, and needs to feel like the thing you are working on rather
+ * than a panel beside the thing you were working on.
+ */
+export function Popup({
+  open,
+  title,
+  sub,
+  actions,
+  onClose,
+  width = 940,
+  children,
+}: {
+  open: boolean;
+  title: ReactNode;
+  sub?: ReactNode;
+  actions?: ReactNode;
+  onClose: () => void;
+  /** Wide by default. A confirmation-sized popup should be a confirm. */
+  width?: number;
+  children: ReactNode;
+}) {
+  const host = useConsoleHost();
+  useOverlayKeys(open, onClose);
+
+  if (!open || !host) return null;
+
+  return createPortal(
+    <div
+      className="console-popup-wrap"
+      // Clicking the backdrop closes; clicking inside it must not. Checking
+      // the target rather than stopping propagation in the panel keeps text
+      // selection that ends outside the panel from closing it.
+      onClick={(event) => event.target === event.currentTarget && onClose()}
+    >
+      <div
+        className="console-popup"
+        style={{ ["--popup-w" as string]: `${width}px` }}
+        role="dialog"
+        aria-modal="true"
+        aria-label={typeof title === "string" ? title : "Detail"}
+      >
+        <header className="console-popup-head">
+          <div className="console-stack-sm" style={{ gap: 3 }}>
+            <h2 className="console-h2">{title}</h2>
+            {sub ? <p className="console-card-sub">{sub}</p> : null}
+          </div>
+          <Button variant="ghost" iconOnly size="sm" icon="close" onClick={onClose} aria-label="Close" />
+        </header>
+        {actions ? <div className="console-popup-actions">{actions}</div> : null}
+        <div className="console-popup-body">{children}</div>
+      </div>
+    </div>,
     host,
   );
 }

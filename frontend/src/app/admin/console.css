@@ -919,6 +919,104 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
 .console-signin-box { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: var(--space-4); }
 
 /* ================================================================
+   THE HEADER — filters · search · pages. Added beside the strip,
+   not in place of it: pages move over one at a time.
+   ================================================================ */
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+}
+.console-header-filters { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+/* The search takes the slack, so the two ends stay put as the page narrows. */
+.console-header-search { flex: 1 1 220px; min-width: 0; }
+.console-header-search .console-search { min-width: 0; width: 100%; }
+.console-header-pages { flex: none; }
+.console-header-trailing { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+/* A date pair reads as one control, not two inputs that happen to be adjacent. */
+.console-range { display: inline-flex; align-items: center; gap: 6px; }
+.console-range span { font-size: var(--t-xs); color: var(--ink3); }
+
+/* ================================================================
+   Popup — a record, centred, with room to work. The drawer is for
+   reading; this is for editing a piece.
+   ================================================================ */
+.console-popup-wrap {
+  position: fixed;
+  inset: 0;
+  /* Below `.console-modal-wrap` (100) on purpose: a confirm raised from
+     inside a popup has to land on top of it, and both are portalled into
+     `.console`, where DOM order would otherwise decide it. */
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(3px);
+  animation: console-fade 0.14s var(--ease);
+}
+.console-popup {
+  width: min(var(--popup-w, 940px), 100%);
+  max-height: min(88vh, 900px);
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  animation: console-modal-in 0.18s var(--ease);
+}
+.console-popup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.console-popup-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+  flex: none;
+}
+.console-popup-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* A colour, shown as a colour. */
+.console-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  flex: none;
+  display: inline-block;
+}
+/* One line of specification. Sits in a row with its own remove button. */
+.console-spec { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.console-spec-sub { font: var(--w-regular) var(--t-xs) / 1 var(--font-mono); color: var(--ink3); }
+/* The date a piece was last touched, under the date it was made. */
+.console-modified { font: var(--w-regular) var(--t-xs) / 1.5 var(--font-mono); color: var(--ok); }
+/* A price that has been reduced still shows what it was. */
+.console-was { text-decoration: line-through; color: var(--ink3); margin-inline-end: 6px; }
+
+/* ================================================================
    Responsive
    ================================================================ */
 @media (max-width: 1023px) {
@@ -969,6 +1067,11 @@ a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); tr
   .console-signin { grid-template-columns: 1fr; }
   .console-signin-hero { min-height: 30vh; border-inline-end: 0; border-bottom: 1px solid var(--line); }
   .console-composer { bottom: 84px; }
+  /* A phone gets the whole screen for a piece — 88vh of a 940px-wide panel
+     is a form nobody can fill in. */
+  .console-popup-wrap { padding: 0; place-items: end stretch; }
+  .console-popup { max-height: 92vh; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .console-popup-head, .console-popup-actions, .console-popup-body { padding-inline: var(--space-4); }
 }
 
 @media (max-width: 767px), (pointer: coarse) {

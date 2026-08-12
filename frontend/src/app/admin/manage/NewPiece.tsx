@@ -21,10 +21,13 @@ import { ArabicInput, Button, Drawer, Field, Segmented } from "../ui/primitives"
 
 export function NewPiece({
   categories,
+  initialCategoryId,
   onClose,
   onCreated,
 }: {
   categories: AdminCategory[];
+  /** Pre-filled when the Add popup already asked which line of work. */
+  initialCategoryId?: string | null;
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
@@ -36,7 +39,7 @@ export function NewPiece({
     description_en: "",
     price: "",
     lead_time_days: "",
-    category_id: "",
+    category_id: initialCategoryId ?? "",
   });
   const [errors, setErrors] = useState<{ title?: string; price?: string; lead?: string }>({});
 

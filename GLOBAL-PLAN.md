@@ -431,3 +431,69 @@ at risk; wrote this plan against `requirementMOdification.md` and the real code.
 **Did not:** write any feature code. No schema, no UI, no migrations exist yet from this plan.
 **Next session starts at:** Session 1, on a clean tree at
 `ecomerce/claude/monolith-rebuild-5xzsfl`.
+
+### Session 1 — catalog spine and the Products table
+
+**Did — backend**
+- `models/catalog.py`: `DiscountKind` and `AttributeGroup` enums; on `Product` the three
+  discount columns, `delivery_days`, `personalizable`, `personalization_markup_pct`, and the
+  methods `effective_price()`, `discount_amount()`, `price_with_personalization()`; new
+  `ProductAttribute` model with a `label` property. `ProductVariant` untouched (D3).
+- Migration `d41a7c9b6e02` on `c3f1a8b52d64`, hand-written, up and down, following the
+  repo's two-form enum convention.
+- `catalog/schemas.py`: `AttributeOut` / `AttributeWrite` / `AttributePatch`,
+  `AttributeSuggestions` + `ColorSuggestion`, `ProductAnalytics`, the shared `check_discount`,
+  and `ProductAdmin` extended with `category_name`, `subcategory_name`, `attributes`,
+  `effective_price`, `delivery_days`, personalization, `updated_at`, `total_likes`/`total_saves`.
+- `catalog/service.py`: `attribute_out`, `category_names`, `attribute_suggestions` (presets ∪
+  what the shop already uses), `LOADED` now eager-loads attributes and the category's parent.
+- `catalog/routes.py`: attribute CRUD, `GET /admin/attribute-suggestions`, `q` /
+  `category_id` / date-range filters on `GET /admin/products`, discount coherence enforced on
+  patch, and `_admin_view` re-reads through `LOADED` with `populate_existing` instead of a
+  hand-listed `refresh` (the old list would have raised on the new relationships).
+- `admin/analytics.py` + `admin/routes.py`: `for_product` and
+  `GET /admin/products/{id}/analytics`.
+
+**Did — frontend**
+- `primitives.tsx` (additive): `ConsoleHeader` (D9), `DateRangeFilter`, `Swatch`, `Popup`, and
+  `useConsoleHost` / `useOverlayKeys` extracted so the portal-into-`.console` rule is a named
+  hook rather than a comment to copy. `ControlStrip` untouched.
+- `console.css`: header zones, popup, swatch, spec row, modified-date and struck-price rules,
+  plus one phone breakpoint. Additive only — no tokens, no resets, nothing restyled. The popup
+  sits at `z-index: 95` so a confirm raised from inside it lands on top.
+- `manage/page.tsx` rewritten as a sortable `DataTable`: photo · made (+ green edited date) ·
+  name · category · sub-category · price (struck when reduced) · delivery · what it is ·
+  saves · likes · actions. No page title, no "need attention" pill.
+- New `ProductPopup` (photos · words behind a language dropdown · price/reduction/delivery/
+  personalization · attributes · reach), `AttributesEditor`, `AddPopup`
+  (category → sub-category → product, with Modify/Delete dull until a row is picked),
+  `ProductAnalyticsPopup`.
+- `PieceInspector.tsx` deleted. `manage/categories/page.tsx` is now a redirect (D13).
+  `ManageSwitch` drops Categories and reads "Products".
+- `lib/console/types.ts` + `api.ts`: attribute types, extended `AdminProduct`, `api.products`
+  now takes an options object, `productAnalytics`, attribute calls. `BoardControls` updated for
+  the new `api.products` signature. `attributeChanged` added to `INVALIDATES`.
+
+**Verified:** `npx tsc --noEmit` clean; `npm run build` passes; `next lint` clean on everything
+I touched (two pre-existing warnings remain in `manage/customers` and `manage/feed`, which are
+session 4's). Backend files byte-compile — **nothing was run against a database**, per the rules.
+
+**Did not do, and why**
+- **The batch section is gone but not its function.** The spec says delete the "1 2 3" batch
+  section outright. Deleting it entirely would have removed the only way to say "I made four",
+  and `update_product` refuses to publish a shelf piece with nothing available — so shelf
+  pieces would have become unpublishable. The tally of numbered marks is gone; one quiet line
+  ("3 of 4 still here" + "I made more") survives inside Reach. **Owner question below.**
+- **Likes and saves are real columns reading a real field that is always 0** until session 2
+  creates `ProductInteraction`. The shape does not change when they light up.
+- Storefront untouched — discount, colour circles and personalization are session 2. Nothing
+  new is advertised to buyers yet.
+- No test was added for `effective_price` or attribute CRUD; the plan puts the test pass with
+  whoever runs Docker, and §6 lists exactly what to cover.
+
+**Next session starts at:** Session 2. `Product.effective_price()` and `ProductAttribute` are
+in place for it to read; `AdminProduct.total_likes` / `total_saves` are the fields to populate.
+
+**One question for the owner:** the batch line above — should a shelf piece keep a simple "how
+many I made" control, or do you want stock handled a different way entirely? Deleting it with
+nothing in its place stops shelf pieces from being published at all.

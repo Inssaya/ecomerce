@@ -256,6 +256,61 @@ async def by_product(db: AsyncSession, period: Period, limit: int = 60) -> dict:
     return {"period": period.as_dict(), "items": items}
 
 
+async def for_product(db: AsyncSession, product_id: str, period: Period) -> dict:
+    """The same funnel again, for one piece, with its shape over time.
+
+    `by_product` answers "which of these is working" across the shop; this
+    answers "how is *this* one doing", which is the question the console asks
+    when the owner clicks Analytics on a row. Same aggregates deliberately —
+    a number that means one thing in the table and another in the popup is
+    worse than no number.
+    """
+    row = (
+        await db.execute(
+            select(
+                _people(Signal.type == SignalType.impression).label("saw"),
+                _people(Signal.type == SignalType.click).label("opened"),
+                _people(
+                    Signal.type == SignalType.dwell, Signal.value >= STAYED_SECONDS
+                ).label("stayed"),
+                func.avg(
+                    case((Signal.type == SignalType.dwell, cast(Signal.value, Float)))
+                ).label("avg_seconds"),
+                _people(Signal.type == SignalType.add_to_cart).label("added"),
+                _people(Signal.type == SignalType.purchase).label("bought"),
+            ).where(_within(Signal.created_at, period), Signal.product_id == product_id)
+        )
+    ).one()
+
+    daily = (
+        await db.execute(
+            select(
+                func.date(Signal.created_at).label("day"),
+                func.count(func.distinct(Signal.visitor_id)).label("visitors"),
+            )
+            .where(_within(Signal.created_at, period), Signal.product_id == product_id)
+            .group_by(func.date(Signal.created_at))
+            .order_by(func.date(Signal.created_at))
+        )
+    ).all()
+
+    saw, opened, bought = row.saw or 0, row.opened or 0, row.bought or 0
+    return {
+        "period": period.as_dict(),
+        "saw": saw,
+        "opened": opened,
+        "opened_pct": _pct(opened, saw),
+        "stayed": row.stayed or 0,
+        "avg_seconds": round(float(row.avg_seconds), 1) if row.avg_seconds else 0.0,
+        "added": row.added or 0,
+        "bought": bought,
+        "bought_pct": _pct(bought, opened),
+        # Through `_fill_days`, so a day nobody came is a zero in the line
+        # rather than a gap the eye reads as missing data.
+        "daily": _fill_days(period, {str(day): count for day, count in daily}),
+    }
+
+
 # ── Screen by screen ──────────────────────────────────────────────────────────
 
 

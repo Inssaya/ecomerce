@@ -59,6 +59,7 @@ export const INVALIDATES: Record<string, string[]> = {
   batchChanged: ["pieces", "make", "waiting"],
   mediaChanged: ["pieces"],
   variantChanged: ["pieces"],
+  attributeChanged: ["pieces"],
   categoryChanged: ["categories", "pieces"],
   feedChanged: ["feed"],
   customerChanged: ["customers"],

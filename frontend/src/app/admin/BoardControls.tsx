@@ -155,7 +155,7 @@ export function BoardStrip({ view }: { view: "today" | "make" }) {
   // The catalogue is small and both dropdowns need it, so it is one cached
   // request shared by every Board render rather than one per control.
   const categories = useConsoleQuery("board:categories", useCallback(() => api.categories(), []));
-  const products = useConsoleQuery("board:products", useCallback(() => api.products("active"), []));
+  const products = useConsoleQuery("board:products", useCallback(() => api.products({ status: "active" }), []));
 
   const categoryId = query.scope.categoryId ?? "";
   const productId = query.scope.productId ?? "";
