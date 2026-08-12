@@ -105,23 +105,17 @@ const copy = {
   ourStory: ["Who we are", "من نحن"],
 
   // Pieces.
+  //
+  // The stock-copy keys used to live here — `allGone`, `lastOne`, `stillHere`,
+  // `weMadeThese`, `tallyMeaning`, `onlyMade`, `piecesMade`, `stillOnTheShelf`.
+  // The shop no longer counts units, so every screen that used them is gone
+  // too. Deleting the keys stops a future page from casually reintroducing
+  // "one left" copy.
   madeIn: ["Made in", "صُنعت في"],
   howItWasMade: ["How it was made", "كيف صُنعت"],
-  onlyMade: ["We made {n}. {left} left.", "صنعنا {n}. بقي {left}."],
-  lastOne: ["One left — the last of them.", "بقيت واحدة — آخرها."],
-  allGone: ["All gone. We may make more.", "نفدت. قد نصنع المزيد."],
   readyInDays: ["Ready in {n} days.", "جاهزة خلال {n} أيام."],
   madeToOrder: ["Made after you order it.", "تُصنع بعد أن تطلبها."],
   piece: ["Piece", "قطعة"],
-  weMadeThese: ["We made these", "هذه ما صنعناه"],
-  stillHere: ["still here", "ما زالت هنا"],
-  gone: ["gone", "ذهبت"],
-  tallyMeaning: [
-    "Solid ones are still here. Crossed ones have gone.",
-    "الممتلئة ما زالت هنا. المشطوبة ذهبت.",
-  ],
-  piecesMade: ["pieces made", "قطعة صنعناها"],
-  stillOnTheShelf: ["still on the shelf", "ما زالت على الرف"],
   choose: ["Choose", "اختر"],
   addToCart: ["Add to cart", "أضف إلى السلة"],
   added: ["In your cart", "في سلتك"],

@@ -497,3 +497,64 @@ in place for it to read; `AdminProduct.total_likes` / `total_saves` are the fiel
 **One question for the owner:** the batch line above — should a shelf piece keep a simple "how
 many I made" control, or do you want stock handled a different way entirely? Deleting it with
 nothing in its place stops shelf pieces from being published at all.
+
+### Session 1.1 — the no-stock correction
+
+The owner answered the batch question: **stock is not a concept this shop wants at all.** If
+a shelf piece is physically gone the workshop calls the buyer — that is a phone conversation,
+not a piece of software. Shelf and workshop stay as two kinds; what goes is the *counting*.
+
+I first misread this as "everything is made-to-order" and started flipping the shelf out of
+existence. The owner corrected it: shelf products are normal products, just uncounted.
+
+**What was reverted from the misread**
+- The migration `20260812_1200_no_stock_everything_made_to_order.py` (never run) is deleted.
+- `Product.kind` is required again on `ProductWrite`, and the workshop coherence validator
+  is back — a workshop piece without `lead_time_days` still refuses to save.
+- The `ck_workshop_has_lead_time` constraint stays on the table. `is_shelf` is back.
+- The AI assistant's `kind` filter is restored, and `NewPiece` has its shelf/workshop picker
+  again, with a `delivery_days` field on the shelf side and `lead_time_days` on the workshop.
+
+**What actually changes (the no-stock cleanup, kept)**
+- **Checkout no longer reserves `Piece` rows.** `_take_pieces` is gone from
+  `modules/orders/service.py`; every line, shelf or workshop, becomes one `OrderItem` with no
+  `piece_id`. `release_stale_reservations()` still runs to release pieces that pre-cleanup
+  orders are still holding — it becomes a no-op once they are done.
+- **`availability()` and `variant_availability()` are deleted from the catalogue service.**
+  `to_card` / `to_detail` / `to_admin` / `variants_out` no longer take an availability arg;
+  `available` is always `None` in the response. The `/workshop` counts endpoint stays as-is
+  (nothing on the storefront reads it).
+- **Publish guard**, `update_product`: one rule per kind. Photo required either way; a
+  workshop piece needs `lead_time_days` (the DB constraint covers it too); a shelf piece
+  needs `delivery_days`. The old "add the pieces you made" check for shelf is gone — that
+  was the stock check.
+- **AI shopper `_card`** drops the `available` and `is_shelf` fields; `add_to_cart` no longer
+  refuses on stock; `get_product` returns `made_of` (attribute labels) instead of per-variant
+  availability. The assistant literally can no longer say "only two left".
+- **Storefront:** stock signals are gone from `PieceView`, `PieceCard`, `ProductFeed`, the
+  cart page and the assistant panel. No "still here", "last one", "all gone", no crossed-out
+  variant swatch, no "sold out" button, no cart notice re-fetching each line. Workshop
+  pieces still carry the "Ready in N days" line — that is a time promise, not stock. The
+  shelf/workshop label under a card is unchanged.
+- **`ProductPopup`** drops the shelf block (`Shelf` sub-component gone). Its publish blocker
+  is per-kind again, matching the server: workshop → needs lead time; shelf → needs delivery
+  time; no stock check either way.
+- **`CartProvider`** loses `sync()` and every `Math.min(quantity, available)` clamp. The
+  `available` field on `CartLine` stays in the shape (as `null`) so a cart written by an
+  older tab loads without a `JSON.parse` shrug.
+- **`i18n.ts`**: `allGone`, `lastOne`, `stillHere`, `weMadeThese`, `tallyMeaning`,
+  `onlyMade`, `piecesMade`, `stillOnTheShelf`, `gone` are removed. Deleting the keys stops a
+  future page from casually reintroducing "one left" copy.
+- **JSON-LD product schema** on the piece page: `availability` is always `InStock` (every
+  listed piece is buyable; the shop does not have a signal to say otherwise).
+
+**Verified:** `npx tsc --noEmit` clean; `npm run build` passes; backend byte-compiles.
+Nothing was run against a database — the M1 migration is still the only new one, and it is
+written, not applied.
+
+**Did not do**
+- Retire `Piece` / `ProductVariant` / `ProductKind`. Live order lines reference them and
+  history has to keep reading correctly. Written into `todo.md` for once no open order does.
+- Touch the `PieceAlert` (waitlist) path — the sold-out "tell me when you make more" flow.
+  It has no way to trigger any more (nothing publishes a sold-out state), so it is dead code
+  rather than broken code. Added to `todo.md`.

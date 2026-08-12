@@ -59,32 +59,11 @@ def visible() -> Select:
     return with_relations(select(Product).where(Product.status == ProductStatus.active))
 
 
-async def availability(db: AsyncSession, product_ids: list[str]) -> dict[str, int]:
-    """How many pieces of each product are still on the shelf.
-
-    One grouped query for the whole page rather than a count per card.
-    """
-    if not product_ids:
-        return {}
-    rows = await db.execute(
-        select(Piece.product_id, func.count())
-        .where(Piece.product_id.in_(product_ids), Piece.state == PieceState.available)
-        .group_by(Piece.product_id)
-    )
-    return dict(rows.all())
-
-
-async def variant_availability(db: AsyncSession, product_id: str) -> dict[str, int]:
-    rows = await db.execute(
-        select(Piece.variant_id, func.count())
-        .where(
-            Piece.product_id == product_id,
-            Piece.state == PieceState.available,
-            Piece.variant_id.is_not(None),
-        )
-        .group_by(Piece.variant_id)
-    )
-    return dict(rows.all())
+# `availability()` and `variant_availability()` used to live here, counting
+# `Piece` rows in state `available` for a page of cards. They are gone with the
+# shelf: the shop makes what is ordered, so there is no number of units to
+# count and nothing can be sold out. Every `available` field the API still
+# carries reports `None`, which has always meant "nothing to run out of".
 
 
 def primary_image(product: Product) -> str | None:
@@ -107,8 +86,7 @@ def media_out(item: ProductMedia, lang: str) -> MediaResponse:
     )
 
 
-def to_card(product: Product, lang: str, available: int | None) -> ProductCard:
-    shelf = product.kind is ProductKind.shelf
+def to_card(product: Product, lang: str) -> ProductCard:
     return ProductCard(
         id=product.id,
         slug=product.slug,
@@ -119,64 +97,37 @@ def to_card(product: Product, lang: str, available: int | None) -> ProductCard:
         image=primary_image(product),
         category_slug=product.category.slug if product.category else None,
         category_name=product.category.name(lang) if product.category else None,
-        available=(available or 0) if shelf else None,
-        lead_time_days=product.lead_time_days if not shelf else None,
+        # Null, always: nothing is finite, so nothing has a count.
+        available=None,
+        lead_time_days=product.delivery_days or product.lead_time_days,
     )
 
 
-def variants_out(
-    product: Product, lang: str, per_variant: dict[str, int] | None
-) -> list[VariantOut]:
-    shelf = product.kind is ProductKind.shelf
+def variants_out(product: Product, lang: str) -> list[VariantOut]:
     return [
         VariantOut(
             id=variant.id,
             sku=variant.sku,
             option=variant.option(lang),
             price=float(variant.price if variant.price is not None else product.price),
-            available=(per_variant or {}).get(variant.id, 0) if shelf else None,
+            available=None,
         )
         for variant in product.variants
         if variant.is_active
     ]
 
 
-def to_detail(
-    product: Product,
-    lang: str,
-    *,
-    available: int | None,
-    per_variant: dict[str, int] | None,
-    pieces: list[Piece],
-) -> ProductDetail:
+def to_detail(product: Product, lang: str) -> ProductDetail:
     return ProductDetail(
-        **to_card(product, lang, available).model_dump(),
+        **to_card(product, lang).model_dump(),
         description=product.description(lang),
         story=product.story(lang),
         images=[media_out(item, lang) for item in product.media],
-        variants=variants_out(product, lang, per_variant),
-        # Numbering is shown only when the workshop decided this batch earns
-        # it. The rows exist either way — this is presentation, not inventory.
-        pieces=(
-            [
-                PieceOut(
-                    id=piece.id,
-                    number=piece.number,
-                    batch_size=piece.batch_size,
-                    label=piece.label,
-                    state=piece.state.value,
-                    made_on=piece.made_on,
-                    photo=piece.photo_url,
-                    # A note belongs to one object and only matters while it is
-                    # still buyable.
-                    note=piece.note(lang) if piece.state is PieceState.available else "",
-                )
-                for piece in pieces
-            ]
-            if product.show_piece_numbers
-            else []
-        ),
-        show_piece_numbers=product.show_piece_numbers,
+        variants=variants_out(product, lang),
+        # Empty, always. The numbered tally said "we made twelve, four are
+        # left" — a sentence about stock, which is not something this shop has.
+        pieces=[],
+        show_piece_numbers=False,
         batch_closed=product.batch_closed,
         made_on=product.made_on,
         created_at=product.created_at,
@@ -211,14 +162,7 @@ def category_names(product: Product) -> tuple[str | None, str | None]:
     return node.name_en, None
 
 
-def to_admin(
-    product: Product,
-    available: int | None,
-    per_variant: dict[str, int] | None,
-    *,
-    likes: int = 0,
-    saves: int = 0,
-) -> ProductAdmin:
+def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmin:
     category_name, subcategory_name = category_names(product)
     return ProductAdmin(
         id=product.id,
@@ -238,9 +182,9 @@ def to_admin(
         subcategory_name=subcategory_name,
         status=product.status,
         images=[media_out(item, "en") for item in product.media],
-        variants=variants_out(product, "en", per_variant),
+        variants=variants_out(product, "en"),
         attributes=[attribute_out(item) for item in product.attributes],
-        available=available if product.kind is ProductKind.shelf else None,
+        available=None,
         lead_time_days=product.lead_time_days,
         delivery_days=product.delivery_days,
         personalizable=product.personalizable,

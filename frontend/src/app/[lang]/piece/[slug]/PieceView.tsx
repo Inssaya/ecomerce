@@ -71,30 +71,19 @@ export function PieceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [piece?.id]);
 
-  // A variant switch or a background stock refresh can drop the cap below
-  // whatever quantity was already picked — nothing else pulls it back down,
-  // and "add to cart" does not otherwise notice.
-  useEffect(() => {
-    if (!piece) return;
-    const activeVariant = piece.variants.find((option) => option.id === variantId) ?? null;
-    const avail = piece.kind === "shelf" ? (activeVariant?.available ?? piece.available) : null;
-    const cap = avail ?? 20;
-    setQuantity((n) => Math.min(n, Math.max(cap, 1)));
-  }, [piece, variantId]);
-
   if (!piece) {
     return <p className="page-wide pt-20 text-center text-ink-soft">{t("notFound")}</p>;
   }
 
   const variant = piece.variants.find((option) => option.id === variantId) ?? null;
   const price = variant?.price ?? piece.price;
-  const available = piece.kind === "shelf" ? (variant?.available ?? piece.available) : null;
-  const soldOut = piece.kind === "shelf" && (available ?? 0) === 0;
   const photos = piece.images.length > 0 ? piece.images : [];
-  const cap = available ?? 20;
+  //: Nothing here runs out, so the only ceiling is one that keeps a slipped
+  //: keypress from becoming an order for four hundred.
+  const cap = 20;
 
   function addToCart() {
-    if (soldOut || !piece) return;
+    if (!piece) return;
     cart.add(
       {
         productId: piece.id,
@@ -104,7 +93,7 @@ export function PieceView({
         option: variant?.option ?? "",
         price,
         image: photos[0]?.url ?? piece.image ?? null,
-        available,
+        available: null,
       },
       quantity,
     );
@@ -180,15 +169,15 @@ export function PieceView({
             <p className="stamp text-[clamp(22px,2vw,28px)] font-semibold tabular-nums">
               {money(price, lang)}
             </p>
-            <p className="text-[14px] text-ink-mute">
-              {piece.kind === "workshop"
-                ? t("readyInDays", { n: piece.lead_time_days ?? 0 })
-                : soldOut
-                  ? t("allGone")
-                  : available === 1
-                    ? t("lastOne")
-                    : t("stillHere")}
-            </p>
+            {/* The stock sentence — "still here", "one left", "all gone" —
+                lived on this line and is gone. What stays is the promise
+                about time, because a workshop piece takes N days to make and
+                the buyer has to know that before they order. */}
+            {piece.kind === "workshop" && piece.lead_time_days ? (
+              <p className="text-[14px] text-ink-mute">
+                {t("readyInDays", { n: piece.lead_time_days })}
+              </p>
+            ) : null}
           </div>
 
           {piece.description ? (
@@ -203,12 +192,10 @@ export function PieceView({
               <div className="mt-2.5 flex flex-wrap gap-2">
                 {piece.variants.map((option) => {
                   const chosen = option.id === variantId;
-                  const empty = piece.kind === "shelf" && (option.available ?? 0) === 0;
                   return (
                     <button
                       key={option.id}
                       type="button"
-                      disabled={empty}
                       onClick={() => setVariantId(option.id)}
                       className={`h-11 min-w-[52px] rounded-[10px] border-[1.5px] px-3.5 text-[14.5px]
                                   font-medium transition-all duration-200 disabled:opacity-35
@@ -252,12 +239,10 @@ export function PieceView({
             <button
               type="button"
               onClick={addToCart}
-              disabled={soldOut}
               className="h-[52px] flex-1 rounded-full bg-ink text-white text-[15.5px] font-semibold
-                         transition-colors duration-200 hover:bg-clay disabled:opacity-40
-                         disabled:hover:bg-ink"
+                         transition-colors duration-200 hover:bg-clay"
             >
-              {added ? t("added") : soldOut ? t("allGone") : t("addToCart")}
+              {added ? t("added") : t("addToCart")}
             </button>
           </div>
 
@@ -279,25 +264,8 @@ export function PieceView({
             {ar ? "نتصل قبل التوصيل" : "we call before we deliver"}
           </p>
 
-          {/* The batch, drawn as what it is. The one claim a reseller cannot
-              make: they do not know how many of anything exists. */}
-          {piece.show_piece_numbers && piece.pieces.length > 0 ? (
-            <div className="mt-8">
-              <p className="text-[13.5px] font-medium text-ink-soft">{t("weMadeThese")}</p>
-              <div className="tally mt-2.5">
-                {piece.pieces.map((one) => (
-                  <span
-                    key={one.id}
-                    title={one.label}
-                    className={one.state === "available" ? "tally-here" : "tally-gone"}
-                  >
-                    {one.number}
-                  </span>
-                ))}
-              </div>
-              <p className="mt-2 text-[12.5px] text-ink-mute">{t("tallyMeaning")}</p>
-            </div>
-          ) : null}
+          {/* The numbered tally of "we made twelve, four are left" was here.
+              It described stock, and the shop has none. */}
 
           {piece.story ? (
             <div className="mt-8 border-t border-sand pt-6">

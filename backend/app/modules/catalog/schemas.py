@@ -177,7 +177,7 @@ class ProductWrite(BaseModel):
 
     `kind` decides what is required, because the two offers genuinely need
     different things: a made-to-order piece without a lead time has nothing
-    honest to put on the page.
+    honest to put on the page (BRAND.md §8).
     """
 
     kind: ProductKind

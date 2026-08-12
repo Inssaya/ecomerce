@@ -13,17 +13,16 @@
  * and both are still readable; picking the language first just means the form
  * is four fields instead of eight.
  *
- * Two sections the old inspector had are deliberately gone: the batch tally
- * and variants. Variants are replaced by `AttributesEditor`; the tally's
- * *function* survives as one quiet line, because a shelf piece with nothing
- * on the shelf cannot be published and removing the only way to say "I made
- * four" would take publishing away with it.
+ * Two sections the old inspector had are gone entirely: the batch tally and
+ * variants. Variants are replaced by `AttributesEditor`. The tally counted
+ * stock, and this shop does not track it — if a piece is physically gone,
+ * that is a phone call, not a piece of software.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Image from "next/image";
 
 import { api, type AdminCategory, type AdminProduct } from "@/lib/console/api";
-import { useConsoleQuery, useMutation } from "@/lib/console/query";
+import { useMutation } from "@/lib/console/query";
 
 import { AttributesEditor } from "./AttributesEditor";
 import {
@@ -91,13 +90,17 @@ export function ProductPopup({
   const guard = useDirtyGuard(dirty);
 
   const live = product.status === "active";
+  // Said before the click rather than after it. A photo is required either
+  // way; the promise is `lead_time_days` for a workshop piece and
+  // `delivery_days` for a shelf one — BRAND.md §8, "ready in six days", never
+  // "soon". No stock check, either way.
   const blocker =
     product.images.length === 0
       ? "Needs a real photo first"
       : product.kind === "workshop" && !product.lead_time_days
         ? "Needs a lead time first"
-        : product.kind === "shelf" && !product.available
-          ? "Nothing on the shelf to sell"
+        : product.kind === "shelf" && !(Number(form.delivery_days) || product.delivery_days)
+          ? "Needs a delivery time first"
           : null;
 
   const save = () =>
@@ -371,7 +374,7 @@ export function ProductPopup({
 
       <AttributesEditor product={product} onChanged={onChanged} />
 
-      {/* ── What it earns, and what is left of it ── */}
+      {/* ── What it earns ── */}
       <Card>
         <CardHead title="Reach" sub="Hearts and buy-later saves, from the shop." />
         <div className="console-row" style={{ gap: "var(--space-5)" }}>
@@ -382,86 +385,8 @@ export function ProductPopup({
             <span className="console-caps">Saves</span> <Num value={product.total_saves} />
           </span>
         </div>
-        {product.kind === "shelf" ? <Shelf product={product} onChanged={onChanged} /> : null}
       </Card>
     </Popup>
-  );
-}
-
-/**
- * How many exist, and one way to say you made more.
- *
- * What is left of the batch section. The tally of numbered marks is gone — it
- * was a wall of squares nobody read — but a shelf piece with no pieces cannot
- * be published, so the count and the "I made more" action stay. Adding still
- * tells everyone who asked to be told, and that is still irreversible, so it
- * still asks first.
- */
-function Shelf({ product, onChanged }: { product: AdminProduct; onChanged: () => void }) {
-  const { mutate, busy } = useMutation();
-  const confirm = useConfirm();
-  const [quantity, setQuantity] = useState("1");
-
-  const waiting = useConsoleQuery(
-    `waiting:${product.id}`,
-    useCallback(() => api.waitingOn(product.id), [product.id]),
-  );
-  const waitingCount = waiting.data?.waiting ?? 0;
-  const pieces = useConsoleQuery(
-    `pieces:${product.id}`,
-    useCallback(() => api.pieces(product.id), [product.id]),
-  );
-  const made = pieces.data?.length ?? 0;
-
-  const add = (count: number) =>
-    mutate(() => api.addPieces(product.id, count), {
-      invalidates: ["batchChanged"],
-      onDone: () => {
-        pieces.reload();
-        waiting.reload();
-        onChanged();
-      },
-    });
-
-  return (
-    <div className="console-stack-sm" style={{ marginTop: "var(--space-3)" }}>
-      <span className="console-caps">On the shelf</span>
-      <p className="console-muted">
-        <Num value={product.available ?? 0} /> of {made} still here.
-        {waitingCount > 0 ? ` ${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting.` : ""}
-      </p>
-      <form
-        className="console-row"
-        onSubmit={(event) => {
-          event.preventDefault();
-          const count = Number(quantity);
-          if (!(count >= 1)) return;
-          if (waitingCount > 0) {
-            confirm({
-              title: `Add ${count} to the shelf?`,
-              body: `${waitingCount} ${waitingCount === 1 ? "person is" : "people are"} waiting on this piece. Adding tells all of them straight away, and that cannot be taken back.`,
-              confirmLabel: `Add ${count} and tell them`,
-              onConfirm: () => add(count),
-            });
-            return;
-          }
-          void add(count);
-        }}
-      >
-        <input
-          type="number"
-          min={1}
-          max={200}
-          value={quantity}
-          onChange={(event) => setQuantity(event.target.value)}
-          style={{ width: 90 }}
-          aria-label="How many you made"
-        />
-        <Button type="submit" size="sm" disabled={busy}>
-          I made more
-        </Button>
-      </form>
-    </div>
   );
 }
 

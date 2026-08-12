@@ -5,12 +5,16 @@
  *
  * Deliberately forgiving: Arabic is optional because blocking on it means
  * fewer pieces get made, and a missing translation is a thing to fix later,
- * not a wall. But it is *marked*, so "later" actually arrives — the list shows
- * the piece as needing attention until the Arabic is there.
+ * not a wall.
  *
- * The one hard rule is the server's: switching kind changes which fields are
- * legal, so switching clears the ones that no longer apply rather than letting
- * the save fail with "a piece already made has no lead time".
+ * Two kinds, because the server has two: **shelf** for a piece the shop sells
+ * like any store sells anything, and **workshop** for one made to order. Which
+ * fields are required follows from the kind — a workshop piece without a lead
+ * time has nothing honest to put on the page, and switching kind clears what
+ * no longer applies rather than letting the save fail.
+ *
+ * The one thing that is *not* here any more is a stock field. There isn't
+ * one: this shop does not count units.
  */
 import { useState } from "react";
 
@@ -39,6 +43,7 @@ export function NewPiece({
     description_en: "",
     price: "",
     lead_time_days: "",
+    delivery_days: "",
     category_id: initialCategoryId ?? "",
   });
   const [errors, setErrors] = useState<{ title?: string; price?: string; lead?: string }>({});
@@ -50,7 +55,7 @@ export function NewPiece({
     const next: typeof errors = {};
     if (!form.title_en.trim()) next.title = "A name";
     if (!(Number(form.price) > 0)) next.price = "A price above zero";
-    if (kind === "workshop" && !(Number(form.lead_time_days) >= 1)) next.lead = "How many days it takes";
+    if (kind === "workshop" && !(Number(form.lead_time_days) >= 1)) next.lead = "How many days it takes to make";
     setErrors(next);
     if (Object.keys(next).length) return;
 
@@ -64,8 +69,10 @@ export function NewPiece({
           description_ar: "",
           price: Number(form.price),
           category_id: form.category_id || null,
-          // The server refuses a lead time on a piece already made.
+          // The server refuses a lead time on a shelf piece and requires one on
+          // a workshop piece. Sending the field that fits keeps the API honest.
           lead_time_days: kind === "workshop" ? Number(form.lead_time_days) : null,
+          delivery_days: form.delivery_days ? Number(form.delivery_days) : null,
         }),
       {
         invalidates: ["pieceChanged"],
@@ -80,8 +87,8 @@ export function NewPiece({
         <Field label="Which kind">
           <Segmented
             options={[
-              { value: "shelf" as const, label: "The Shelf — already made" },
-              { value: "workshop" as const, label: "The Workshop — made to order" },
+              { value: "shelf" as const, label: "Shelf — a normal product" },
+              { value: "workshop" as const, label: "Workshop — made to order" },
             ]}
             value={kind}
             onChange={(next) => {
@@ -110,10 +117,14 @@ export function NewPiece({
             <input id="new-price" type="number" min={1} value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} aria-invalid={Boolean(errors.price)} />
           </Field>
           {kind === "workshop" ? (
-            <Field label="Ready in (days)" htmlFor="new-lead" error={errors.lead}>
+            <Field label="Ready in (days)" htmlFor="new-lead" error={errors.lead} hint="How long the making takes.">
               <input id="new-lead" type="number" min={1} max={365} value={form.lead_time_days} onChange={(event) => setForm({ ...form, lead_time_days: event.target.value })} aria-invalid={Boolean(errors.lead)} />
             </Field>
-          ) : null}
+          ) : (
+            <Field label="Delivery time (days)" htmlFor="new-delivery" hint="Needed before you can publish it — not to save a draft.">
+              <input id="new-delivery" type="number" min={1} max={365} value={form.delivery_days} onChange={(event) => setForm({ ...form, delivery_days: event.target.value })} />
+            </Field>
+          )}
         </div>
 
         <Field label="Description" htmlFor="new-description">

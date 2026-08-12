@@ -82,8 +82,8 @@ export function ChatPanel({ lang }: { lang: Lang }) {
                 option: variant?.option ?? "",
                 price: variant?.price ?? piece.price,
                 image: piece.images[0]?.url ?? null,
-                available:
-                  piece.kind === "shelf" ? (variant?.available ?? piece.available) : null,
+                // No stock ceiling — the shop does not count units.
+                available: null,
               },
               action.quantity ?? 1,
             );

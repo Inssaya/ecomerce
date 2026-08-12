@@ -62,17 +62,17 @@ export async function generateMetadata({
 
   if (!found) return { title: t("notFound") };
 
-  // What is actually true about it, in one line: the price, and either how
-  // many are left or how long it takes to make. No adjectives — the photo
-  // does that job, and a claim we cannot keep is worse than no claim.
-  const madeOrLeft =
-    found.kind === "workshop"
-      ? t("readyInDays", { n: found.lead_time_days ?? 0 })
-      : (found.available ?? 0) === 0
-        ? t("allGone")
-        : t("onlyMade", { n: found.pieces.length || (found.available ?? 0), left: found.available ?? 0 });
+  // The one line under the title in search snippets and share previews: the
+  // price, and — for a workshop piece — how long it takes to make. No stock
+  // claim; the shop does not track units, so a "how many left" sentence here
+  // would be one the site cannot back up. A claim we cannot keep is worse
+  // than no claim.
+  const madeNote =
+    found.kind === "workshop" && found.lead_time_days
+      ? t("readyInDays", { n: found.lead_time_days })
+      : "";
 
-  const description = `${money(found.price, lang)} · ${madeOrLeft} ${found.description || t("taglineSupport")}`
+  const description = `${money(found.price, lang)}${madeNote ? ` · ${madeNote}` : ""} ${found.description || t("taglineSupport")}`
     .replace(/\s+/g, " ")
     .slice(0, 200);
   const path = `/${lang}/piece/${found.slug}`;
@@ -174,7 +174,6 @@ function MorePieces({
 }
 
 function productSchema(found: PieceDetail, lang: Lang) {
-  const inStock = found.kind === "workshop" || (found.available ?? 0) > 0;
   return {
     "@context": "https://schema.org",
     "@type": "Product",
@@ -188,9 +187,9 @@ function productSchema(found: PieceDetail, lang: Lang) {
       url: `${siteUrl}/${lang}/piece/${found.slug}`,
       price: found.price,
       priceCurrency: "MAD",
-      availability: inStock
-        ? "https://schema.org/InStock"
-        : "https://schema.org/OutOfStock",
+      // Every listed piece is buyable. The shop does not count units, so a
+      // stock signal here would be one the site cannot back up.
+      availability: "https://schema.org/InStock",
       // Cash on delivery, stated where a machine can read it too.
       acceptedPaymentMethod: "http://purl.org/goodrelations/v1#COD",
     },

@@ -55,17 +55,21 @@ VOICE:
 Soft, warm, certain. Short sentences, plain words. We are quietly confident because we made the thing. Never "premium", never "luxury", never exclamation marks, never emoji. Concede what is true: custom work is slower, because it is being made."""
 
 
-def _card(product: Product, available: int | None, lang: str) -> dict[str, Any]:
-    """What the model needs to talk about a piece, and nothing more."""
+def _card(product: Product, lang: str) -> dict[str, Any]:
+    """What the model needs to talk about a piece, and nothing more.
+
+    No stock figure, because there is none — the shop makes what is ordered.
+    Handing the assistant an "available" number was how it learned to say
+    things like "only two left", which would be an invented shortage
+    (BRAND.md §10) now that nothing is finite.
+    """
     return {
         "id": product.id,
         "slug": product.slug,
         "title": product.title(lang),
         "price_mad": float(product.price),
         "price_max_mad": float(product.price_max) if product.price_max is not None else None,
-        "kind": product.kind.value,
-        "available": available if product.is_shelf else None,
-        "ready_in_days": None if product.is_shelf else product.lead_time_days,
+        "delivery_days": product.delivery_days or product.lead_time_days,
         "category": product.category.name(lang) if product.category else None,
     }
 
@@ -82,7 +86,6 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         products = list(
             (await db.scalars(statement.limit(min(limit, 10)))).unique()
         )
-        left = await catalog.availability(db, [product.id for product in products])
         if query and visitor_id:
             # An explicit search is the strongest statement of intent there is,
             # and the most direct answer to "what are people asking us for that
@@ -97,7 +100,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             await db.commit()
         return {
             "found": len(products),
-            "products": [_card(product, left.get(product.id, 0), lang) for product in products],
+            "products": [_card(product, lang) for product in products],
         }
 
     async def get_product(slug: str) -> dict:
@@ -106,19 +109,17 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         )
         if product is None or product.status is not ProductStatus.active:
             return {"error": f"No piece with the slug '{slug}'"}
-        left = await catalog.availability(db, [product.id])
-        per_variant = await catalog.variant_availability(db, product.id)
         return {
-            **_card(product, left.get(product.id, 0), lang),
+            **_card(product, lang),
             "description": product.description(lang),
             "how_it_was_made": product.story(lang),
             "photos": len(product.media),
+            "made_of": [attribute.label for attribute in product.attributes],
             "options": [
                 {
                     "id": variant.id,
                     "option": variant.option(lang),
                     "price_mad": variant.unit_price(),
-                    "available": per_variant.get(variant.id, 0) if product.is_shelf else None,
                 }
                 for variant in product.variants
                 if variant.is_active
@@ -129,10 +130,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         products, _, _ = await engine.page(
             db, visitor_id=visitor_id or "anonymous", size=min(limit, 10), offset=0
         )
-        left = await catalog.availability(db, [product.id for product in products])
-        return {
-            "products": [_card(product, left.get(product.id, 0), lang) for product in products]
-        }
+        return {"products": [_card(product, lang) for product in products]}
 
     async def add_to_cart(product_id: str, quantity: int = 1, variant_id: str | None = None) -> dict:
         """Validated here, carried out by the browser — the cart is on their
@@ -142,12 +140,8 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         )
         if product is None or product.status is not ProductStatus.active:
             return {"error": "That piece is not available"}
-        if product.is_shelf:
-            left = (await catalog.availability(db, [product.id])).get(product.id, 0)
-            if left < quantity:
-                return {
-                    "error": f"We only have {left} of '{product.title(lang)}' — we made that many"
-                }
+        # No stock check: what is ordered gets made, so a quantity can never be
+        # more than there is.
         return {
             "added": product.title(lang),
             "quantity": quantity,
@@ -303,7 +297,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         ),
         spec(
             "get_product",
-            "One piece in full: description, how it was made, options, how many are left.",
+            "One piece in full: description, how it was made, what it is made of, options.",
             {"slug": _STR},
             required=["slug"],
         ),

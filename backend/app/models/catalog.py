@@ -2,16 +2,23 @@
 
 Two offers, one table. `kind` says which:
 
-* **shelf** — already made. Finite by nature: we made four, there are four. It
-  has `pieces`, one row per physical object, and availability is a count of
-  them.
-* **workshop** — made to order. Nothing to run out of, so no pieces. What it
-  has instead is a promise about time.
+* **shelf** — a piece the shop sells like any store sells anything: a name, a
+  price, a photo. Nothing in the schema counts units of it. If it ever runs
+  out for real, the workshop calls the buyer — that is a phone conversation,
+  not a piece of software.
+* **workshop** — made to order. The buyer knows before they order how long it
+  takes, because the page says so. `lead_time_days` is that promise, and a
+  workshop piece without one has nothing honest to put on the page (BRAND.md
+  §8: "ready in six days", never "soon"). A check constraint keeps that true.
 
-An earlier draft of this file split the two into subclass tables with joined
-inheritance. That bought type-safety on six columns and cost three tables, a
-polymorphic mapper and a join on every read. The buyer cannot tell the
-difference; the validation lives in the write schema instead.
+The `Piece` and `ProductVariant` tables are still here because live order
+lines point at them and history has to keep reading correctly. **They are no
+longer read for availability** — no screen counts units, no endpoint returns a
+"how many left" figure, and checkout does not reserve rows. Stock is a whole
+world of complexity (backorders, reservations, restock windows, waitlists)
+this shop does not want; if a shelf piece is physically gone, the workshop
+handles that person on the phone. Retiring those tables entirely is its own
+migration, once no open order references one — see `todo.md`.
 
 There is no facet/filter system here either, and that is deliberate. Filters
 exist to help someone narrow ten thousand items. This catalogue is short on
@@ -132,6 +139,13 @@ class Category(Base, TimestampMixin):
 
 
 class Product(Base, TimestampMixin, BilingualMixin):
+    """One thing the shop sells.
+
+    There is deliberately no quantity column and no availability. See the
+    module docstring: this catalogue does not track stock. A shelf piece is a
+    normal product; a workshop piece is one that carries a promise about time.
+    """
+
     __tablename__ = "products"
     __table_args__ = (
         # A made-to-order piece without a lead time has nothing honest to put

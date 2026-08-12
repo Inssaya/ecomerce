@@ -2,10 +2,9 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { use, useEffect, useState } from "react";
+import { use } from "react";
 
 import { useCart } from "@/components/CartProvider";
-import { api } from "@/lib/api";
 import { feeFor, useDelivery } from "@/lib/delivery";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";
 
@@ -22,52 +21,13 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
   const { lang: raw } = use(params);
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
-  const { lines, total, setQuantity, sync, remove, ready } = useCart();
+  const { lines, total, setQuantity, remove, ready } = useCart();
   const terms = useDelivery(lang);
-  const [notices, setNotices] = useState<Record<string, string>>({});
 
-  // What a line remembers is only what stock looked like the moment it was
-  // added — someone else can buy the last one while it sits here unpaid for.
-  // Asked again on every visit to the cart, since that is the last stop
-  // before the order is placed.
-  const key = lines.map((line) => `${line.productId}:${line.variantId}`).join(",");
-  useEffect(() => {
-    if (!ready || lines.length === 0) return;
-    let cancelled = false;
-    (async () => {
-      const found: Record<string, string> = {};
-      for (const line of lines) {
-        try {
-          const fresh = await api.piece(lang, line.slug);
-          const variant = line.variantId
-            ? fresh.variants.find((option) => option.id === line.variantId)
-            : null;
-          const live = fresh.kind === "shelf" ? (variant?.available ?? fresh.available) : null;
-          if (live !== line.available) sync(line.productId, line.variantId, live);
-          if (live !== null && live < line.quantity) {
-            found[`${line.productId}:${line.variantId}`] =
-              live === 0
-                ? lang === "ar"
-                  ? "نفدت هذه القطعة."
-                  : "This one has sold out."
-                : lang === "ar"
-                  ? `تبقّى ${live} فقط — عدّلنا الكمية.`
-                  : `Only ${live} left — we adjusted the quantity.`;
-          }
-        } catch {
-          /* couldn't check this one — leave it as it was rather than block the cart */
-        }
-      }
-      if (!cancelled) setNotices(found);
-    })();
-    return () => {
-      cancelled = true;
-    };
-    // Keyed on which lines exist, not on the objects themselves — `sync`
-    // above rewrites those, and re-running this for a stock check the moment
-    // it just finished one would be a loop.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ready, lang, key]);
+  // The cart used to re-fetch each line on every visit and warn "only 2 left"
+  // or "this one has sold out". The shop no longer counts units — if a shelf
+  // piece is physically gone, the workshop calls the buyer after the order —
+  // so there is nothing here to check and no notice to show.
 
   if (!ready) return <div className="page pt-10" aria-hidden />;
 
@@ -107,11 +67,6 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
               <p className="text-[15px] font-medium leading-snug line-clamp-2">{line.title}</p>
               {line.option ? <p className="text-[13px] text-ink-soft">{line.option}</p> : null}
               <p className="stamp mt-0.5 text-[15px] font-semibold">{money(line.price, lang)}</p>
-              {notices[`${line.productId}:${line.variantId}`] ? (
-                <p role="alert" className="mt-1 text-[13px] text-warn">
-                  {notices[`${line.productId}:${line.variantId}`]}
-                </p>
-              ) : null}
 
               <div className="mt-2 flex items-center gap-1">
                 <Stepper
@@ -121,7 +76,6 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
                 <span className="stamp w-9 text-center text-[15px]">{line.quantity}</span>
                 <Stepper
                   label="+"
-                  disabled={line.available !== null && line.quantity >= line.available}
                   onClick={() => setQuantity(line.productId, line.variantId, line.quantity + 1)}
                 />
                 <button

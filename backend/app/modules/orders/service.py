@@ -37,7 +37,6 @@ from app.models import (
     Piece,
     PieceState,
     Product,
-    ProductKind,
     ProductStatus,
     ProductVariant,
     User,
@@ -45,7 +44,7 @@ from app.models import (
 from app.modules.catalog.service import primary_image
 from app.modules.local import service as local
 from app.modules.notify.service import notify_order_status
-from app.modules.orders.schemas import CartLine, CheckoutRequest
+from app.modules.orders.schemas import CheckoutRequest
 
 logger = logging.getLogger(__name__)
 
@@ -111,33 +110,18 @@ async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None
     return Decimal(str(await local.fee_for_name(db, city)))
 
 
-async def _take_pieces(
-    db: AsyncSession, product: Product, line: CartLine
-) -> list[Piece]:
-    """Lock and reserve the pieces this line is buying."""
-    query = (
-        select(Piece)
-        .where(Piece.product_id == product.id, Piece.state == PieceState.available)
-        .order_by(Piece.number)
-        .limit(line.quantity)
-        .with_for_update()
-    )
-    if line.variant_id:
-        query = query.where(Piece.variant_id == line.variant_id)
-
-    pieces = list(await db.scalars(query))
-    if len(pieces) < line.quantity:
-        raise conflict(
-            f"We have {len(pieces)} of '{product.title_en}' — we made that many"
-        )
-    for piece in pieces:
-        piece.state = PieceState.reserved
-    return pieces
-
-
 async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | None) -> Order:
-    # Before taking pieces off the shelf, put back any that abandoned orders
-    # are still holding.
+    """Take the order. Nothing is reserved, because nothing is finite.
+
+    This used to lock and reserve `Piece` rows for anything filed as `shelf`,
+    and refuse the line when there were not enough — "we have 2 of this, we
+    made that many". The shop is made-to-order throughout: what is ordered
+    gets made. So an order can never be short, and no row is taken off
+    anything.
+
+    `release_stale_reservations` still runs, for orders placed before this
+    changed that are still holding pieces. It is a no-op once they are done.
+    """
     await release_stale_reservations(db)
 
     seen = {(line.product_id, line.variant_id) for line in body.items}
@@ -170,44 +154,28 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
 
         unit_price = Decimal(variant.price if variant and variant.price is not None else product.price)
 
-        if product.kind is ProductKind.shelf:
-            pieces = await _take_pieces(db, product, line)
-            # One line per physical object: the customer is buying piece 04 of
-            # 12, not "one of them".
-            for piece in pieces:
-                subtotal += unit_price
-                lines.append(
-                    OrderItem(
-                        product_id=product.id,
-                        variant_id=variant.id if variant else None,
-                        piece_id=piece.id,
-                        title=product.title(body.lang),
-                        variant_label=variant.option(body.lang) if variant else "",
-                        piece_label=piece.label if product.show_piece_numbers else "",
-                        unit_price=unit_price,
-                        quantity=1,
-                        subtotal=unit_price,
-                        image_url=piece.photo_url or primary_image(product),
-                    )
-                )
-        else:
-            line_total = unit_price * line.quantity
-            subtotal += line_total
-            lines.append(
-                OrderItem(
-                    product_id=product.id,
-                    variant_id=variant.id if variant else None,
-                    piece_id=None,
-                    title=product.title(body.lang),
-                    variant_label=variant.option(body.lang) if variant else "",
-                    # What we promised, on the day we promised it.
-                    lead_time_days=product.lead_time_days,
-                    unit_price=unit_price,
-                    quantity=line.quantity,
-                    subtotal=line_total,
-                    image_url=primary_image(product),
-                )
+        # One line per product, whatever the quantity. There is no longer a
+        # branch that splits a line into one row per physical object, because
+        # there are no physical objects to point at until it is made.
+        line_total = unit_price * line.quantity
+        subtotal += line_total
+        lines.append(
+            OrderItem(
+                product_id=product.id,
+                variant_id=variant.id if variant else None,
+                piece_id=None,
+                title=product.title(body.lang),
+                variant_label=variant.option(body.lang) if variant else "",
+                # What we promised, on the day we promised it. `delivery_days`
+                # is the field the console edits; `lead_time_days` is what old
+                # rows carry.
+                lead_time_days=product.delivery_days or product.lead_time_days,
+                unit_price=unit_price,
+                quantity=line.quantity,
+                subtotal=line_total,
+                image_url=primary_image(product),
             )
+        )
 
     fee = await delivery_fee_for(db, subtotal, body.address.city)
     order = Order(

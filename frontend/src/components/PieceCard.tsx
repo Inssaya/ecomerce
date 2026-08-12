@@ -52,14 +52,13 @@ export function PieceCard({
     return () => observer.disconnect();
   }, [piece.id]);
 
-  const soldOut = piece.kind === "shelf" && piece.available === 0;
-  const note = piece.kind === "workshop"
-    ? t("readyInDays", { n: piece.lead_time_days ?? 0 })
-    : soldOut
-      ? t("allGone")
-      : piece.available === 1
-        ? t("lastOne")
-        : "";
+  // The shop does not count units, so a card can no longer say "one left" or
+  // "all gone". The one line that stays is the workshop's promise about time —
+  // a made-to-order card that hid it would surprise the buyer at checkout.
+  const note =
+    piece.kind === "workshop" && piece.lead_time_days
+      ? t("readyInDays", { n: piece.lead_time_days })
+      : "";
 
   return (
     <Link
@@ -75,20 +74,10 @@ export function PieceCard({
             alt={piece.title}
             fill
             sizes="(max-width:768px) 50vw, (max-width:1180px) 33vw, 280px"
-            className={`object-cover transition-transform duration-[900ms] ease-[cubic-bezier(.2,.8,.2,1)]
-                        group-hover:scale-[1.06] ${soldOut ? "opacity-45" : ""}`}
+            className="object-cover transition-transform duration-[900ms] ease-[cubic-bezier(.2,.8,.2,1)]
+                        group-hover:scale-[1.06]"
             priority={priority}
           />
-        ) : null}
-
-        {soldOut ? (
-          <span className="absolute top-3 start-3 rounded-full bg-ink/85 px-2.5 py-1.5 text-[12px] font-medium text-white">
-            {t("allGone")}
-          </span>
-        ) : piece.kind === "shelf" && piece.available === 1 ? (
-          <span className="absolute top-3 start-3 rounded-full bg-clay px-2.5 py-1.5 text-[12px] font-medium text-white">
-            {t("lastOne")}
-          </span>
         ) : null}
       </div>
 

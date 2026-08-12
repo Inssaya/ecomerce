@@ -14,7 +14,7 @@ from app.core.limits import SignalLimit
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import FEED_WEIGHT_COPY, FeedWeight, Product, SignalType
 from app.modules.catalog.schemas import ProductCard
-from app.modules.catalog.service import availability, to_card
+from app.modules.catalog.service import to_card
 from app.modules.feed import embeddings, engine, service
 
 router = APIRouter(tags=["feed"])
@@ -93,9 +93,8 @@ async def feed(db: DbSession, lang: Lang, paging: Paging, visitor: Visitor) -> F
     products, ratio, total = await engine.page(
         db, visitor_id=visitor or "anonymous", size=paging.size, offset=paging.offset
     )
-    left = await availability(db, [product.id for product in products])
     return FeedPage(
-        items=[to_card(product, lang, left.get(product.id, 0)) for product in products],
+        items=[to_card(product, lang) for product in products],
         page=paging.page,
         size=paging.size,
         has_more=paging.offset + len(products) < total,

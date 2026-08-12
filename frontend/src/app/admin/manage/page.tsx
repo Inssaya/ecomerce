@@ -172,7 +172,6 @@ export default function ManageProducts() {
           <Text className="console-strong">{product.title_en}</Text>
           <span className="console-cell-sub" style={{ display: "block" }}>
             {product.status === "active" ? "live" : product.status}
-            {product.kind === "shelf" ? ` · ${product.available ?? 0} here` : " · made to order"}
           </span>
         </>
       ),

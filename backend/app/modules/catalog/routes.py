@@ -227,8 +227,7 @@ async def list_products(
 
     rows = await db.scalars(query.order_by(ordering).offset(paging.offset).limit(paging.size))
     products = list(rows.unique())
-    left = await service.availability(db, [product.id for product in products])
-    items = [service.to_card(product, lang, left.get(product.id, 0)) for product in products]
+    items = [service.to_card(product, lang) for product in products]
     return ProductPage(
         items=items,
         total=total,
@@ -246,24 +245,7 @@ async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
     if product.status is not ProductStatus.active:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    left = await service.availability(db, [product.id])
-    per_variant = await service.variant_availability(db, product.id)
-    # The whole batch, not only what is left: the page shows what was made and
-    # strikes through what has gone. `kept` pieces are ours, never offered.
-    pieces = list(
-        await db.scalars(
-            select(Piece)
-            .where(Piece.product_id == product.id, Piece.state != PieceState.kept)
-            .order_by(Piece.number)
-        )
-    )
-    return service.to_detail(
-        product,
-        lang,
-        available=left.get(product.id, 0),
-        per_variant=per_variant,
-        pieces=pieces,
-    )
+    return service.to_detail(product, lang)
 
 
 # ── Products, owner ───────────────────────────────────────────────────────────
@@ -316,9 +298,7 @@ async def _admin_view(db: DbSession, product_id: str) -> ProductAdmin:
             .execution_options(populate_existing=True)
         )
     ).unique().one()
-    left = await service.availability(db, [product.id])
-    per_variant = await service.variant_availability(db, product.id)
-    return service.to_admin(product, left.get(product.id, 0), per_variant)
+    return service.to_admin(product)
 
 
 @router.get("/admin/products", response_model=list[ProductAdmin])
@@ -358,9 +338,7 @@ async def list_products_admin(
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
-    products = list(rows.unique())
-    left = await service.availability(db, [product.id for product in products])
-    return [service.to_admin(product, left.get(product.id, 0), None) for product in products]
+    return [service.to_admin(product) for product in rows.unique()]
 
 
 @router.post("/admin/products", response_model=ProductAdmin, status_code=status.HTTP_201_CREATED)
@@ -397,12 +375,15 @@ async def update_product(
         # without one.
         if not product.media:
             raise bad_request("Add at least one photo of the piece before publishing it")
-        # A shelf piece with nothing on the shelf is not for sale. Publishing
-        # it would be advertising something that does not exist.
+        # The other half of §8: "ready in six days", never "soon". A workshop
+        # piece has this covered by the check constraint (`lead_time_days`); a
+        # shelf piece needs `delivery_days`. The old rule for shelf pieces was
+        # "add the pieces you made" — that was a stock check, and this shop
+        # does not track stock.
         if product.kind is ProductKind.shelf:
-            left = await service.availability(db, [product.id])
-            if not left.get(product.id):
-                raise bad_request("Add the pieces you made before publishing this")
+            promise = changes.get("delivery_days", product.delivery_days)
+            if not promise:
+                raise bad_request("Say how many days delivery takes before publishing this")
 
     if "category_id" in changes and changes["category_id"]:
         await get_or_404(db, Category, changes["category_id"], detail="Category not found")
@@ -558,7 +539,7 @@ async def add_variant(
         sku=variant.sku,
         option=variant.option_en,
         price=float(variant.price if variant.price is not None else product.price),
-        available=0 if product.kind is ProductKind.shelf else None,
+        available=None,
     )
 
 
@@ -595,7 +576,7 @@ async def update_variant(
         sku=variant.sku,
         option=variant.option_en,
         price=float(variant.price if variant.price is not None else product.price),
-        available=0 if product.kind is ProductKind.shelf else None,
+        available=None,
     )
 
 

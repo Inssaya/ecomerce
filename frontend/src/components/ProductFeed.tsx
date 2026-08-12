@@ -334,8 +334,6 @@ function Tile({ piece, lang, index }: { piece: Piece; lang: Lang; index: number 
     return () => watcher.disconnect();
   }, [piece.id]);
 
-  const soldOut = piece.kind === "shelf" && piece.available === 0;
-
   return (
     <article className="mb-2.5 sm:mb-3 lg:mb-4 break-inside-avoid">
       <Link
@@ -357,18 +355,12 @@ function Tile({ piece, lang, index }: { piece: Piece; lang: Lang; index: number 
             alt={piece.title}
             fill
             sizes="(max-width:640px) 50vw, (max-width:1024px) 33vw, (max-width:1536px) 25vw, 20vw"
-            className={`object-cover transition-transform duration-[900ms] ease-gentle
-                        group-hover:scale-[1.05] ${soldOut ? "opacity-55" : ""}`}
+            className="object-cover transition-transform duration-[900ms] ease-gentle
+                        group-hover:scale-[1.05]"
             priority={index < 6}
           />
         ) : null}
-
-        {soldOut ? (
-          <span className="absolute top-3 start-3 rounded-full bg-ink/85 px-2.5 py-1.5
-                           text-[12px] font-medium text-white">
-            {t("allGone")}
-          </span>
-        ) : null}
+        {/* The "all gone" badge lived here. The shop does not count units. */}
 
         {/*
           The name and the price.
