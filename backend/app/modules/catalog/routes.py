@@ -5,17 +5,19 @@ import logging
 from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
-from app.core.limits import RequestLimit
+from app.core.limits import RequestLimit, SignalLimit
 from app.core.slug import unique_slug
 from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
-from app.deps import DbSession, Lang, Owner, Paging
+from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import (
     AttributeGroup,
     Category,
+    InteractionKind,
     Piece,
     PieceState,
     Product,
@@ -25,7 +27,7 @@ from app.models import (
     ProductStatus,
     ProductVariant,
 )
-from app.modules.catalog import alerts, service
+from app.modules.catalog import alerts, interactions, service
 from app.modules.catalog.schemas import (
     AlertRequest,
     AttributeOut,
@@ -298,7 +300,9 @@ async def _admin_view(db: DbSession, product_id: str) -> ProductAdmin:
             .execution_options(populate_existing=True)
         )
     ).unique().one()
-    return service.to_admin(product)
+    totals = await interactions.totals_for(db, [product.id])
+    likes, saves = totals.get(product.id, (0, 0))
+    return service.to_admin(product, likes=likes, saves=saves)
 
 
 @router.get("/admin/products", response_model=list[ProductAdmin])
@@ -338,7 +342,16 @@ async def list_products_admin(
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
-    return [service.to_admin(product) for product in rows.unique()]
+    products = list(rows.unique())
+    totals = await interactions.totals_for(db, [product.id for product in products])
+    return [
+        service.to_admin(
+            product,
+            likes=totals.get(product.id, (0, 0))[0],
+            saves=totals.get(product.id, (0, 0))[1],
+        )
+        for product in products
+    ]
 
 
 @router.post("/admin/products", response_model=ProductAdmin, status_code=status.HTTP_201_CREATED)
@@ -717,6 +730,92 @@ async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
         .values(batch_size=remaining)
     )
     await db.commit()
+
+
+# ── Hearts and saves ──────────────────────────────────────────────────────────
+#
+# Pinterest-shaped. A **like** is the same button on every social app; a
+# **save** is buy-later. The two are stored the same way but the feed reads
+# them differently — a save is a much stronger buying signal than a like.
+#
+# Kept on the storefront's own limiter (`SignalLimit`, 120 per minute) rather
+# than on `RequestLimit`: this is the same tempo as an impression signal, and
+# a customer scrolling a feed of thirty cards must not run out of taps.
+
+
+class InteractionState(BaseModel):
+    likes: int
+    saves: int
+    liked: bool
+    saved: bool
+
+
+class InteractionToggle(InteractionState):
+    active: bool
+
+
+async def _toggle_endpoint(
+    slug: str, kind: InteractionKind, db: DbSession, visitor: Visitor, user: OptionalUser
+) -> InteractionToggle:
+    if not visitor:
+        # Same rule as the feed: without a fingerprint there is nothing to
+        # attribute the tap to. A 400 rather than a silent no-op so the
+        # storefront can prompt to enable it rather than pretending it worked.
+        raise bad_request("A fingerprint is required to react to a piece")
+    product = await get_or_404(
+        db, Product, slug, field="slug", detail="Product not found"
+    )
+    if product.status is not ProductStatus.active:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    active = await interactions.toggle(
+        db,
+        product_id=product.id,
+        visitor_id=visitor,
+        user_id=user.id if user else None,
+        kind=kind,
+    )
+    state = await interactions.state_for(db, product_id=product.id, visitor_id=visitor)
+    return InteractionToggle(active=active, **state)
+
+
+@router.post("/products/{slug}/like", response_model=InteractionToggle)
+async def like_product(
+    slug: str,
+    db: DbSession,
+    visitor: Visitor,
+    user: OptionalUser,
+    _: SignalLimit,
+) -> InteractionToggle:
+    return await _toggle_endpoint(slug, InteractionKind.like, db, visitor, user)
+
+
+@router.post("/products/{slug}/save", response_model=InteractionToggle)
+async def save_product(
+    slug: str,
+    db: DbSession,
+    visitor: Visitor,
+    user: OptionalUser,
+    _: SignalLimit,
+) -> InteractionToggle:
+    return await _toggle_endpoint(slug, InteractionKind.save, db, visitor, user)
+
+
+@router.get("/products/{slug}/interactions", response_model=InteractionState)
+async def read_interactions(
+    slug: str, db: DbSession, visitor: Visitor
+) -> InteractionState:
+    """The counts, plus whether this visitor pressed either.
+
+    Reported in one call so the button paints correctly on the first load —
+    a separate "did I like this" fetch would flash unpressed for one tick and
+    pressed for the next.
+    """
+    product = await get_or_404(
+        db, Product, slug, field="slug", detail="Product not found"
+    )
+    state = await interactions.state_for(db, product_id=product.id, visitor_id=visitor)
+    return InteractionState(**state)
 
 
 # ── Waiting on a piece ────────────────────────────────────────────────────────

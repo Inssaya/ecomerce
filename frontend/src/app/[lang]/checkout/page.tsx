@@ -112,11 +112,15 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
           city: city.trim(),
           notes: notes.trim() || null,
         },
-        // Only ids and counts. The server prices the order itself.
+        // Only ids, counts, and the buyer's own choices. The server prices
+        // the order itself — the amount collected at the door is always the
+        // one it computes, not the one the client sends.
         items: lines.map((line) => ({
           product_id: line.productId,
           variant_id: line.variantId,
           quantity: line.quantity,
+          selection: line.selection,
+          personalization: line.personalization,
         })),
       });
 

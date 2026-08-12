@@ -11,7 +11,7 @@ from sqlalchemy import select
 
 from app.core.errors import get_or_404
 from app.core.limits import CheckoutLimit, LookupLimit
-from app.deps import CurrentUser, DbSession, OptionalUser, Owner, Paging
+from app.deps import CurrentUser, DbSession, OptionalUser, Owner, Paging, Visitor
 from app.models import Order, OrderStatus
 from app.modules.notify.service import whatsapp_url
 from app.modules.orders import service
@@ -34,11 +34,21 @@ def _out(order: Order) -> OrderResponse:
 
 @router.post("/orders", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def checkout(
-    body: CheckoutRequest, db: DbSession, user: OptionalUser, _: CheckoutLimit
+    body: CheckoutRequest,
+    db: DbSession,
+    user: OptionalUser,
+    visitor: Visitor,
+    _: CheckoutLimit,
 ) -> OrderResponse:
     """No account required. In a market where trust is the scarce thing, an
-    account gate before the first purchase is a lost purchase."""
-    order = await service.place_order(db, body, user)
+    account gate before the first purchase is a lost purchase.
+
+    The visitor fingerprint travels with the order so a guest's hearts and
+    saves can still roll up under their phone bucket in the customer view.
+    Missing here is fine — an order from a browser with no fingerprint just
+    joins nothing later, which is what used to happen for everything.
+    """
+    order = await service.place_order(db, body, user, visitor)
     return _out(order)
 
 

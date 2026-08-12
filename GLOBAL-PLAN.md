@@ -558,3 +558,69 @@ written, not applied.
 - Touch the `PieceAlert` (waitlist) path — the sold-out "tell me when you make more" flow.
   It has no way to trigger any more (nothing publishes a sold-out state), so it is dead code
   rather than broken code. Added to `todo.md`.
+
+### Session 2 — the storefront side, and the buyer's choices
+
+**Did — backend**
+- `models/catalog.py`: `InteractionKind` (`like` / `save`) and `ProductInteraction`, with a
+  unique constraint on `(product_id, visitor_id, kind)` — that is what makes the toggle
+  honest under a double-tap.
+- `models/orders.py`: `Order.visitor_id` (indexed), and on `OrderItem` a JSON `selection`
+  snapshot and a `String(20)` `personalization`.
+- Migration `e58b2d0f7a13` on `d41a7c9b6e02`. Hand-written, up and down, following the
+  two-form enum convention.
+- `catalog/interactions.py`: a tiny module owning the toggle (via `insert … on conflict do
+  nothing` + a conditional delete) and the aggregate reads (`state_for` for one product,
+  `totals_for` for a whole page in one query).
+- `catalog/routes.py`: `POST /products/{slug}/like`, `POST /products/{slug}/save`,
+  `GET /products/{slug}/interactions`. Rate-limited on `SignalLimit`, not `RequestLimit` —
+  same tempo as feed impressions, and a fingerprint is required (400 if missing so the
+  storefront can prompt).
+- The admin product list joins `interactions.totals_for` into `to_admin`, so session 1's
+  zeroes are real numbers now. The single-product `_admin_view` does the same.
+- `catalog/schemas.py`: `ProductCard` gains `effective_price` and `discount_active` so the
+  storefront and the card never disagree with the piece page. `ProductDetail` gains
+  `attributes`, `personalizable`, `personalization_markup_pct`. `SelectedAttribute` and the
+  extended `CartLine` on the checkout side carry the buyer's picks.
+- `orders/service.place_order`: takes a `visitor_id`, uses `Product.effective_price()` for
+  the base, refuses personalization on non-`personalizable` pieces, and applies the markup
+  on the server — a client that lies about the markup still gets billed correctly.
+- `orders/routes.py`: the checkout depends on `Visitor` and passes it through.
+
+**Did — frontend**
+- `lib/api.ts`: `PieceAttribute`, `InteractionState` / `InteractionToggle`, `likePiece`,
+  `savePiece`, `interactions`. `Piece` gains `effective_price` and `discount_active`;
+  `PieceDetail` gains attributes and personalization fields.
+- `components/CartProvider.tsx`: `CartSelection` type, `identityOf(line)` so two of the
+  same piece with different picks or names stay two lines. `setQuantity` and `remove` now
+  take a line id (composed from product + variant + selection + personalization); `idOf` is
+  exposed so pages don't recompute the shape.
+- `components/PieceCard.tsx`: struck original + offer badge when `discount_active` and the
+  effective price is below the original. Read from the server every time.
+- `app/[lang]/piece/[slug]/PieceView.tsx` (rewritten): title, price (with struck original +
+  "offer" badge when live), description, variants; **colour swatches** as circles,
+  **measures and materials** as chips (each rendered exactly as the admin entered them,
+  nothing inferred); an optional **name field** capped at 20 characters that shows the
+  markup honestly before add-to-cart; quantity + add-to-cart; **heart** and **save**
+  buttons with optimistic flip and reconcile.
+- `app/[lang]/cart/page.tsx`: renders the buyer's picks and their name in the line
+  subtitle; controls key off `idOf(line)`.
+- `app/[lang]/checkout/page.tsx`: sends `selection` and `personalization` per line.
+- `components/ChatPanel.tsx`: assistant's add-to-cart uses `effective_price` and sends
+  empty selection / null personalization — the assistant does not pick colours.
+
+**Verified:** `npx tsc --noEmit` clean; `npm run build` passes; backend byte-compiles.
+Nothing was run against a database — M1 and now M2 are written, not applied.
+
+**Did not do**
+- Move `Order.visitor_id` and the interactions totals into the customer aggregation
+  (`modules/admin/customers.py`). That is session 4's job — it is where the Customers page
+  gets its Saves / Likes columns and the behaviour popup. The join key is in place.
+- The `OrderResponse` schema does not expose `visitor_id` (deliberately — the fingerprint
+  is admin-internal). Session 3 will read it from `Order.visitor_id` directly, not add it
+  to the DTO.
+- Storefront analytics for the new buttons: a like or save records nothing on `Signal`
+  today. Adding a signal type is one line and belongs in the feed's next tuning pass.
+- No test was added; the plan puts the test pass with whoever runs Docker.
+
+**Next session starts at:** Session 3 (order door — table, countdown, invoice, custom modal).

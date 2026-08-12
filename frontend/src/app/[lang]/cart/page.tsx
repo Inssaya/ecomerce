@@ -21,7 +21,7 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
   const { lang: raw } = use(params);
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
-  const { lines, total, setQuantity, remove, ready } = useCart();
+  const { lines, total, setQuantity, remove, idOf, ready } = useCart();
   const terms = useDelivery(lang);
 
   // The cart used to re-fetch each line on every visit and warn "only 2 left"
@@ -56,39 +56,46 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
           laptop. */}
       <div className="mt-5 grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px] lg:items-start lg:gap-10">
       <ul className="space-y-3">
-        {lines.map((line) => (
-          <li key={`${line.productId}:${line.variantId}`} className="card flex gap-3 p-3 shadow-soft">
-            <div className="relative h-20 w-20 shrink-0 rounded-2xl overflow-hidden bg-clay-soft">
-              {line.image ? (
-                <Image src={line.image} alt={line.title} fill sizes="80px" className="object-cover" />
-              ) : null}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-[15px] font-medium leading-snug line-clamp-2">{line.title}</p>
-              {line.option ? <p className="text-[13px] text-ink-soft">{line.option}</p> : null}
-              <p className="stamp mt-0.5 text-[15px] font-semibold">{money(line.price, lang)}</p>
-
-              <div className="mt-2 flex items-center gap-1">
-                <Stepper
-                  label="−"
-                  onClick={() => setQuantity(line.productId, line.variantId, line.quantity - 1)}
-                />
-                <span className="stamp w-9 text-center text-[15px]">{line.quantity}</span>
-                <Stepper
-                  label="+"
-                  onClick={() => setQuantity(line.productId, line.variantId, line.quantity + 1)}
-                />
-                <button
-                  type="button"
-                  onClick={() => remove(line.productId, line.variantId)}
-                  className="tap ms-auto px-3 text-[13px] text-ink-soft"
-                >
-                  ×
-                </button>
+        {lines.map((line) => {
+          const id = idOf(line);
+          // Their choices, one per row, so the cart shows exactly what was
+          // picked at add-to-cart time — a piece bought in "Red / M" reads
+          // as "Red · M", not as a mystery line.
+          const picks = [
+            line.option || null,
+            ...line.selection.map((pick) => (pick.name ? `${pick.name}: ${pick.value}` : pick.value)),
+            line.personalization ? `“${line.personalization}”` : null,
+          ].filter(Boolean) as string[];
+          return (
+            <li key={id} className="card flex gap-3 p-3 shadow-soft">
+              <div className="relative h-20 w-20 shrink-0 rounded-2xl overflow-hidden bg-clay-soft">
+                {line.image ? (
+                  <Image src={line.image} alt={line.title} fill sizes="80px" className="object-cover" />
+                ) : null}
               </div>
-            </div>
-          </li>
-        ))}
+              <div className="flex-1 min-w-0">
+                <p className="text-[15px] font-medium leading-snug line-clamp-2">{line.title}</p>
+                {picks.length > 0 ? (
+                  <p className="text-[13px] text-ink-soft">{picks.join(" · ")}</p>
+                ) : null}
+                <p className="stamp mt-0.5 text-[15px] font-semibold">{money(line.price, lang)}</p>
+
+                <div className="mt-2 flex items-center gap-1">
+                  <Stepper label="−" onClick={() => setQuantity(id, line.quantity - 1)} />
+                  <span className="stamp w-9 text-center text-[15px]">{line.quantity}</span>
+                  <Stepper label="+" onClick={() => setQuantity(id, line.quantity + 1)} />
+                  <button
+                    type="button"
+                    onClick={() => remove(id)}
+                    className="tap ms-auto px-3 text-[13px] text-ink-soft"
+                  >
+                    ×
+                  </button>
+                </div>
+              </div>
+            </li>
+          );
+        })}
       </ul>
 
       <aside className="card p-5 shadow-soft lg:sticky lg:top-20">

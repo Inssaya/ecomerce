@@ -110,14 +110,25 @@ async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None
     return Decimal(str(await local.fee_for_name(db, city)))
 
 
-async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | None) -> Order:
+async def place_order(
+    db: AsyncSession,
+    body: CheckoutRequest,
+    customer: User | None,
+    visitor_id: str | None,
+) -> Order:
     """Take the order. Nothing is reserved, because nothing is finite.
 
     This used to lock and reserve `Piece` rows for anything filed as `shelf`,
-    and refuse the line when there were not enough — "we have 2 of this, we
-    made that many". The shop is made-to-order throughout: what is ordered
-    gets made. So an order can never be short, and no row is taken off
-    anything.
+    and refuse the line when there were not enough. The shop does not count
+    units — an order can never be short, and no row is taken off anything.
+
+    What is new here: the buyer's *choices* travel with the order. Their
+    fingerprint lands on `Order.visitor_id` (the join key that lets a customer
+    bucket collect their hearts and saves), the attributes they picked are
+    frozen as JSON on each line, and their name — capped at 20 characters —
+    goes on the line the workshop actually reads. The personalization markup
+    is applied here on the server, from `Product.personalization_markup_pct`,
+    so a client that lies about the markup still gets billed correctly.
 
     `release_stale_reservations` still runs, for orders placed before this
     changed that are still holding pieces. It is a no-op once they are done.
@@ -152,13 +163,30 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
             if variant is None:
                 raise conflict("That option is no longer available")
 
-        unit_price = Decimal(variant.price if variant and variant.price is not None else product.price)
+        # Discount is applied by the server (see `Product.effective_price`),
+        # so a variant override still wins when it is set — that is how the
+        # catalogue has always worked — but the base price is the reduced one.
+        base_price = variant.price if variant and variant.price is not None else product.effective_price()
+        unit_price = Decimal(str(base_price))
 
-        # One line per product, whatever the quantity. There is no longer a
-        # branch that splits a line into one row per physical object, because
-        # there are no physical objects to point at until it is made.
+        # Personalization: only if the piece allows it, and only if the buyer
+        # actually typed something. The markup is applied here rather than on
+        # the client so a rewritten checkout body still pays the right price.
+        personalization = (line.personalization or "").strip() or None
+        if personalization and not product.personalizable:
+            raise conflict(f"'{product.title_en}' cannot be personalised")
+        if personalization:
+            markup = Decimal(str(product.personalization_markup_pct or 0))
+            unit_price = (unit_price * (Decimal("100") + markup) / Decimal("100")).quantize(Decimal("0.01"))
+
         line_total = unit_price * line.quantity
         subtotal += line_total
+
+        # Snapshot of what they picked, so a typo corrected on a colour next
+        # month never rewrites this row. Empty list stored as null so the
+        # column reads honestly.
+        selection = [item.model_dump() for item in line.selection] or None
+
         lines.append(
             OrderItem(
                 product_id=product.id,
@@ -174,6 +202,8 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
                 quantity=line.quantity,
                 subtotal=line_total,
                 image_url=primary_image(product),
+                selection=selection,
+                personalization=personalization,
             )
         )
 
@@ -185,6 +215,7 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
         customer_name=body.full_name,
         customer_phone=body.phone,
         customer_email=body.email,
+        visitor_id=visitor_id,
         lang=body.lang,
         address=body.address.model_dump(),
         city=body.address.city,

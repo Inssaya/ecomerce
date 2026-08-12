@@ -22,6 +22,24 @@ export interface Piece {
   category_name: string | null;
   available: number | null;
   lead_time_days: number | null;
+  /** What it costs today. Computed on the server, so the card and the piece
+   *  page cannot disagree with each other about the number the buyer sees. */
+  effective_price: number;
+  discount_active: boolean;
+}
+
+/** One row of specification: a measure, a colour or a material. */
+export interface PieceAttribute {
+  id: string;
+  group: "measure" | "color" | "material";
+  /** "Width" — or null, for a plain value like "M" or "Wood". */
+  name: string | null;
+  value: string;
+  /** Only for colours. */
+  hex: string | null;
+  display_order: number;
+  /** Composed on the server so every screen joins the pair the same way. */
+  label: string;
 }
 
 export interface PieceDetail extends Piece {
@@ -41,6 +59,28 @@ export interface PieceDetail extends Piece {
   batch_closed: boolean;
   made_on: string | null;
   created_at: string;
+  /** The three groups the piece is described by. Any of them can be empty. */
+  attributes: PieceAttribute[];
+  /** Present and non-zero when the shop is running an offer on this piece. */
+  discount_active: boolean;
+  effective_price: number;
+  /** Whether the buyer can put their name on it, and how much that costs. */
+  personalizable: boolean;
+  personalization_markup_pct: number;
+}
+
+/** The visitor's own state on a piece, plus what everyone else did. */
+export interface InteractionState {
+  likes: number;
+  saves: number;
+  liked: boolean;
+  saved: boolean;
+}
+
+/** The toggle response — same shape plus what actually happened this tap. */
+export interface InteractionToggle extends InteractionState {
+  /** true after this call left the visitor liking/saving; false after undo. */
+  active: boolean;
 }
 
 /** A line of work — hooks, brackets, lamps. What the shelf actually learns from. */
@@ -231,6 +271,21 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  /** Toggle a heart on a piece. Idempotent server-side — a second call from
+   *  the same visitor removes the row, and the response says which side of
+   *  the toggle they ended on. */
+  likePiece: (lang: Lang, slug: string) =>
+    request<InteractionToggle>(`/products/${slug}/like`, { lang, method: "POST" }),
+
+  /** Toggle a buy-later save. Same shape as `likePiece`. */
+  savePiece: (lang: Lang, slug: string) =>
+    request<InteractionToggle>(`/products/${slug}/save`, { lang, method: "POST" }),
+
+  /** The counts plus the visitor's own state, in one call so the buttons
+   *  paint correctly on first load. */
+  interactions: (lang: Lang, slug: string) =>
+    request<InteractionState>(`/products/${slug}/interactions`, { lang }),
 
   /** The cities we name, and what delivery costs anywhere else. Read by the
    *  cart and the checkout so neither of them has to hold its own copy. */

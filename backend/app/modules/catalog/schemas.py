@@ -86,10 +86,16 @@ class ProductCard(BaseModel):
     image: str | None = None
     category_slug: str | None = None
     category_name: str | None = None
-    #: Shelf: pieces still available. Workshop: null — nothing to run out of.
+    #: Historically the piece count on the shelf. Every response returns null
+    #: now — the shop does not track units. Kept in the shape so an old cart
+    #: written by a previous tab still loads without a shrug.
     available: int | None = None
-    #: Workshop: days until it is ready. Shelf: null — it already is.
+    #: Workshop: days until it is ready. Shelf: the delivery estimate.
     lead_time_days: int | None = None
+    #: What it costs today. Computed on the server, once, so the card and the
+    #: cart cannot disagree with the piece page about the number the buyer sees.
+    effective_price: float
+    discount_active: bool = False
 
 
 class ProductDetail(ProductCard):
@@ -97,12 +103,17 @@ class ProductDetail(ProductCard):
     story: str
     images: list[MediaResponse]
     variants: list[VariantOut]
-    #: Shelf only, and only when the workshop chose to number this batch.
+    #: Empty, always — used to be shelf-only "we made twelve, four gone".
     pieces: list[PieceOut] = []
     show_piece_numbers: bool = False
     batch_closed: bool = False
     made_on: date | None = None
     created_at: datetime
+    #: The three groups of specification. Any can be empty.
+    attributes: list[AttributeOut] = []
+    #: Whether the buyer can put their name on it, and how much that costs.
+    personalizable: bool = False
+    personalization_markup_pct: float = 0
 
 
 class AlertRequest(BaseModel):

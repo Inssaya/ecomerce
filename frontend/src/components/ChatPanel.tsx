@@ -80,10 +80,14 @@ export function ChatPanel({ lang }: { lang: Lang }) {
                 variantId: variant?.id ?? null,
                 title: piece.title,
                 option: variant?.option ?? "",
-                price: variant?.price ?? piece.price,
+                // The assistant does not pick colours or add a name — those are
+                // decisions the buyer makes on the piece page — so this adds
+                // the bare product and the buyer edits it there if they want.
+                price: variant?.price ?? piece.effective_price ?? piece.price,
                 image: piece.images[0]?.url ?? null,
-                // No stock ceiling — the shop does not count units.
                 available: null,
+                selection: [],
+                personalization: null,
               },
               action.quantity ?? 1,
             );

@@ -60,6 +60,12 @@ export function PieceCard({
       ? t("readyInDays", { n: piece.lead_time_days })
       : "";
 
+  // Discount badge and the struck-out original price when an offer is live.
+  // `effective_price` and `discount_active` come from the server so the card
+  // never disagrees with the piece page about the number the buyer sees.
+  const shown = piece.effective_price ?? piece.price;
+  const reduced = piece.discount_active === true && shown < piece.price;
+
   return (
     <Link
       ref={ref}
@@ -79,6 +85,11 @@ export function PieceCard({
             priority={priority}
           />
         ) : null}
+        {reduced ? (
+          <span className="absolute top-3 start-3 rounded-full bg-clay px-2.5 py-1.5 text-[12px] font-medium text-white">
+            {lang === "ar" ? "تخفيض" : "offer"}
+          </span>
+        ) : null}
       </div>
 
       <div className="mt-3 flex items-start justify-between gap-3.5">
@@ -92,8 +103,19 @@ export function PieceCard({
           {note ? <p className="mt-0.5 text-[13.5px] text-ink-mute truncate">{note}</p> : null}
         </div>
         <p className="stamp text-[15.5px] font-semibold whitespace-nowrap tabular-nums">
-          {money(piece.price, lang)}
-          {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
+          {reduced ? (
+            <>
+              <span className="me-1.5 text-[13px] font-normal text-ink-mute line-through">
+                {money(piece.price, lang)}
+              </span>
+              {money(shown, lang)}
+            </>
+          ) : (
+            <>
+              {money(piece.price, lang)}
+              {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
+            </>
+          )}
         </p>
       </div>
     </Link>

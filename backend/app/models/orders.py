@@ -69,6 +69,13 @@ class Order(Base, TimestampMixin):
     customer_name: Mapped[str] = mapped_column(String(255), nullable=False)
     customer_phone: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     customer_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    #: The buyer's device fingerprint at checkout — the same id the feed and
+    #: `ProductInteraction` are keyed on. Kept here so the customer aggregation
+    #: can join guest orders to guest behaviour: the phone bucket collects the
+    #: fingerprints it has ordered from, and every hearted or saved piece
+    #: rolled up through them. Without this, "total saves per customer" reads
+    #: zero for every guest — and guests are most of this shop.
+    visitor_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     lang: Mapped[str] = mapped_column(String(2), default="en", nullable=False)
 
     address: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -131,6 +138,19 @@ class OrderItem(Base):
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     subtotal: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+
+    #: What the buyer picked from the piece's measures/colours/materials,
+    #: frozen at checkout as `[{group, name, value, hex}, ...]`. A snapshot
+    #: rather than foreign keys so that correcting an attribute's typo next
+    #: month never reaches back into someone's receipt. Null when the buyer
+    #: picked nothing (the piece had no attributes, or offered them
+    #: read-only).
+    selection: Mapped[list | None] = mapped_column(JSONB, nullable=True)
+    #: The customer's name, 20 characters max, when they turned on
+    #: personalization at add-to-cart. The price on this row already carries
+    #: the personalization markup — this field is what the workshop reads to
+    #: know what to put on the object. Null when personalization was off.
+    personalization: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     order: Mapped[Order] = relationship(back_populates="items")
 

@@ -25,18 +25,44 @@ def normalise_moroccan_phone(value: str) -> str:
     return digits
 
 
+class SelectedAttribute(BaseModel):
+    """What the buyer picked from a piece's measures, colours or materials.
+
+    The label is not required — a plain value like "M" has no name — and hex
+    is only carried for colours. All of it is a **snapshot**: the server does
+    not look it up against `product_attributes` and does not care whether the
+    row still exists, because the point is that the order stays reconstructable
+    the day the workshop corrects a typo six months later.
+    """
+
+    group: str
+    name: str | None = None
+    value: str
+    hex: str | None = None
+
+
 class CartLine(BaseModel):
     """What the customer wants, and how many.
 
-    Deliberately no price field. The old checkout took the price from the
-    request body and multiplied it out, which meant the amount collected at the
-    door was whatever the client said it was. Prices are read from the
+    No price field, on purpose. The old checkout took the price from the
+    request body and multiplied it out, which meant the amount collected at
+    the door was whatever the client said it was. Prices are read from the
     database.
+
+    Selection and personalization ride along here rather than as separate
+    calls: the whole checkout is one request, and giving each line its own
+    picks means two identical products with different names on them stay two
+    lines and read correctly on the invoice.
     """
 
     product_id: str
     variant_id: str | None = None
     quantity: int = Field(ge=1, le=20)
+    selection: list[SelectedAttribute] = Field(default_factory=list)
+    #: The name the buyer wants written on it. The server refuses this on a
+    #: piece that is not `personalizable`, and caps it at 20 characters — the
+    #: same cap the piece page enforces.
+    personalization: str | None = Field(default=None, max_length=20)
 
 
 class Address(BaseModel):

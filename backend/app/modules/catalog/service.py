@@ -97,9 +97,10 @@ def to_card(product: Product, lang: str) -> ProductCard:
         image=primary_image(product),
         category_slug=product.category.slug if product.category else None,
         category_name=product.category.name(lang) if product.category else None,
-        # Null, always: nothing is finite, so nothing has a count.
         available=None,
         lead_time_days=product.delivery_days or product.lead_time_days,
+        effective_price=product.effective_price(),
+        discount_active=product.discount_active,
     )
 
 
@@ -131,6 +132,9 @@ def to_detail(product: Product, lang: str) -> ProductDetail:
         batch_closed=product.batch_closed,
         made_on=product.made_on,
         created_at=product.created_at,
+        attributes=[attribute_out(item) for item in product.attributes],
+        personalizable=product.personalizable,
+        personalization_markup_pct=float(product.personalization_markup_pct or 0),
     )
 
 

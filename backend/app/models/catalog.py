@@ -99,6 +99,19 @@ class AttributeGroup(str, PyEnum):
     material = "material"  # "Wood", or "Fabric" → "Cotton 100%"
 
 
+class InteractionKind(str, PyEnum):
+    """The two Pinterest-shaped reactions a visitor can leave on a piece.
+
+    A **like** is a lightweight taste signal — the same button on every social
+    app. A **save** is buy-later: something they meant to come back to. The
+    two are kept apart because the feed reads them differently (a save is a
+    much stronger buying signal than a like).
+    """
+
+    like = "like"
+    save = "save"
+
+
 class Category(Base, TimestampMixin):
     """Self-referencing tree: T-Shirts → Oversize, Slim.
 
@@ -370,6 +383,43 @@ class ProductAttribute(Base):
     def label(self) -> str:
         """How it reads on a page: "Width 10 cm", or just "M"."""
         return f"{self.name} {self.value}" if self.name else self.value
+
+
+class ProductInteraction(Base):
+    """A heart or a save, left by one visitor on one piece.
+
+    Identified by `visitor_id` — the fingerprint the frontend already sets —
+    the same way `Signal` is, because most reactions happen before anyone
+    signs in. `user_id` is filled in too when there is an account, so signing
+    in later keeps the history instead of starting from nothing.
+
+    The unique constraint is what makes the toggle honest: pressing "like"
+    twice is one row, not two, and the endpoint's job is to insert-or-remove
+    rather than count clicks. Aggregating stays a simple `count(*)`.
+    """
+
+    __tablename__ = "product_interactions"
+    __table_args__ = (
+        UniqueConstraint("product_id", "visitor_id", "kind", name="uq_interaction_visitor"),
+        Index("ix_product_interactions_product_kind", "product_id", "kind"),
+        Index("ix_product_interactions_visitor", "visitor_id"),
+    )
+
+    id: Mapped[str] = uuid_pk()
+    product_id: Mapped[str] = uuid_fk("products.id")
+    kind: Mapped[InteractionKind] = mapped_column(
+        Enum(InteractionKind, name="interaction_kind"), nullable=False
+    )
+    visitor_id: Mapped[str] = mapped_column(String(80), nullable=False)
+    user_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Piece(Base):
