@@ -121,6 +121,11 @@ async def approve(
         subtotal=price,
         delivery_fee=fee,
         total=price + fee,
+        # The date already agreed at quoting time. Without carrying it over,
+        # the countdown on the tracking page is empty for exactly the path
+        # that needs it most: the buyer of a custom piece has no catalogue
+        # entry to reassure them, only this date.
+        promised_for=request.promised_for,
         note=request.description[:500],
         items=[
             OrderItem(

@@ -10,15 +10,15 @@ in a cash-on-delivery market:
    status over any other, so a delivered order could be moved back to pending
    and re-notified.
 
-Buying a shelf piece **reserves specific pieces**, taken under a row lock and
-lowest-numbered first. That is what makes the count on the page true: two
-people checking out the last piece at the same moment cannot both get it,
-because there is one row and only one of them can lock it. Made-to-order lines
-reserve nothing — there is nothing yet to reserve, only a promise about when.
+**Nothing is reserved, and nothing expires.** This shop does not count units,
+so checkout takes no row off anything and an order can never be short. The
+48-hour sweep that used to cancel any order still `placed` is gone with it: it
+had no pieces left to free, it ran on every checkout, and it mailed the buyer
+"your order is cancelled" for the sole offence of the workshop not having rung
+them back yet. Confirming is a phone call, and a phone call has no deadline.
 """
 from __future__ import annotations
 
-import logging
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
@@ -46,52 +46,12 @@ from app.modules.local import service as local
 from app.modules.notify.service import notify_order_status
 from app.modules.orders.schemas import CheckoutRequest
 
-logger = logging.getLogger(__name__)
-
 #: Pieces move with the order they belong to.
 PIECE_STATE_FOR_ORDER: dict[OrderStatus, PieceState] = {
     OrderStatus.delivered: PieceState.sold,
     OrderStatus.cancelled: PieceState.available,
     OrderStatus.returned: PieceState.available,
 }
-
-
-#: How long an unconfirmed order may hold real objects. Cash on delivery has
-#: no payment step to abandon, so nothing else ever releases them.
-RESERVATION_HOURS = 48
-
-
-async def release_stale_reservations(db: AsyncSession) -> int:
-    """Give back the pieces held by orders nobody ever confirmed.
-
-    This closes a genuine hole rather than adding a feature. A shelf piece is
-    reserved the moment an order is placed, and an order that is never
-    confirmed used to hold it forever — so a handful of abandoned checkouts
-    would show the shop as sold out while nothing had been sold. There is no
-    payment step here to time out, so this is the only thing that frees them.
-
-    Runs on the way into checkout: one indexed query, and it means the sweep
-    happens without a scheduler to forget to deploy.
-    """
-    cutoff = datetime.now(UTC) - timedelta(hours=RESERVATION_HOURS)
-    stale = list(
-        await db.scalars(
-            select(Order)
-            .where(Order.status == OrderStatus.placed, Order.created_at < cutoff)
-            .limit(50)
-        )
-    )
-    for order in stale:
-        await change_status(
-            db,
-            order,
-            OrderStatus.cancelled,
-            f"Not confirmed within {RESERVATION_HOURS} hours",
-            actor="system",
-        )
-    if stale:
-        logger.info("Released the pieces held by %s unconfirmed orders", len(stale))
-    return len(stale)
 
 
 async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None) -> Decimal:
@@ -129,12 +89,7 @@ async def place_order(
     goes on the line the workshop actually reads. The personalization markup
     is applied here on the server, from `Product.personalization_markup_pct`,
     so a client that lies about the markup still gets billed correctly.
-
-    `release_stale_reservations` still runs, for orders placed before this
-    changed that are still holding pieces. It is a no-op once they are done.
     """
-    await release_stale_reservations(db)
-
     seen = {(line.product_id, line.variant_id) for line in body.items}
     if len(seen) != len(body.items):
         raise bad_request("The same piece appears twice in the cart")
