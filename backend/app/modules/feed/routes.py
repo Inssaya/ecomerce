@@ -6,13 +6,15 @@ them and posts once.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 
+from app.core.limits import SignalLimit
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
-from app.models import FEED_WEIGHT_COPY, FeedWeight, SignalType
+from app.models import FEED_WEIGHT_COPY, FeedWeight, Product, SignalType
 from app.modules.catalog.schemas import ProductCard
-from app.modules.catalog.service import availability, to_card
+from app.modules.catalog.service import to_card
 from app.modules.feed import embeddings, engine, service
 
 router = APIRouter(tags=["feed"])
@@ -25,8 +27,12 @@ class SignalIn(BaseModel):
     product_id: str | None = None
     category_id: str | None = None
     query: str | None = Field(default=None, max_length=200)
-    #: `dwell`: seconds. `scroll_depth`: percent.
+    #: `dwell`: seconds. `scroll_depth`: percent. `search`: results found.
     value: int | None = Field(default=None, ge=0, le=100_000)
+    #: Which screen. Reduced to a known pattern server-side — see
+    #: `service.clean_path` — so nothing that identifies one person can land
+    #: in a table the whole panel reads.
+    path: str | None = Field(default=None, max_length=200)
 
 
 class SignalBatch(BaseModel):
@@ -35,7 +41,7 @@ class SignalBatch(BaseModel):
 
 @router.post("/signals", status_code=status.HTTP_202_ACCEPTED)
 async def record_signals(
-    body: SignalBatch, db: DbSession, user: OptionalUser, visitor: Visitor
+    body: SignalBatch, db: DbSession, user: OptionalUser, visitor: Visitor, _: SignalLimit
 ) -> dict:
     """Anonymous by default — most buyers never sign in, so the fingerprint is
     the identity that matters. When there is an account too, both are stored,
@@ -56,6 +62,7 @@ async def record_signals(
             category_id=item.category_id,
             query=item.query,
             value=item.value,
+            path=item.path,
         )
         recorded += signal is not None
     await db.commit()
@@ -86,9 +93,8 @@ async def feed(db: DbSession, lang: Lang, paging: Paging, visitor: Visitor) -> F
     products, ratio, total = await engine.page(
         db, visitor_id=visitor or "anonymous", size=paging.size, offset=paging.offset
     )
-    left = await availability(db, [product.id for product in products])
     return FeedPage(
-        items=[to_card(product, lang, left.get(product.id, 0)) for product in products],
+        items=[to_card(product, lang) for product in products],
         page=paging.page,
         size=paging.size,
         has_more=paging.offset + len(products) < total,
@@ -141,6 +147,54 @@ async def set_weights(
             row.value = item.value
     await db.commit()
     return await read_weights(db, owner, lang)
+
+
+class PreviewItem(BaseModel):
+    product_id: str
+    title: str
+    slug: str
+    score: float
+    terms: dict[str, float]
+
+
+@router.get("/admin/feed/preview")
+async def preview_feed(
+    db: DbSession, owner: Owner, limit: int = Query(default=20, ge=1, le=60)
+) -> dict:
+    """What the shop is actually pushing, and why.
+
+    Six sliders with no visible effect are six blind guesses, so this returns
+    the current ranking with each term's contribution to the score.
+
+    It is deliberately computed for a **visitor with no history**. The feed is
+    personalised, so previewing it as the owner would show the owner's own
+    feed — shaped by every piece they have opened while editing it — which is
+    the one audience whose feed does not matter. A neutral visitor is what a
+    stranger arriving at the shop sees.
+    """
+    coefficients = await engine.weights(db)
+    scored = await engine.score_all(db, visitor_id="__preview__")
+    top = sorted(scored, key=lambda item: item.score, reverse=True)[:limit]
+
+    products = {
+        product.id: product
+        for product in await db.scalars(
+            select(Product).where(Product.id.in_([item.product_id for item in top]))
+        )
+    }
+
+    items = [
+        PreviewItem(
+            product_id=item.product_id,
+            title=products[item.product_id].title_en if item.product_id in products else "—",
+            slug=products[item.product_id].slug if item.product_id in products else "",
+            score=round(item.score, 4),
+            terms=dict(coefficients),
+        )
+        for item in top
+        if item.product_id in products
+    ]
+    return {"visitor": "neutral", "weights": coefficients, "items": [item.model_dump() for item in items]}
 
 
 @router.post("/admin/feed/embeddings")

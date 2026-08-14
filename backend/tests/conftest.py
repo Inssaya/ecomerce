@@ -13,26 +13,40 @@ from __future__ import annotations
 
 import os
 from collections.abc import AsyncGenerator
+from contextlib import suppress
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 
 os.environ.setdefault("JWT_SECRET", "test-secret-not-used-in-production")
+# The rate limiter counts in Redis and fails open when it cannot reach one, so
+# without this the limit tests would silently pass by never limiting anything.
+os.environ.setdefault("REDIS_URL", os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/1"))
 os.environ.setdefault(
     "DATABASE_URL",
     os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://mostyle:mostyle@127.0.0.1:5432/mostyle"),
 )
 
 from app.core import storage  # noqa: E402
-from app.core.cache import close_redis  # noqa: E402
+from app.core.cache import close_redis, get_redis  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
 from app.modules.notify import email as email_module  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
+def mailbox(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
+    """Every message the shop tried to send during one test.
+
+    Autouse, so nothing ever reaches a real SMTP server — but returned rather
+    than discarded, because some of what the shop does is only observable in
+    what it posts. A password reset is the clearest case: the token exists
+    solely inside the link in that email, so a test that cannot read the
+    mailbox cannot follow the flow a person follows.
+    """
+    sent: list[dict[str, str]] = []
+
     async def fake_upload(data: bytes, content_type: str, *, prefix: str) -> str:
         return f"http://storage.test/{prefix}/photo.jpg"
 
@@ -40,6 +54,7 @@ def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
         return None
 
     async def fake_send(to: str, subject: str, html: str) -> bool:
+        sent.append({"to": to, "subject": subject, "html": html})
         return True
 
     monkeypatch.setattr(storage, "upload_image", fake_upload)
@@ -47,6 +62,7 @@ def _no_external_services(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("app.modules.catalog.routes.upload_image", fake_upload)
     monkeypatch.setattr("app.modules.catalog.routes.delete_object", fake_delete)
     monkeypatch.setattr(email_module, "send_email", fake_send)
+    return sent
 
 
 @pytest.fixture
@@ -63,11 +79,16 @@ async def clean_db() -> AsyncGenerator[None, None]:
         await connection.execute(
             text(
                 "TRUNCATE request_events, custom_requests, order_events, order_items, orders, "
-                "pieces, product_variants, "
+                "piece_alerts, pieces, product_variants, "
                 "product_embeddings, product_media, products, signals, feed_weights, categories, "
-                "notifications, refresh_tokens, users RESTART IDENTITY CASCADE"
+                "cities, services, contact_messages, "
+                "refresh_tokens, users RESTART IDENTITY CASCADE"
             )
         )
+    # Counters are per-test: a limit tripped in one test must not spill into
+    # the next, and a test that expects to be limited must start from zero.
+    with suppress(Exception):
+        await get_redis().flushdb()
     yield
     await close_redis()
     await engine.dispose()

@@ -11,7 +11,9 @@ Two things were wrong with the ported templates and are fixed here.
 """
 from __future__ import annotations
 
+import html as html_module
 import logging
+import re
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -65,12 +67,52 @@ def _layout(*, lang: str, heading: str, blocks: list[str], action: tuple[str, st
 </html>"""
 
 
+#: The port that means implicit TLS. Everything else that encrypts does it by
+#: upgrading a plain connection with STARTTLS.
+IMPLICIT_TLS_PORT = 465
+
+
+def _plain_text(html: str) -> str:
+    """A readable text version of the message.
+
+    Deliberately crude — these templates are a handful of paragraphs and one
+    button, not arbitrary HTML — but it has to exist. A `multipart/alternative`
+    carrying only an HTML part is one of the oldest and most reliable spam
+    signals there is, and in a cash-on-delivery shop an order update in the
+    junk folder is a package refused at the door by someone who never knew it
+    was coming.
+    """
+    text = re.sub(r"<br\s*/?>", "\n", html)
+    text = re.sub(r"</(p|h1|h2|div|tr)>", "\n\n", text)
+    # Keep the link's address, since the button is the whole point of most of
+    # these messages.
+    text = re.sub(r'<a[^>]*href="([^"]+)"[^>]*>(.*?)</a>', r"\2: \1", text, flags=re.S)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = html_module.unescape(text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
 async def send_email(to: str, subject: str, html: str) -> bool:
     message = MIMEMultipart("alternative")
     message["Subject"] = subject
     message["From"] = f"{settings.app_name} <{settings.smtp_from}>"
     message["To"] = to
+    # Order matters in `alternative`: least preferred first, so a client that
+    # can render HTML still picks the HTML.
+    message.attach(MIMEText(_plain_text(html), "plain", "utf-8"))
     message.attach(MIMEText(html, "html", "utf-8"))
+
+    # Implicit TLS on 465, STARTTLS everywhere else.
+    #
+    # This used to pass `use_tls=SMTP_TLS, start_tls=False`, which is implicit
+    # TLS — correct only on 465. Every common provider (Resend, Brevo,
+    # Postmark, Gmail) listens on 587 and expects the connection to be upgraded
+    # with STARTTLS, so setting SMTP_TLS=true with the port they give you made
+    # every message fail. Silently, because sending is deliberately
+    # non-fatal — which is exactly how a shop discovers it three weeks in.
+    implicit = settings.smtp_tls and settings.smtp_port == IMPLICIT_TLS_PORT
+    upgrade = settings.smtp_tls and not implicit
+
     try:
         await aiosmtplib.send(
             message,
@@ -78,8 +120,8 @@ async def send_email(to: str, subject: str, html: str) -> bool:
             port=settings.smtp_port,
             username=settings.smtp_user or None,
             password=settings.smtp_password or None,
-            use_tls=settings.smtp_tls,
-            start_tls=False,
+            use_tls=implicit,
+            start_tls=upgrade,
         )
         return True
     except Exception as exc:

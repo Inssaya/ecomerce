@@ -1,0 +1,29 @@
+# Coverage configuration.
+#
+# `concurrency = greenlet` is not optional here, and getting it wrong is worse
+# than having no coverage at all.
+#
+# SQLAlchemy's async support runs the database work inside a greenlet, so
+# without this line coverage stops tracing the moment an endpoint awaits a
+# query — which is the first thing almost every endpoint does. The report then
+# claims the bodies of those endpoints were never executed. Measured on this
+# repository: 75% reported against 87% actual, with the auth routes shown at
+# 49% while every one of them was in fact being exercised end to end.
+#
+# A coverage report that is wrong in the safe direction is merely useless. This
+# one was wrong in the dangerous direction: it pointed at well-tested files and
+# said "untested", which is how effort ends up spent on the wrong thing.
+[run]
+source = app
+concurrency = greenlet
+omit =
+    */__pycache__/*
+
+[report]
+skip_empty = True
+# These are the seams where the shop talks to something that is not there in a
+# test — an LLM provider, an embedding model, object storage. They are covered
+# by fakes at the boundary rather than by exercising the client itself.
+exclude_also =
+    if TYPE_CHECKING:
+    raise NotImplementedError

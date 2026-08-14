@@ -167,6 +167,11 @@ Arabic is written as Arabic — warm, direct, native. It is never a translation 
 
 - Never a stock photo. Never a supplier image.
 - Never a fake countdown or invented scarcity.
+- **Never a batch number that is not true.** "01 of 4" is a claim about a
+  specific physical object and about how many of it exist. When the run grows
+  the older pieces are relabelled upward — 04/08 becomes 04/12 — and when a
+  miscount is corrected the run shrinks the same way. The number moves when the
+  truth moves, in both directions, or it is decoration.
 - Never "premium," "luxury," or "high-quality" as a claim — show it instead.
 - Never compete on price against imported goods. That race is unwinnable and it is the wrong race.
 - Never a vague delivery date.

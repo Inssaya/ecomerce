@@ -10,24 +10,31 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 
 from app.config import settings
 from app.core.cache import close_redis, get_redis
+from app.core.limits import client_ip
 from app.core.llm import close_client
 from app.core.storage import ensure_bucket
-from app.db import engine
+from app.db import SessionLocal, engine
+from app.deps import visitor_id as read_visitor_id
 from app.modules.admin.routes import router as admin_router
 from app.modules.ai.routes import router as ai_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.catalog.routes import router as catalog_router
+from app.modules.contact.routes import router as contact_router
 from app.modules.feed.routes import router as feed_router
-from app.modules.notify.routes import router as notify_router
+from app.modules.local.routes import router as local_router
+from app.modules.local.seed import seed as seed_local
 from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
+from app.modules.security import service as security_service
+from app.modules.security.routes import router as security_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mostyle")
@@ -35,6 +42,7 @@ logger = logging.getLogger("mostyle")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings.check()
     try:
         await ensure_bucket()
     except Exception as exc:
@@ -42,6 +50,31 @@ async def lifespan(app: FastAPI):
         # storage, so the storefront keeps working and orders keep being taken
         # while it is unreachable; only uploads fail, and they fail loudly.
         logger.warning("Object storage is not reachable yet: %s", exc)
+
+    # The cities we deliver to and the services we offer are content, and a
+    # deployment with neither has no local pages at all. Seeding here means a
+    # fresh install is complete without anybody remembering a command; it only
+    # ever inserts what is missing, so the owner's edits are never overwritten.
+    try:
+        async with SessionLocal() as db:
+            added_cities, added_services = await seed_local(db)
+        if added_cities or added_services:
+            logger.info("Seeded %s cities and %s services", added_cities, added_services)
+    except Exception as exc:
+        # Same reasoning as storage: a shop that will not start because a
+        # landing page is missing is worse than a shop without that page.
+        logger.warning("Could not seed cities and services: %s", exc)
+
+    # Housekeeping for the Logs door — see `SecurityEvent` retention (D12).
+    # Non-fatal for the same reason as everything else above.
+    try:
+        async with SessionLocal() as db:
+            removed = await security_service.prune(db)
+        if removed:
+            logger.info("Pruned %s aged-out security events", removed)
+    except Exception as exc:
+        logger.warning("Could not prune security events: %s", exc)
+
     logger.info("%s API ready", settings.app_name)
     yield
     await close_redis()
@@ -69,15 +102,71 @@ app.add_middleware(
 # 99% of buyers are on a phone, often on mobile data: compress everything.
 app.add_middleware(GZipMiddleware, minimum_size=512)
 
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Headers the browser enforces for us.
+
+    This API answers a storefront and nothing else, so the policy can be far
+    tighter than a general-purpose one: it never renders HTML, never needs to
+    be framed, and never needs to be reachable from another origin's page.
+    """
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy", "camera=(), microphone=(), geolocation=(), interest-cohort=()"
+    )
+    # JSON only: nothing this API returns should ever be executed or framed.
+    response.headers.setdefault(
+        "Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'"
+    )
+    # An order reference or a tracking token must never travel in the clear.
+    if settings.is_production:
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
+@app.middleware("http")
+async def blocklist_guard(request: Request, call_next):
+    """Turn away a blocked device or address before it reaches a route.
+
+    Checked against Redis only (see `security.service.is_blocked`) — no
+    database read on every request, and it fails open on a Redis outage the
+    same way the rate limiter does. `/health` and `/ready` are exempt: an
+    orchestrator polling those must never be the thing that gets blocked.
+    """
+    if request.url.path in ("/health", "/ready"):
+        return await call_next(request)
+
+    ip = client_ip(request)
+    visitor = read_visitor_id(request)
+    if await security_service.is_blocked(ip=ip, visitor_id=visitor):
+        return JSONResponse(
+            status_code=403,
+            content={
+                "detail": "You are blocked for security reasons — contact support on "
+                "0623842535, or email mostyle.service@gmail.com.",
+                "code": "blocked",
+            },
+        )
+    return await call_next(request)
+
+
 api = APIRouter(prefix="/api")
 api.include_router(auth_router)
 api.include_router(catalog_router)
+api.include_router(contact_router)
 api.include_router(orders_router)
 api.include_router(requests_router)
 api.include_router(feed_router)
-api.include_router(notify_router)
+api.include_router(local_router)
 api.include_router(admin_router)
 api.include_router(ai_router)
+api.include_router(security_router)
 app.include_router(api)
 
 

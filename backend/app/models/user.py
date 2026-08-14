@@ -40,6 +40,20 @@ class User(Base, TimestampMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Preferred language for email and notifications: "en" or "ar".
     lang: Mapped[str] = mapped_column(String(2), default="en", nullable=False)
+    #: The customer's own photograph. Null on almost every account — the
+    #: storefront falls back to an initial rather than a stock silhouette.
+    avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+
+    #: Where they are, so checkout does not ask a second time.
+    #:
+    #: An order still copies the address into its own JSON column rather than
+    #: pointing at these, and deliberately: an order is a record of what was
+    #: agreed on that day, and a customer who moves house must not rewrite where
+    #: last month's parcel was sent. These two are the *default* — what the
+    #: checkout form arrives already filled in with, and what a correction there
+    #: writes back for next time.
+    address_line1: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    city: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     refresh_tokens: Mapped[list[RefreshToken]] = relationship(
         back_populates="user", cascade="all, delete-orphan"

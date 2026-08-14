@@ -78,15 +78,31 @@ services:
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: ${JWT_SECRET}
       MINIO_ENDPOINT: minio:9000
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:9000}
+      # Photographs are addressed on the storefront's own origin and proxied to
+      # MinIO from there — a bare localhost:9000 is reachable from a browser but
+      # not from the server rendering the page, which broke every image.
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:3000}
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_FROM: ${SMTP_FROM:-workshop@mostyle.ma}
+      # These three were missing entirely: SMTP_USER/PASSWORD/TLS were readable
+      # from .env but never reached the container, so real SMTP (anything but
+      # Mailpit) silently sent as anonymous, unencrypted mail and every real
+      # provider rejected it before this line existed.
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-false}
       WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
-      DELIVERY_FEE: ${DELIVERY_FEE:-30}
-      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-500}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+      LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      # Delivery is free on everything. A threshold of zero is cleared by every
+      # order, so nothing is ever charged whatever a city's own override says.
+      DELIVERY_FEE: ${DELIVERY_FEE:-0}
+      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-0}
     depends_on:
       postgres:
         condition: service_healthy
@@ -98,6 +114,17 @@ services:
   web:
     build:
       context: ./frontend
+      # Next bakes these into the build; they are not readable at run time.
+      # Without them the ARGs default to empty, `siteUrl` becomes "" and
+      # `new URL("")` throws in the language layout's generateMetadata — which
+      # fails every prerendered page. The production overlay has always passed
+      # these; this file did not, so only the production path ever built.
+      args:
+        INTERNAL_API_URL: http://api:8000
+        NEXT_PUBLIC_SITE_URL: ${APP_URL:-http://localhost:3000}
+        MEDIA_HOSTNAMES: ${MEDIA_HOSTNAMES:-}
+        NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
+        NEXT_PUBLIC_WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
     restart: unless-stopped
     networks: [mostyle]
     environment:

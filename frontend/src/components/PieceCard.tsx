@@ -11,11 +11,26 @@ import { track } from "@/lib/signals";
 /**
  * One piece in a list.
  *
- * It reports its own impression when it actually enters the screen, not when
- * it is rendered — a card below the fold that nobody scrolled to was not seen,
- * and counting it would teach the feed something false.
+ * Drawn to the design's shop card: a 4:5 photograph with a 14px radius that
+ * scales slowly under the cursor, the status as a small badge over the top
+ * corner, and the name, the promise and the price on one baseline underneath.
+ * The card itself carries no border, no shadow and no surface — a wall of these
+ * should read as a wall of photographs, and a box around each one is what makes
+ * a shop look like a spreadsheet.
+ *
+ * It reports its own impression when it actually enters the screen, not when it
+ * is rendered — a card below the fold that nobody scrolled to was not seen, and
+ * counting it would teach the feed something false.
  */
-export function PieceCard({ piece, lang, priority }: { piece: Piece; lang: Lang; priority?: boolean }) {
+export function PieceCard({
+  piece,
+  lang,
+  priority,
+}: {
+  piece: Piece;
+  lang: Lang;
+  priority?: boolean;
+}) {
   const t = translator(lang);
   const ref = useRef<HTMLAnchorElement>(null);
 
@@ -37,47 +52,70 @@ export function PieceCard({ piece, lang, priority }: { piece: Piece; lang: Lang;
     return () => observer.disconnect();
   }, [piece.id]);
 
-  const soldOut = piece.kind === "shelf" && piece.available === 0;
+  // The shop does not count units, so a card can no longer say "one left" or
+  // "all gone". The one line that stays is the workshop's promise about time —
+  // a made-to-order card that hid it would surprise the buyer at checkout.
+  const note =
+    piece.kind === "workshop" && piece.lead_time_days
+      ? t("readyInDays", { n: piece.lead_time_days })
+      : "";
+
+  // Discount badge and the struck-out original price when an offer is live.
+  // `effective_price` and `discount_active` come from the server so the card
+  // never disagrees with the piece page about the number the buyer sees.
+  const shown = piece.effective_price ?? piece.price;
+  const reduced = piece.discount_active === true && shown < piece.price;
 
   return (
     <Link
       ref={ref}
       href={`/${lang}/piece/${piece.slug}`}
       onClick={() => track({ type: "click", product_id: piece.id })}
-      className="card block shadow-soft active:scale-[0.99] transition-transform duration-gentle"
+      className="group block"
     >
-      <div className="relative aspect-square bg-clay-soft">
+      <div className="relative aspect-[4/5] overflow-hidden rounded-[14px] bg-surface">
         {piece.image ? (
           <Image
             src={piece.image}
             alt={piece.title}
             fill
-            sizes="(max-width: 560px) 50vw, 260px"
-            className={`object-cover transition-opacity duration-500 ${soldOut ? "opacity-45" : ""}`}
+            sizes="(max-width:768px) 50vw, (max-width:1180px) 33vw, 280px"
+            className="object-cover transition-transform duration-[900ms] ease-[cubic-bezier(.2,.8,.2,1)]
+                        group-hover:scale-[1.06]"
             priority={priority}
           />
         ) : null}
-        {piece.kind === "workshop" ? (
-          <span className="absolute top-2 start-2 rounded-full bg-surface/90 px-2.5 py-1 text-[11px] font-medium text-ink-soft">
-            {t("theWorkshop")}
+        {reduced ? (
+          <span className="absolute top-3 start-3 rounded-full bg-clay px-2.5 py-1.5 text-[12px] font-medium text-white">
+            {lang === "ar" ? "تخفيض" : "offer"}
           </span>
         ) : null}
       </div>
 
-      <div className="p-3.5">
-        <h3 className="text-[15px] font-medium leading-snug line-clamp-2">{piece.title}</h3>
-        <p className="mt-1.5 text-[15px] font-semibold">
-          {money(piece.price, lang)}
-          {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
-        </p>
-        <p className="mt-0.5 text-[12px] text-ink-soft">
-          {piece.kind === "workshop"
-            ? t("readyInDays", { n: piece.lead_time_days ?? 0 })
-            : soldOut
-              ? t("allGone")
-              : piece.available === 1
-                ? t("lastOne")
-                : null}
+      <div className="mt-3 flex items-start justify-between gap-3.5">
+        <div className="min-w-0">
+          <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-ink-mute">
+            {piece.kind === "workshop" ? t("madeToOrder") : t("theShelf")}
+          </p>
+          <h3 className="mt-1 text-[15.5px] font-semibold tracking-[-0.01em] truncate">
+            {piece.title}
+          </h3>
+          {note ? <p className="mt-0.5 text-[13.5px] text-ink-mute truncate">{note}</p> : null}
+        </div>
+        <p className="stamp text-[15.5px] font-semibold whitespace-nowrap tabular-nums">
+          {reduced ? (
+            <>
+              <span className="me-1.5 text-[13px] font-normal text-ink-mute line-through">
+                {money(piece.price, lang)}
+              </span>
+              {money(shown, lang)}
+            </>
+          ) : (
+            <>
+              {money(piece.price, lang)}
+              {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
+            </>
+          )}
         </p>
       </div>
     </Link>

@@ -10,13 +10,17 @@
  */
 @layer base {
   :root {
-    --cream: 38 40% 96%;      /* the page */
-    --surface: 40 45% 99%;    /* cards, sheets */
-    --sand: 34 28% 89%;       /* dividers, resting states */
-    --clay: 18 34% 53%;       /* the one accent */
-    --clay-soft: 20 45% 94%;  /* the accent, at rest */
-    --ink: 24 12% 17%;        /* text */
-    --ink-soft: 24 8% 46%;    /* secondary text */
+    /* Retuned to the design's own tokens — #f7f5f1, #ffffff, #e5e1da,
+       #d24a24, #fbeee9, #171618, #4a4750, #8a8690 — converted to HSL so the
+       existing utilities keep working unchanged. */
+    --cream: 40 27% 96%;      /* the page      #f7f5f1 */
+    --surface: 0 0% 100%;     /* cards, sheets #ffffff */
+    --sand: 38 17% 88%;       /* dividers      #e5e1da */
+    --clay: 13 71% 48%;       /* the one accent — ember #d24a24 */
+    --clay-soft: 17 69% 95%;  /* the accent, at rest  #fbeee9 */
+    --ink: 270 4% 9%;         /* text          #171618 */
+    --ink-soft: 260 6% 30%;   /* secondary     #4a4750 */
+    --ink-mute: 264 4% 55%;   /* tertiary      #8a8690 */
     --good: 150 30% 38%;
     --warn: 8 55% 48%;
 
@@ -25,6 +29,43 @@
 
   * {
     border-color: hsl(var(--sand));
+  }
+
+  /*
+   * Ambient backgrounds.
+   *
+   * The canvas is fixed behind everything, so the page itself has to stop
+   * painting over it. Cards keep their own surface — text must never sit
+   * directly on a moving background, at any hour.
+   */
+  [data-ambient]:not([data-ambient="none"]) body {
+    background: transparent;
+  }
+
+  /*
+   * Night is a real theme, not a dark picture behind dark text.
+   *
+   * Putting the warm palette over a night sky would leave charcoal text on a
+   * near-black background, which is unreadable — so the tokens invert and
+   * every component follows without knowing anything about it. The clay accent
+   * lifts, because the same clay that reads warm on cream reads muddy on ink.
+   */
+  [data-ambient="night"] {
+    --cream: 227 25% 11%;
+    --surface: 227 20% 15%;
+    --sand: 227 14% 26%;
+    --clay: 24 55% 66%;
+    --clay-soft: 227 18% 21%;
+    --ink: 38 30% 93%;
+    --ink-soft: 225 12% 68%;
+    --good: 150 35% 62%;
+    --warn: 8 70% 70%;
+  }
+
+  /* On a dark theme a photograph is the brightest thing on screen; taking the
+     glare off it stops it burning a hole in the page. */
+  [data-ambient="night"] img {
+    filter: brightness(0.94);
   }
 
   html {
@@ -44,16 +85,41 @@
     padding-bottom: env(safe-area-inset-bottom);
   }
 
-  /* Arabic is first-class, not a layer bolted on. */
+  /*
+   * Arabic is calibrated, not just switched on.
+   *
+   * Arabic glyphs sit visually smaller than Latin at the same point size and
+   * their letters connect, so the same numbers that read well in English read
+   * cramped in Arabic. Two adjustments: a little more size and a lot more
+   * leading, since ascenders and descenders overlap between lines otherwise.
+   */
   [dir="rtl"] body {
+    /* Schibsted Grotesk carries no Arabic, so Arabic takes its own face first
+       in the stack. Without this the browser silently substitutes whatever the
+       device has, and the two languages stop looking like one shop. */
     font-family: var(--font-arabic), system-ui, sans-serif;
-    line-height: 1.85;
+    font-size: 17px;
+    line-height: 1.9;
   }
 
   h1, h2, h3 {
     line-height: 1.25;
     font-weight: 600;
     letter-spacing: -0.015em;
+  }
+
+  /*
+   * Heavy weights close up the counters in connected Arabic letterforms and
+   * turn a heading into a smudge at phone size. Arabic headings carry their
+   * emphasis through size, not weight — and tracking that is tightened for
+   * Latin must be released, because Arabic letters are already joined.
+   */
+  [dir="rtl"] h1,
+  [dir="rtl"] h2,
+  [dir="rtl"] h3 {
+    font-weight: 500;
+    letter-spacing: 0;
+    line-height: 1.4;
   }
 
   /* Focus must stay visible — some people navigate with a keyboard, and the
@@ -74,6 +140,24 @@
 }
 
 @layer components {
+  /*
+   * The signature.
+   *
+   * A workshop numbers what it makes, so every number here is stamped: piece
+   * 04/12, an order reference read back over the phone, a price, a count of
+   * what is left. Tabular figures so columns line up, and slightly open
+   * tracking so a reference is easy to read aloud. This is the one loud thing
+   * in the design; everything else stays quiet around it.
+   */
+  .stamp {
+    font-family: var(--font-stamp), Georgia, serif;
+    font-feature-settings: "tnum" 1;
+    letter-spacing: 0.02em;
+    /* Latin numerals in both languages: a reference has to survive being
+       written down and dialled. */
+    direction: ltr;
+    unicode-bidi: isolate;
+  }
   /* Thumb-reachable: 44px is the floor, and every tappable thing meets it. */
   .tap {
     @apply min-h-[44px] min-w-[44px] inline-flex items-center justify-center;
@@ -109,5 +193,56 @@
   /* Whitespace signals confidence. */
   .page {
     @apply mx-auto w-full max-w-[560px] px-5;
+  }
+
+  /* The shop itself. A grid of photographs wants the width a phone cannot
+     give it, while prose stays at `.page` — 560px is a comfortable measure to
+     read and a cramped one to shop in. */
+  .page-wide {
+    @apply mx-auto w-full max-w-[1180px] px-5;
+  }
+
+  /* Escapes a narrow column to the full viewport, so a band of photographs can
+     run edge to edge inside a page whose prose must not. */
+  .breakout {
+    width: 100vw;
+    margin-inline-start: calc(50% - 50vw);
+  }
+
+  /* A row that scrolls sideways without a scrollbar cutting across it. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@layer components {
+  /*
+   * The batch, drawn as what it is.
+   *
+   * One mark per object we made. The ones still here are solid; the ones that
+   * have gone are struck through. It is the shelf itself, and it is the one
+   * claim on this whole site a reseller physically cannot make — they do not
+   * know how many of anything exists, because they did not make it.
+   */
+  .tally {
+    @apply inline-flex flex-wrap items-center gap-1.5;
+  }
+
+  .tally-mark {
+    @apply inline-block h-7 rounded-md px-2 text-[12px] leading-7 tabular-nums;
+    font-family: var(--font-stamp), Georgia, serif;
+  }
+
+  .tally-here {
+    @apply tally-mark bg-ink text-cream;
+  }
+
+  .tally-gone {
+    @apply tally-mark bg-sand text-ink-soft line-through decoration-1;
   }
 }

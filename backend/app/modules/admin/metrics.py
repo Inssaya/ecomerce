@@ -15,15 +15,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import func, select
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
     Category,
+    ContactMessage,
     Order,
     OrderItem,
     OrderStatus,
     Piece,
+    PieceAlert,
     PieceState,
     Product,
     ProductStatus,
@@ -59,8 +61,73 @@ class Period:
         return {"from": self.start.isoformat(), "to": self.end.isoformat()}
 
 
+@dataclass(slots=True, frozen=True)
+class Scope:
+    """What slice of the shop a number is about.
+
+    REBUILD-PLAN §3: one scope drives the whole page — pick a category or a
+    piece once and every figure below re-reads for it.
+
+    Not every figure *can* honour it, and pretending otherwise would be worse
+    than not offering it. Signals carry both ids, so audience, funnel and
+    conversion narrow exactly. Orders narrow through their line items. The
+    work queue never narrows: "what needs me today" is a question about the
+    whole shop, and a scoped queue would hide work rather than focus it —
+    so it is reported as shop-wide and the screen says so.
+    """
+
+    category_id: str | None = None
+    product_id: str | None = None
+
+    @property
+    def active(self) -> bool:
+        return bool(self.category_id or self.product_id)
+
+    def signal_conditions(self) -> list:
+        """A piece beats a category — the narrower wins."""
+        if self.product_id:
+            return [Signal.product_id == self.product_id]
+        if self.category_id:
+            return [Signal.category_id == self.category_id]
+        return []
+
+    def order_condition(self):
+        """An order is in scope when it contains a line that is."""
+        if not self.active:
+            return None
+        lines = select(OrderItem.id).where(OrderItem.order_id == Order.id)
+        if self.product_id:
+            lines = lines.where(OrderItem.product_id == self.product_id)
+        else:
+            lines = lines.join(Product, Product.id == OrderItem.product_id).where(
+                Product.category_id == self.category_id
+            )
+        return lines.exists()
+
+    def as_dict(self) -> dict:
+        return {
+            "category_id": self.category_id,
+            "product_id": self.product_id,
+            "active": self.active,
+        }
+
+
+#: Used when a caller does not scope at all.
+WHOLE_SHOP = Scope()
+
+
 def _within(column, period: Period):
     return column.between(period.start, period.end + timedelta(days=1))
+
+
+def _scoped(query, scope: Scope, *, orders: bool = False):
+    """Apply a scope to a query, if there is one to apply."""
+    if not scope.active:
+        return query
+    if orders:
+        condition = scope.order_condition()
+        return query.where(condition) if condition is not None else query
+    return query.where(*scope.signal_conditions())
 
 
 async def pulse(db: AsyncSession) -> dict:
@@ -99,24 +166,56 @@ async def pulse(db: AsyncSession) -> dict:
     }
 
 
-async def revenue(db: AsyncSession, period: Period) -> dict:
+async def revenue(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
     """What was collected, against the same length of time before it."""
 
     async def totals(window: Period) -> tuple[int, float]:
         count = await db.scalar(
-            select(func.count())
-            .select_from(Order)
-            .where(Order.status.in_(PAID_STATUSES), _within(Order.updated_at, window))
+            _scoped(
+                select(func.count())
+                .select_from(Order)
+                .where(Order.status.in_(PAID_STATUSES), _within(Order.updated_at, window)),
+                scope,
+                orders=True,
+            )
         )
         amount = await db.scalar(
-            select(func.coalesce(func.sum(Order.total), 0)).where(
-                Order.status.in_(PAID_STATUSES), _within(Order.updated_at, window)
+            _scoped(
+                select(func.coalesce(func.sum(Order.total), 0)).where(
+                    Order.status.in_(PAID_STATUSES), _within(Order.updated_at, window)
+                ),
+                scope,
+                orders=True,
             )
         )
         return count or 0, float(amount or 0)
 
     orders, amount = await totals(period)
     before_orders, before_amount = await totals(period.previous())
+
+    # A day-by-day series, so the tile can carry a sparkline. Visitors already
+    # had one; revenue — the more useful of the two to an owner — did not.
+    # Every day in the window is present, including the empty ones: a chart
+    # with the quiet days missing lies about the shape of a week.
+    collected_by_day = dict(
+        (row.day, float(row.total))
+        for row in await db.execute(
+            _scoped(
+                select(
+                    func.date(Order.updated_at).label("day"),
+                    func.coalesce(func.sum(Order.total), 0).label("total"),
+                ).where(Order.status.in_(PAID_STATUSES), _within(Order.updated_at, period)),
+                scope,
+                orders=True,
+            ).group_by(func.date(Order.updated_at))
+        )
+    )
+    daily = []
+    cursor = period.start
+    while cursor <= period.end:
+        daily.append({"date": cursor.isoformat(), "mad": collected_by_day.get(cursor, 0.0)})
+        cursor += timedelta(days=1)
+
     return {
         "period": period.as_dict(),
         "orders_delivered": orders,
@@ -124,40 +223,52 @@ async def revenue(db: AsyncSession, period: Period) -> dict:
         "average_order_mad": round(amount / orders, 2) if orders else 0.0,
         "previous_period": {"orders_delivered": before_orders, "collected_mad": before_amount},
         "change_mad": round(amount - before_amount, 2),
+        "daily": daily,
     }
 
 
-async def refusals(db: AsyncSession, period: Period) -> dict:
+async def refusals(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
     """The number that decides whether this business works.
 
     A refused package pays shipping twice and earns nothing. Anything at or
     above the market's usual 15% means people are being surprised by the box.
     """
     reached_door = await db.scalar(
-        select(func.count())
-        .select_from(Order)
-        .where(
-            Order.status.in_([*PAID_STATUSES, *REFUSED_STATUSES]),
-            _within(Order.updated_at, period),
+        _scoped(
+            select(func.count())
+            .select_from(Order)
+            .where(
+                Order.status.in_([*PAID_STATUSES, *REFUSED_STATUSES]),
+                _within(Order.updated_at, period),
+            ),
+            scope,
+            orders=True,
         )
     )
     refused = await db.scalar(
-        select(func.count())
-        .select_from(Order)
-        .where(Order.status.in_(REFUSED_STATUSES), _within(Order.updated_at, period))
+        _scoped(
+            select(func.count())
+            .select_from(Order)
+            .where(Order.status.in_(REFUSED_STATUSES), _within(Order.updated_at, period)),
+            scope,
+            orders=True,
+        )
     )
     rate = round(100 * (refused or 0) / reached_door, 1) if reached_door else 0.0
 
     by_city = (
         await db.execute(
-            select(
-                Order.city,
-                func.count().filter(Order.status.in_(REFUSED_STATUSES)).label("refused"),
-                func.count().label("total"),
-            )
-            .where(
-                Order.status.in_([*PAID_STATUSES, *REFUSED_STATUSES]),
-                _within(Order.updated_at, period),
+            _scoped(
+                select(
+                    Order.city,
+                    func.count().filter(Order.status.in_(REFUSED_STATUSES)).label("refused"),
+                    func.count().label("total"),
+                ).where(
+                    Order.status.in_([*PAID_STATUSES, *REFUSED_STATUSES]),
+                    _within(Order.updated_at, period),
+                ),
+                scope,
+                orders=True,
             )
             .group_by(Order.city)
             .order_by(func.count().filter(Order.status.in_(REFUSED_STATUSES)).desc())
@@ -255,8 +366,10 @@ async def shelf_state(db: AsyncSession) -> dict:
 
     running_out, not_moving = [], []
     stale_before = date.today() - timedelta(days=45)
-    for _, title, slug, available, sold, created_at in rows:
-        entry = {"title": title, "slug": slug, "available": available, "sold": sold}
+    for product_id, title, slug, available, sold, created_at in rows:
+        # The id was selected and then discarded, so every shelf row named a
+        # piece the owner had no way to open. It is the whole point of the row.
+        entry = {"product_id": product_id, "title": title, "slug": slug, "available": available, "sold": sold}
         if available == 0:
             entry["note"] = "nothing left"
             running_out.append(entry)
@@ -278,6 +391,14 @@ async def best_sellers(db: AsyncSession, period: Period, limit: int = 10) -> dic
                 OrderItem.title,
                 func.sum(OrderItem.quantity).label("sold"),
                 func.sum(OrderItem.subtotal).label("revenue"),
+                # Grouped by the snapshot title on purpose — that is what was
+                # actually sold, and it survives the piece being renamed. This
+                # is only so the row can link somewhere; if one title was sold
+                # under two products it picks one, and the id may be null for a
+                # piece that no longer exists, which the console handles.
+                # Cast to text because Postgres has no max() over uuid, and the
+                # value is only ever used as a string in a URL.
+                func.max(cast(OrderItem.product_id, String)).label("product_id"),
             )
             .join(Order, Order.id == OrderItem.order_id)
             .where(Order.status.in_(PAID_STATUSES), _within(Order.updated_at, period))
@@ -289,25 +410,40 @@ async def best_sellers(db: AsyncSession, period: Period, limit: int = 10) -> dic
     return {
         "period": period.as_dict(),
         "pieces": [
-            {"title": title, "sold": int(sold), "revenue_mad": float(revenue_)}
-            for title, sold, revenue_ in rows
+            {
+                "title": title,
+                "sold": int(sold),
+                "revenue_mad": float(revenue_),
+                "product_id": product_id,
+            }
+            for title, sold, revenue_, product_id in rows
         ],
     }
 
 
-async def conversion(db: AsyncSession, period: Period) -> dict:
+async def conversion(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
     """How many of the people who looked ended up buying."""
     visitors = await db.scalar(
-        select(func.count(func.distinct(Signal.visitor_id))).where(
-            _within(Signal.created_at, period)
+        _scoped(
+            select(func.count(func.distinct(Signal.visitor_id))).where(
+                _within(Signal.created_at, period)
+            ),
+            scope,
         )
     )
     orders = await db.scalar(
-        select(func.count()).select_from(Order).where(_within(Order.created_at, period))
+        _scoped(
+            select(func.count()).select_from(Order).where(_within(Order.created_at, period)),
+            scope,
+            orders=True,
+        )
     )
     carts = await db.scalar(
-        select(func.count(func.distinct(Signal.visitor_id))).where(
-            Signal.type == SignalType.add_to_cart, _within(Signal.created_at, period)
+        _scoped(
+            select(func.count(func.distinct(Signal.visitor_id))).where(
+                Signal.type == SignalType.add_to_cart, _within(Signal.created_at, period)
+            ),
+            scope,
         )
     )
     return {
@@ -318,6 +454,64 @@ async def conversion(db: AsyncSession, period: Period) -> dict:
         "visitor_to_order_pct": round(100 * (orders or 0) / visitors, 1) if visitors else 0.0,
         "cart_to_order_pct": round(100 * (orders or 0) / carts, 1) if carts else 0.0,
     }
+
+
+async def money_block(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -> dict:
+    """Revenue, refusals and conversion together — the money view of a period."""
+    return {
+        "revenue": await revenue(db, period, scope),
+        "refusals": await refusals(db, period, scope),
+        "conversion": await conversion(db, period, scope),
+    }
+
+
+async def unread_messages(db: AsyncSession) -> int:
+    """Contact-form messages nobody has read.
+
+    The console used to count these only once the owner had already opened the
+    Messages tab — a badge that appears after you arrive is decoration. It is
+    part of the Board's one call now, so it is right before you go looking.
+    """
+    total = await db.scalar(
+        select(func.count())
+        .select_from(ContactMessage)
+        .where(ContactMessage.read_at.is_(None), ContactMessage.archived_at.is_(None))
+    )
+    return total or 0
+
+
+async def waiting_list(db: AsyncSession, limit: int = 50) -> list[dict]:
+    """Who is waiting on which piece, newest demand first.
+
+    `piece_alerts` is the most direct signal in the building: a search says
+    somebody typed a word, this says somebody would have paid, for a specific
+    piece, at a price they had already seen. Until now the only way to read it
+    was one product at a time, as a bare count.
+    """
+    rows = await db.execute(
+        select(
+            PieceAlert.product_id,
+            Product.title_en,
+            Product.slug,
+            func.count().label("waiting"),
+            func.min(PieceAlert.created_at).label("since"),
+        )
+        .join(Product, Product.id == PieceAlert.product_id)
+        .where(PieceAlert.notified_at.is_(None))
+        .group_by(PieceAlert.product_id, Product.title_en, Product.slug)
+        .order_by(func.count().desc())
+        .limit(limit)
+    )
+    return [
+        {
+            "product_id": row.product_id,
+            "title": row.title_en,
+            "slug": row.slug,
+            "waiting": row.waiting,
+            "since": row.since.isoformat() if row.since else None,
+        }
+        for row in rows
+    ]
 
 
 #: Plain-language explanations, so the panel makes the owner better at running

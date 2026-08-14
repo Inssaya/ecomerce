@@ -76,6 +76,11 @@ class Signal(Base):
         # "What has been earning attention this week" — the owner's question.
         Index("ix_signals_product_recent", "product_id", "created_at"),
         Index("ix_signals_category_recent", "category_id", "created_at"),
+        # "What is happening on each screen this week" — the analytics table.
+        Index("ix_signals_path_recent", "path", "created_at"),
+        # Every analytics query is "this period, grouped by something", and
+        # without this each one is a sequential scan of the whole table.
+        Index("ix_signals_recent", "created_at"),
     )
 
     id: Mapped[str] = uuid_pk()
@@ -100,7 +105,16 @@ class Signal(Base):
     # the owner has to "what are people asking us for that we don't make".
     query: Mapped[str | None] = mapped_column(Text, nullable=True)
     # `dwell`: seconds on the page. `scroll_depth`: percent through a list.
+    # `search`: how many pieces came back — which is what makes "they searched
+    # and we had nothing" a question the database can answer.
     value: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    #: Which screen it happened on, as the *route pattern* — `/piece/[slug]`,
+    #: never `/piece/matte-black-hook`, and never `/track/<token>` with the
+    #: token in it. Two reasons, and the second is the important one: patterns
+    #: group, so "how far do people get down the shelf" is one GROUP BY; and a
+    #: real URL here would put someone's tracking token in an analytics table
+    #: that the whole owner panel reads.
+    path: Mapped[str | None] = mapped_column(String(60), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False

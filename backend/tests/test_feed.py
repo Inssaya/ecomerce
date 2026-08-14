@@ -336,3 +336,43 @@ async def test_embedding_refresh_reports_itself_unavailable_without_a_key(
     response = await client.post("/api/admin/feed/embeddings", headers=owner_headers)
     assert response.status_code == 200
     assert response.json()["unavailable"] == 1
+
+
+# ── The half of the ranking that was switched off ─────────────────────────────
+
+
+async def test_publishing_a_piece_puts_it_into_meaning_space(
+    client: AsyncClient, owner_headers: dict[str, str], monkeypatch
+) -> None:
+    """The feed weights `cosine(visitor_vector, product_embedding)` at 0.8 —
+    second only to a visitor's own affinity — and for a long time nothing in
+    the application ever wrote a product embedding. The column, the index and
+    the SQL term all existed and the term was multiplied by zero for every
+    piece in the shop.
+
+    This asserts the caller exists. It does not assert the vector is any good;
+    that is the model's job.
+    """
+    called: list[bool] = []
+
+    async def spy(db, *, force: bool = False) -> dict[str, int]:
+        called.append(True)
+        return {"embedded": 0, "skipped": 0}
+
+    monkeypatch.setattr("app.modules.catalog.routes.embeddings.refresh", spy)
+
+    created = await client.post(
+        "/api/admin/products",
+        headers=owner_headers,
+        json={"kind": "shelf", "title_en": "A new hook", "title_ar": "خطاف", "price": 90},
+    )
+    assert created.status_code == 201
+    assert called, "creating a piece must schedule an embedding"
+
+    called.clear()
+    await client.patch(
+        f"/api/admin/products/{created.json()['id']}",
+        headers=owner_headers,
+        json={"description_en": "Rewritten, which changes what it means."},
+    )
+    assert called, "rewriting a piece must re-embed it"

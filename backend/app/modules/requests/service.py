@@ -7,14 +7,15 @@ exist to be collected at the door.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import conflict
 from app.core.security import new_order_reference, new_tracking_token
-from app.models import Order, OrderEvent, OrderItem, OrderStatus, User
+from app.models import Category, Order, OrderEvent, OrderItem, OrderStatus, User
 from app.models.requests import CustomRequest, RequestEvent, RequestStatus
 from app.modules.notify.service import notify_order_status, notify_request_status
 from app.modules.orders.service import delivery_fee_for
@@ -24,6 +25,16 @@ from app.modules.requests.schemas import Quote, RequestCreate
 async def raise_request(
     db: AsyncSession, body: RequestCreate, customer: User | None
 ) -> CustomRequest:
+    # A category we do not recognise is dropped rather than refused. The
+    # picker only ever offers real ones, so this is a stale tab or a bad
+    # client — and losing a lead over a dropdown would be the expensive way to
+    # be right. The description, which is the part that matters, is untouched.
+    category_id = body.category_id or None
+    if category_id and not await db.scalar(
+        select(Category.id).where(Category.id == category_id, Category.is_active.is_(True))
+    ):
+        category_id = None
+
     request = CustomRequest(
         reference=new_order_reference(),
         tracking_token=new_tracking_token(),
@@ -34,6 +45,7 @@ async def raise_request(
         city=body.city,
         lang=body.lang,
         description=body.description,
+        category_id=category_id,
         budget=body.budget,
         references=body.references,
         product_id=body.product_id,
@@ -43,7 +55,7 @@ async def raise_request(
     db.add(request)
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
     return request
 
 
@@ -76,7 +88,7 @@ async def quote(db: AsyncSession, request: CustomRequest, body: Quote) -> Custom
     )
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
     return request
 
 
@@ -95,7 +107,7 @@ async def approve(
         raise conflict("This request has not been quoted yet")
 
     price = Decimal(request.quote_price)
-    fee = delivery_fee_for(price)
+    fee = await delivery_fee_for(db, price, city)
     order = Order(
         reference=request.reference,
         tracking_token=new_tracking_token(),
@@ -136,8 +148,8 @@ async def approve(
     await db.refresh(request)
     await db.refresh(order)
 
-    await notify_request_status(db, request)
-    await notify_order_status(db, order)
+    await notify_request_status(request)
+    await notify_order_status(order)
     return request
 
 
@@ -159,5 +171,24 @@ async def change_status(
     db.add(RequestEvent(request_id=request.id, status=target, actor=actor, note=note))
     await db.commit()
     await db.refresh(request)
-    await notify_request_status(db, request)
+    await notify_request_status(request)
+    return request
+
+
+async def hide_request(db: AsyncSession, request: CustomRequest) -> CustomRequest:
+    """Archive a lead out of the console's default view. Reversible — a
+    request that looked like nothing today may not be nothing next month,
+    which is the same reasoning contact-message archiving already uses."""
+    if request.hidden_at is None:
+        request.hidden_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(request)
+    return request
+
+
+async def unhide_request(db: AsyncSession, request: CustomRequest) -> CustomRequest:
+    if request.hidden_at is not None:
+        request.hidden_at = None
+        await db.commit()
+        await db.refresh(request)
     return request

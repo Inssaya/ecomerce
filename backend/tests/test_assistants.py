@@ -419,3 +419,138 @@ async def test_the_copilot_answers_what_should_i_make_next(
     )
     result = json.loads(model.requests[1]["messages"][-1]["content"])
     assert any("radio dial" in text for text in result["people_asked_us_to_make"])
+
+
+# ── Somebody else's order ─────────────────────────────────────────────────────
+
+
+async def _an_order(client: AsyncClient, owner_headers: dict[str, str]) -> dict:
+    piece = await shelf_piece(client, owner_headers, made=2)
+    placed = await client.post(
+        "/api/orders",
+        json={
+            "full_name": "Youssef A.",
+            "phone": "0612345678",
+            "address": {"line1": "12 Rue des Oliviers", "city": "Casablanca"},
+            "items": [{"product_id": piece["id"], "quantity": 1}],
+        },
+    )
+    assert placed.status_code == 201, placed.text
+    return placed.json()
+
+
+async def _tracked(client: AsyncClient, model, arguments: dict) -> str:
+    model.says(
+        {"content": None, "tool_calls": [as_tool_call("track_order", arguments)]},
+        {"content": "Here you go."},
+    )
+    response = await client.post(
+        "/api/assistant",
+        headers=VISITOR,
+        json={"messages": [{"role": "user", "content": "where is my order"}]},
+    )
+    assert response.status_code == 200
+    # What the tool handed back to the model, which is the only thing that can
+    # reach the person asking.
+    return model.requests[1]["messages"][-1]["content"]
+
+
+async def test_a_reference_alone_will_not_open_somebody_elses_order(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    """The reference is eight characters designed to be read aloud over the
+    phone and printed on a label. It is not a secret, and the front door knows
+    it: `/orders/find` demands the phone number too. This used to hand back the
+    status, the total and the date to anyone who typed a reference."""
+    order = await _an_order(client, owner_headers)
+    result = await _tracked(client, model, {"reference_or_token": order["reference"]})
+
+    assert "phone" in result, "it must ask for the second factor"
+    # None of the order came back: not the money, not the state, not the date.
+    assert str(order["total"]) not in result
+    assert '"status"' not in result
+    assert order["reference"] not in result
+
+
+async def test_the_reference_and_the_phone_together_do_open_it(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    order = await _an_order(client, owner_headers)
+    result = await _tracked(
+        client, model, {"reference_or_token": order["reference"], "phone": "0612345678"}
+    )
+    assert order["reference"] in result
+    assert '"status":"placed"' in result.replace(" ", "")
+
+
+async def test_the_wrong_phone_is_refused_the_same_way_as_a_wrong_reference(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    """One message for both, so this cannot be used to find out which
+    references exist."""
+    order = await _an_order(client, owner_headers)
+    wrong_phone = await _tracked(
+        client, model, {"reference_or_token": order["reference"], "phone": "0600000000"}
+    )
+    wrong_reference = await _tracked(
+        client, model, {"reference_or_token": "AAAAAAAA", "phone": "0612345678"}
+    )
+    assert wrong_phone == wrong_reference
+
+
+async def test_the_tracking_token_stands_on_its_own(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    """Forty characters from the link we emailed them. Nobody guesses that, and
+    asking for a phone number on top of it would be theatre."""
+    order = await _an_order(client, owner_headers)
+    result = await _tracked(client, model, {"reference_or_token": order["tracking_token"]})
+    assert order["reference"] in result
+
+
+# ── Categories: opening a line of work ────────────────────────────────────────
+
+
+async def test_open_category_sends_the_browser_to_that_line(
+    client: AsyncClient, owner_headers: dict[str, str], model
+) -> None:
+    """A whole category is a better landing than one piece from it when the
+    question is "what kinds of things do you make". The panel already added
+    /store/<slug> pages; the assistant should be able to reach them."""
+    line = await client.post(
+        "/api/admin/categories",
+        headers=owner_headers,
+        json={"name_en": "Hooks", "name_ar": "خطّافات"},
+    )
+    slug = line.json()["slug"]
+
+    model.says(
+        {"content": None, "tool_calls": [as_tool_call("open_category", {"slug": slug})]},
+        {"content": "Here are the hooks."},
+    )
+    response = await client.post(
+        "/api/assistant",
+        headers=VISITOR,
+        json={"messages": [{"role": "user", "content": "what hooks do you make"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["actions"] == [{"type": "open_category", "slug": slug}]
+
+
+async def test_open_category_refuses_a_line_that_does_not_exist(
+    client: AsyncClient, model
+) -> None:
+    """The assistant cannot invite the browser to open something we do not have.
+    The check is on the server: the model could otherwise send anyone anywhere
+    just by guessing a slug."""
+    model.says(
+        {"content": None, "tool_calls": [as_tool_call("open_category", {"slug": "invented"})]},
+        {"content": "We do not have that line."},
+    )
+    response = await client.post(
+        "/api/assistant",
+        headers=VISITOR,
+        json={"messages": [{"role": "user", "content": "show me your gadgets"}]},
+    )
+    assert response.status_code == 200
+    assert response.json()["actions"] == []

@@ -44,8 +44,10 @@ HARD RULES:
 - Every fact you state — a price, a size, how many are left, a date — must come from a tool result in this conversation. Never estimate and never invent. If the tools do not have it, say plainly that you will find out.
 - Prices are in dirhams (MAD). Payment is cash on delivery, in Morocco, always.
 - Availability is real. "Three left" means we made three. Never invent urgency, never rush anyone, never mention a countdown.
+- If they ask what kind of things we make (hooks, lamps, brackets), open_category is better than opening one piece — the category page shows every piece in that line.
 - If nothing we have matches what they want, use request_custom_item. This is the best outcome we have short of a sale — say plainly "we don't have that, but we can make it", and ask for the detail you need first.
 - Call every tool you need for the question in ONE round; they run together. Never call the same tool twice with the same arguments.
+- Somebody else's order is none of ours to read out. To look one up you need the reference AND the phone number it was placed with, or the long token from their tracking link. If they give only a reference, ask for the phone number before you look — politely, once, and without explaining our security to them.
 - add_to_cart only after they have chosen. Then tell them it is in the cart and that they can check out when ready. You cannot place the order yourself, and you should not try: they confirm it themselves on the checkout screen.
 - Answer in the language of the question. English or Arabic only, never any other language.
 
@@ -53,17 +55,21 @@ VOICE:
 Soft, warm, certain. Short sentences, plain words. We are quietly confident because we made the thing. Never "premium", never "luxury", never exclamation marks, never emoji. Concede what is true: custom work is slower, because it is being made."""
 
 
-def _card(product: Product, available: int | None, lang: str) -> dict[str, Any]:
-    """What the model needs to talk about a piece, and nothing more."""
+def _card(product: Product, lang: str) -> dict[str, Any]:
+    """What the model needs to talk about a piece, and nothing more.
+
+    No stock figure, because there is none — the shop makes what is ordered.
+    Handing the assistant an "available" number was how it learned to say
+    things like "only two left", which would be an invented shortage
+    (BRAND.md §10) now that nothing is finite.
+    """
     return {
         "id": product.id,
         "slug": product.slug,
         "title": product.title(lang),
         "price_mad": float(product.price),
         "price_max_mad": float(product.price_max) if product.price_max is not None else None,
-        "kind": product.kind.value,
-        "available": available if product.is_shelf else None,
-        "ready_in_days": None if product.is_shelf else product.lead_time_days,
+        "delivery_days": product.delivery_days or product.lead_time_days,
         "category": product.category.name(lang) if product.category else None,
     }
 
@@ -80,7 +86,6 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         products = list(
             (await db.scalars(statement.limit(min(limit, 10)))).unique()
         )
-        left = await catalog.availability(db, [product.id for product in products])
         if query and visitor_id:
             # An explicit search is the strongest statement of intent there is,
             # and the most direct answer to "what are people asking us for that
@@ -95,7 +100,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             await db.commit()
         return {
             "found": len(products),
-            "products": [_card(product, left.get(product.id, 0), lang) for product in products],
+            "products": [_card(product, lang) for product in products],
         }
 
     async def get_product(slug: str) -> dict:
@@ -104,19 +109,17 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         )
         if product is None or product.status is not ProductStatus.active:
             return {"error": f"No piece with the slug '{slug}'"}
-        left = await catalog.availability(db, [product.id])
-        per_variant = await catalog.variant_availability(db, product.id)
         return {
-            **_card(product, left.get(product.id, 0), lang),
+            **_card(product, lang),
             "description": product.description(lang),
             "how_it_was_made": product.story(lang),
             "photos": len(product.media),
+            "made_of": [attribute.label for attribute in product.attributes],
             "options": [
                 {
                     "id": variant.id,
                     "option": variant.option(lang),
                     "price_mad": variant.unit_price(),
-                    "available": per_variant.get(variant.id, 0) if product.is_shelf else None,
                 }
                 for variant in product.variants
                 if variant.is_active
@@ -127,10 +130,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         products, _, _ = await engine.page(
             db, visitor_id=visitor_id or "anonymous", size=min(limit, 10), offset=0
         )
-        left = await catalog.availability(db, [product.id for product in products])
-        return {
-            "products": [_card(product, left.get(product.id, 0), lang) for product in products]
-        }
+        return {"products": [_card(product, lang) for product in products]}
 
     async def add_to_cart(product_id: str, quantity: int = 1, variant_id: str | None = None) -> dict:
         """Validated here, carried out by the browser — the cart is on their
@@ -140,12 +140,8 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         )
         if product is None or product.status is not ProductStatus.active:
             return {"error": "That piece is not available"}
-        if product.is_shelf:
-            left = (await catalog.availability(db, [product.id])).get(product.id, 0)
-            if left < quantity:
-                return {
-                    "error": f"We only have {left} of '{product.title(lang)}' — we made that many"
-                }
+        # No stock check: what is ordered gets made, so a quantity can never be
+        # more than there is.
         return {
             "added": product.title(lang),
             "quantity": quantity,
@@ -162,6 +158,23 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
 
     async def open_product(slug: str) -> dict:
         return {"opened": slug, "_actions": [{"type": "open_product", "slug": slug}]}
+
+    async def open_category(slug: str) -> dict:
+        """Show them a whole line of work.
+
+        For "what kinds of things do you make?" and "show me your hooks", the
+        page for the category is a better landing than one piece from it. The
+        slug is checked against the catalogue rather than trusted, so the
+        assistant cannot invite a browser to open a line that does not exist.
+        """
+        from app.models import Category
+
+        exists = await db.scalar(
+            select(Category.id).where(Category.slug == slug, Category.is_active.is_(True))
+        )
+        if exists is None:
+            return {"error": f"We do not have a line called '{slug}'"}
+        return {"opened": slug, "_actions": [{"type": "open_category", "slug": slug}]}
 
     async def go_to_checkout() -> dict:
         """Hand over to the checkout screen. The customer confirms the total
@@ -197,13 +210,38 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             "next": "We read every one of these ourselves and come back with a price and a real date.",
         }
 
-    async def track_order(reference_or_token: str) -> dict:
+    async def track_order(reference_or_token: str, phone: str = "") -> dict:
+        """Where an order got to — for the person whose order it is.
+
+        The front door is careful about this and this used to not be. A
+        reference is eight characters designed to be *read aloud over the
+        phone* and printed on a label; it is not a secret, and it was enough
+        here to return somebody's status, total and date to anyone who typed
+        it. The HTTP surface refuses exactly that: `/orders/track` wants the
+        forty-character token, and `/orders/find` wants the reference **and**
+        the phone number, with one message for both failures so it cannot be
+        used to discover which references exist.
+
+        So this asks for the same two things, and answers the same way when
+        either is wrong.
+        """
         value = reference_or_token.strip()
-        order = await db.scalar(
-            select(Order).where(
-                (Order.reference == value.upper()) | (Order.tracking_token == value)
-            )
+        typed_phone = phone.strip()
+        # The token is unguessable, so it stands alone. The reference does not.
+        by_token = len(value) >= 32
+        if not by_token and not typed_phone:
+            return {
+                "needs": "phone",
+                "say": "Ask them for the phone number the order was placed with — "
+                "the reference on its own is not enough for us to look it up.",
+            }
+
+        order_is_theirs = (
+            Order.tracking_token == value
+            if by_token
+            else (Order.reference == value.upper()) & (Order.customer_phone == typed_phone)
         )
+        order = await db.scalar(select(Order).where(order_is_theirs))
         if order is not None:
             return {
                 "kind": "order",
@@ -212,12 +250,13 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
                 "total_mad": float(order.total),
                 "placed_on": order.created_at.date().isoformat(),
             }
-        request = await db.scalar(
-            select(CustomRequest).where(
-                (CustomRequest.reference == value.upper())
-                | (CustomRequest.tracking_token == value)
-            )
+        request_is_theirs = (
+            CustomRequest.tracking_token == value
+            if by_token
+            else (CustomRequest.reference == value.upper())
+            & (CustomRequest.customer_phone == typed_phone)
         )
+        request = await db.scalar(select(CustomRequest).where(request_is_theirs))
         if request is not None:
             return {
                 "kind": "custom_request",
@@ -226,7 +265,9 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
                 "quoted_mad": float(request.quote_price) if request.quote_price else None,
                 "ready_on": request.promised_for.isoformat() if request.promised_for else None,
             }
-        return {"error": "Nothing found with that reference"}
+        # One message whichever half was wrong, so this cannot be used to find
+        # out which references exist.
+        return {"error": "Nothing found with that reference and phone number"}
 
     async def escalate_to_human() -> dict:
         """Some things should be said by a person. In a market where trust is
@@ -239,6 +280,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         "get_recommendations": get_recommendations,
         "add_to_cart": add_to_cart,
         "open_product": open_product,
+        "open_category": open_category,
         "go_to_checkout": go_to_checkout,
         "request_custom_item": request_custom_item,
         "track_order": track_order,
@@ -255,7 +297,7 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         ),
         spec(
             "get_product",
-            "One piece in full: description, how it was made, options, how many are left.",
+            "One piece in full: description, how it was made, what it is made of, options.",
             {"slug": _STR},
             required=["slug"],
         ),
@@ -271,6 +313,13 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
             required=["product_id"],
         ),
         spec("open_product", "Show them a piece's page.", {"slug": _STR}, required=["slug"]),
+        spec(
+            "open_category",
+            "Show them a whole line of work by its slug — better than one piece "
+            "when they ask 'what kind of X do you have'.",
+            {"slug": _STR},
+            required=["slug"],
+        ),
         spec("go_to_checkout", "Take them to checkout so they can confirm and order.", {}),
         spec(
             "request_custom_item",
@@ -287,8 +336,10 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
         ),
         spec(
             "track_order",
-            "Where an order or a custom request has got to, by its reference.",
-            {"reference_or_token": _STR},
+            "Where an order or a custom request has got to. Needs the reference "
+            "AND the phone number it was placed with — or the long tracking link "
+            "token on its own. A reference alone is not enough.",
+            {"reference_or_token": _STR, "phone": _STR},
             required=["reference_or_token"],
         ),
         spec("escalate_to_human", "Open WhatsApp so a person can answer them.", {}),

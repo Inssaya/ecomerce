@@ -75,6 +75,18 @@ class CustomRequest(Base, TimestampMixin):
     budget: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     #: Reference images they uploaded.
     references: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    #: What kind of thing it is, chosen by the customer from the same tree the
+    #: shop is organised by.
+    #:
+    #: Free text is the truest record of what somebody wants and the worst
+    #: possible input to a forecast — twenty people can ask for the same thing
+    #: in twenty wordings, and the workshop sees twenty unrelated requests. One
+    #: tap turns that into "eleven people asked for a lamp this month", which
+    #: is a number that can be counted, ranked against what is already on the
+    #: shelf, and acted on. The description stays; this sits beside it.
+    category_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     #: Where it came from: the assistant, the form, a product page.
     source: Mapped[str] = mapped_column(String(40), default="form", nullable=False)
     #: Set when the assistant raised it, so a conversation can be found again.
@@ -101,6 +113,10 @@ class CustomRequest(Base, TimestampMixin):
     order_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("orders.id", ondelete="SET NULL"), nullable=True
     )
+
+    #: Soft-delete, same shape as `Order.hidden_at`: archived out of the
+    #: console's default view, recoverable, never actually gone.
+    hidden_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     events: Mapped[list[RequestEvent]] = relationship(
         back_populates="request",

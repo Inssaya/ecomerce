@@ -1,87 +1,109 @@
-import Link from "next/link";
-
+import { ProductFeed } from "@/components/ProductFeed";
+import type { CategoryNode, Piece } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
+import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
- * The landing page. One idea, one action.
+ * The shop, and the front door.
  *
- * The old homepage dumped four storefronts and every product at once, which is
- * the confusion the whole rebuild exists to fix. This page says who we are and
- * offers exactly two doors.
+ * There is one page that lists what the workshop makes and this is it — no
+ * separate `/store`, no route per category. Somebody arriving from a search
+ * lands on the objects, not on writing about them: no hero, no headline, no
+ * buttons, no counters. The photographs start at the top of the page.
+ *
+ * The order is shuffled per visit, so the shelf does not always open on the
+ * same six pieces. The seed is minted here, on the server, and handed to the
+ * feed — every later page of this visit is drawn from that same arrangement,
+ * which is the only way a shuffled list can be paged without repeating itself.
  */
-export default async function Landing({ params }: { params: Promise<{ lang: string }> }) {
+export const dynamic = "force-dynamic";
+
+/** What the first screen needs; the feed asks for the next thirty itself. */
+const FIRST_PAGE = 30;
+
+export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = await params;
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
+  return {
+    title: `MoStyle — ${t("tagline")}`,
+    description: t("taglineSupport"),
+    alternates: alternates(lang),
+  };
+}
+
+export default async function Shop({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ lang: string }>;
+  searchParams: Promise<{ category?: string }>;
+}) {
+  const { lang: raw } = await params;
+  const { category } = await searchParams;
+  const lang = (isLang(raw) ? raw : "en") as Lang;
+  const t = translator(lang);
+
+  // A new arrangement per visit. Postgres' `md5(id || seed)` turns it into a
+  // fixed order, so paging stays consistent from here on.
+  const seed = Math.floor(Math.random() * 2_147_483_647);
+
+  const [first, categoryList] = await Promise.all([
+    fromApi<{ items: Piece[]; total: number; has_more: boolean }>(
+      `/products?page=1&size=${FIRST_PAGE}&seed=${seed}` +
+        (category ? `&category=${encodeURIComponent(category)}` : ""),
+      lang,
+    ),
+    fromApi<CategoryNode[]>("/categories", lang, { revalidate: 3600 }),
+  ]);
+
+  const pieces = first?.items ?? [];
+  // `fromApi` collapses every failure to null on purpose, so an empty array
+  // here is ambiguous by itself: it means either "nothing matches" or "the
+  // shop could not be reached." Only the second is worth telling a visitor
+  // about — the first is a normal, honest state.
+  const broken = first === null;
 
   return (
-    <div className="page pt-14 pb-8">
-      <section className="animate-rise">
-        <h1 className="text-[34px] leading-[1.15] font-semibold tracking-tight">{t("tagline")}</h1>
-        <p className="mt-4 text-[17px] text-ink-soft leading-relaxed">{t("taglineSupport")}</p>
-      </section>
+    <div className="px-2.5 pt-2.5 sm:px-4 sm:pt-4 lg:px-6 lg:pt-6">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: jsonLd(workshopSchema(lang, t)) }}
+      />
 
-      <section className="mt-12 space-y-4">
-        <Door
-          href={`/${lang}/store`}
-          title={t("theShelf")}
-          meaning={t("shelfMeaning")}
-          action={t("browse")}
-          primary
-        />
-        <Door
-          href={`/${lang}/ask`}
-          title={t("theWorkshop")}
-          meaning={t("workshopMeaning")}
-          action={t("askUs")}
-        />
-      </section>
+      {/* The page still needs a name for a screen reader and for search — it
+          just is not something anybody has to look at. */}
+      <h1 className="sr-only">{`MoStyle — ${t("tagline")}`}</h1>
 
-      <section className="mt-14 card p-6 shadow-soft">
-        <h2 className="text-[19px] font-semibold">{t("ourStory")}</h2>
-        <div className="mt-3 space-y-3 text-[15px] text-ink-soft leading-relaxed">
-          <p>
-            {lang === "ar"
-              ? "كل ما يُباع تقريباً على الإنترنت في المغرب وصل داخل حاوية. صوّره أحدهم، وعرضه، وأرسله. لا أحد في تلك السلسلة لمس ما يبيعه."
-              : "Almost everything sold online in Morocco arrived in a container. Someone photographed it, listed it, and shipped it on. Nobody in that chain has ever touched the thing they're selling."}
-          </p>
-          <p>
-            {lang === "ar"
-              ? "لدينا ورشة. نصنع قطعنا واحدة واحدة — طباعة، وخراطة، وصقل باليد. الصورة في الصفحة هي القطعة نفسها التي ستصلك، لأنها واحدة فقط، ولأننا نحن من صنعها."
-              : "We have a workshop. We make our pieces one at a time — printed, machined, finished by hand. The photo on the page is the actual piece you will receive, because there is only one of it and we're the ones who made it."}
-          </p>
-          <p className="text-ink font-medium">{t("ifWeDontHaveIt")}</p>
-        </div>
-      </section>
+      <ProductFeed
+        lang={lang}
+        initial={pieces}
+        initialBroken={broken}
+        hasMore={first?.has_more ?? false}
+        seed={seed}
+        categories={categoryList ?? []}
+      />
     </div>
   );
 }
 
-function Door({
-  href,
-  title,
-  meaning,
-  action,
-  primary,
-}: {
-  href: string;
-  title: string;
-  meaning: string;
-  action: string;
-  primary?: boolean;
-}) {
-  return (
-    <Link
-      href={href}
-      className={`card block p-6 shadow-soft active:scale-[0.99] transition-transform duration-gentle ${
-        primary ? "bg-clay text-white" : ""
-      }`}
-    >
-      <h2 className="text-[22px] font-semibold">{title}</h2>
-      <p className={`mt-1.5 text-[15px] ${primary ? "text-white/80" : "text-ink-soft"}`}>
-        {meaning}
-      </p>
-      <p className={`mt-5 text-[15px] font-semibold ${primary ? "" : "text-clay"}`}>{action} →</p>
-    </Link>
-  );
+function workshopSchema(lang: Lang, t: (key: "tagline" | "taglineSupport") => string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: "MoStyle",
+    url: `${siteUrl}/${lang}`,
+    description: t("taglineSupport"),
+    slogan: t("tagline"),
+    ...(workshopPhone ? { telephone: workshopPhone } : {}),
+    areaServed: { "@type": "Country", name: "Morocco" },
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: `${siteUrl}/${lang}/search?q={search_term_string}`,
+      },
+      "query-input": "required name=search_term_string",
+    },
+  };
 }

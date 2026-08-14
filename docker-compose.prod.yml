@@ -1,0 +1,120 @@
+# Production overlay for a single machine.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# What this changes about the base file, and why each one matters on a box with
+# a public IP:
+#
+#   * **Nothing is published except nginx.** The base file exposes Postgres via
+#     its own container only, but publishes MinIO (9000/9001), the API (8000)
+#     and the web server (3000) on every interface. On a VPS that is an
+#     administration console and a database-backed API open to the internet,
+#     bypassing every rate limit and TLS. Here the API and the web server are
+#     reachable only from nginx, and MinIO only on localhost so `deploy.sh` can
+#     reach it.
+#   * **Photographs are served through nginx**, on their own subdomain, so they
+#     get TLS and caching and MinIO is never addressed directly by a browser.
+#   * **Certificates** are shared with certbot through two volumes.
+#   * **Backups** run nightly in their own container.
+#
+# The web image takes its build arguments from the environment, because Next
+# bakes the site URL and the API location into the build.
+
+services:
+  postgres:
+    # A shop's whole history. Keep the WAL small enough for a 4GB box and let
+    # it checkpoint often.
+    command: >
+      postgres
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c max_connections=60
+
+  redis:
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+
+  minio:
+    # Only nginx and the deploy script talk to this. Binding to loopback keeps
+    # the storage console off the public internet entirely.
+    #
+    # `!override` is load-bearing: Compose *merges* port lists between files, so
+    # without it the base file's `9000:9000` — every interface — survives
+    # alongside these, and the admin console ends up open to the internet on a
+    # box with a public IP. Verified by reading `docker compose config`, not by
+    # assuming.
+    ports: !override
+      - "127.0.0.1:9000:9000"
+      - "127.0.0.1:9001:9001"
+
+  api:
+    ports: !override []
+    environment:
+      ENVIRONMENT: production
+      APP_URL: ${APP_URL}
+      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT}
+      MINIO_USE_SSL: "false"
+
+  web:
+    build:
+      context: ./frontend
+      args:
+        # Inside the compose network. Used by `rewrites()` and by every
+        # server-rendered page.
+        INTERNAL_API_URL: http://api:8000
+        NEXT_PUBLIC_SITE_URL: ${APP_URL}
+        MEDIA_HOSTNAMES: ${MEDIA_HOSTNAMES}
+        NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
+        NEXT_PUBLIC_WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+    ports: !override []
+
+  nginx:
+    profiles: !override []
+    volumes:
+      - ./infra/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./infra/nginx/conf.d:/etc/nginx/conf.d:ro
+      - certbot_certs:/etc/letsencrypt:ro
+      - certbot_webroot:/var/www/certbot:ro
+    depends_on:
+      - web
+      - api
+      - minio
+
+  # Renews the certificate and reloads nginx. Runs every twelve hours, does
+  # nothing until a certificate is within thirty days of expiring.
+  certbot:
+    image: certbot/certbot:latest
+    restart: unless-stopped
+    networks: [mostyle]
+    volumes:
+      - certbot_certs:/etc/letsencrypt
+      - certbot_webroot:/var/www/certbot
+    entrypoint: >
+      sh -c "trap exit TERM;
+             while :; do certbot renew --webroot -w /var/www/certbot --quiet;
+             sleep 12h & wait $${!}; done"
+
+  # A database dump and a copy of the photographs, every night, kept for two
+  # weeks. On one machine this is the only thing standing between a mistake and
+  # losing the shop — copy ./backups somewhere else as well.
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    networks: [mostyle]
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./backups:/backups
+    entrypoint: >
+      sh -c "while :; do
+               sleep 86400;
+               pg_dump -h postgres -U ${POSTGRES_USER} -d ${POSTGRES_DB:-mostyle}
+                 | gzip > /backups/mostyle-$$(date +%%Y-%%m-%%d).sql.gz;
+               find /backups -name '*.sql.gz' -mtime +14 -delete;
+             done"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  certbot_certs:
+  certbot_webroot:

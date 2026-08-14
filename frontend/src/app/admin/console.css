@@ -1,0 +1,1143 @@
+/* ================================================================
+   THE CONSOLE — M-StyLe's owner console.
+
+   Light is the primary theme; dark is the night variant. The accent
+   is Aptiv's orange, and it means exactly one thing: act here.
+   It is never a chart series and never a status.
+
+   Everything is scoped under .console so it can neither leak onto
+   the storefront's Tailwind/clay system nor be leaked onto by it.
+
+   Page anatomy (see planRDSN.md §3): there are NO page titles. One
+   control strip carries filters, count, view switch and the page
+   action; content starts immediately beneath it. Record detail
+   opens in a drawer over the list, never as a separate page.
+   ================================================================ */
+
+.console {
+  color-scheme: light;
+
+  /* ---------- Surfaces — cool greys, Aptiv's light values verbatim ----
+     These were warm (#f4f4f2, blue channel *lowest*) — the storefront's
+     paper-and-clay cast, carried in here by a comment I wrote saying
+     "faint warm cast". That is the storefront's language, not this
+     console's. An operational console reads cool: blue is the highest
+     channel, not the lowest.                                          */
+  --bg0: #f2f4f6;              /* page plane */
+  --bg1: #ffffff;              /* panel surface */
+  --bg2: #f6f7f9;              /* inputs, nested blocks */
+  --bg3: #eaeef2;              /* hover fills */
+
+  /* ---------- Ink ---------- */
+  --ink:  #131820;
+  --ink2: #4c5665;
+  --ink3: #7e8896;
+
+  /* ---------- Lines ---------- */
+  --line:  rgba(16, 22, 32, 0.09);
+  --line2: rgba(16, 22, 32, 0.17);
+
+  /* ---------- Accent — "act here", nothing else ---------- */
+  --accent:     #e56207;
+  --accent-hi:  #c95300;
+  --accent-dim: rgba(229, 98, 7, 0.10);
+  --on-accent:  #ffffff;
+
+  /* ---------- Status — reserved. Never a chart series. ---------- */
+  --ok:     #148a4e;
+  --warn:   #9a6a00;
+  --danger: #d33638;
+  --info:   #1668c7;
+  --ok-dim:     rgba(20, 138, 78, 0.10);
+  --warn-dim:   rgba(154, 106, 0, 0.12);
+  --danger-dim: rgba(211, 54, 56, 0.10);
+  --info-dim:   rgba(22, 104, 199, 0.10);
+
+  /* ---------- Charts — their own ramp, validated separately ------
+     nominal: one hue for every bar in a nominal set.
+     sequential: magnitude, light → dark.
+     ordinal: ordered categories (the funnel), light → dark.        */
+  --chart-nominal:      #2a6fb0;
+  --chart-sequential-1: #cfe0ef;
+  --chart-sequential-2: #9dc1de;
+  --chart-sequential-3: #6a9fcb;
+  --chart-sequential-4: #3c7fb4;
+  --chart-sequential-5: #1f5c8c;
+  --chart-ordinal-1: #d5e3f0;
+  --chart-ordinal-2: #aecbe2;
+  --chart-ordinal-3: #86b1d3;
+  --chart-ordinal-4: #5e94c2;
+  --chart-ordinal-5: #3f76a6;
+  --chart-ordinal-6: #2a5a83;
+  --chart-axis: #6b7684;
+  --chart-grid: rgba(16, 22, 32, 0.08);
+  --chart-track: rgba(16, 22, 32, 0.07);
+
+  /* ---------- Type ---------- */
+  --font-display: var(--console-font-display), "Space Grotesk", system-ui, sans-serif;
+  --font-body: var(--console-font-body), Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--console-font-mono), "JetBrains Mono", ui-monospace, Consolas, monospace;
+
+  /* Type scale — tokens, not magic numbers at call sites. */
+  --t-hero:   34px;   --t-hero-lh:   1.1;
+  --t-metric: 26px;   --t-metric-lh: 1.15;
+  --t-lg:     17px;   --t-lg-lh:     1.35;
+  --t-md:     14.5px; --t-md-lh:     1.5;
+  --t-base:   13.5px; --t-base-lh:   1.55;
+  --t-sm:     12.5px; --t-sm-lh:     1.5;
+  --t-xs:     11.5px; --t-xs-lh:     1.45;
+  --t-caps:   10.5px; --t-caps-lh:   1.4;   /* mono, uppercase, tracked */
+
+  --w-regular: 400;
+  --w-medium:  500;
+  --w-semi:    600;
+
+  /* ---------- Spacing / geometry ---------- */
+  --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+  --space-5: 20px; --space-6: 24px; --space-7: 32px; --space-8: 40px;
+
+  --r-sm: 7px;
+  --r-md: 10px;
+  --r-lg: 14px;
+
+  --control-h: 36px;
+  --gutter: 16px;
+  --rail-w: 208px;
+  --rail-icon-w: 64px;
+
+  --shadow-card: 0 1px 2px rgba(16, 20, 28, 0.05);
+  --shadow-pop: 0 18px 50px rgba(20, 28, 40, 0.16);
+  --glow-accent: 0 0 0 3px var(--accent-dim);
+
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.console[data-console-theme="dark"] {
+  color-scheme: dark;
+
+  /* Cool carbon, matching light's correction — Aptiv's dark surfaces.
+     These were neutral-warm greys, the same drift as the light theme. */
+  --bg0: #0a0d11;
+  --bg1: #10151c;
+  --bg2: #161d26;
+  --bg3: #1e2733;
+
+  --ink:  #edf1f6;
+  --ink2: #a6b1bd;
+  --ink3: #67737f;
+
+  --line:  rgba(255, 255, 255, 0.08);
+  --line2: rgba(255, 255, 255, 0.15);
+
+  --accent:     #ff7a1c;
+  --accent-hi:  #ff9147;
+  --accent-dim: rgba(255, 122, 28, 0.14);
+  --on-accent:  #190f05;
+
+  --ok:     #35d07c;
+  --warn:   #ffb224;
+  --danger: #ff5d5f;
+  --info:   #58a6ff;
+  --ok-dim:     rgba(53, 208, 124, 0.14);
+  --warn-dim:   rgba(255, 178, 36, 0.14);
+  --danger-dim: rgba(255, 93, 95, 0.14);
+  --info-dim:   rgba(88, 166, 255, 0.14);
+
+  /* Dark is chosen, not flipped — its own steps against the dark surface. */
+  --chart-nominal:      #5a9fd6;
+  --chart-sequential-1: #1d3244;
+  --chart-sequential-2: #2b4d68;
+  --chart-sequential-3: #3d6d92;
+  --chart-sequential-4: #518fbb;
+  --chart-sequential-5: #74b3dd;
+  --chart-ordinal-1: #1d3244;
+  --chart-ordinal-2: #294a65;
+  --chart-ordinal-3: #386587;
+  --chart-ordinal-4: #4a82aa;
+  --chart-ordinal-5: #5f9fcc;
+  --chart-ordinal-6: #7cbce7;
+  --chart-axis: #868d95;
+  --chart-grid: rgba(255, 255, 255, 0.07);
+  --chart-track: rgba(255, 255, 255, 0.08);
+
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --shadow-pop: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+
+/* ================================================================
+   Reset — scoped. :where() zeroes specificity so component classes
+   always win regardless of source order.
+   ================================================================ */
+.console, .console *, .console *::before, .console *::after { box-sizing: border-box; }
+
+.console {
+  min-height: 100dvh;
+  background: var(--bg0);
+  color: var(--ink);
+  font: var(--w-regular) var(--t-base) / var(--t-base-lh) var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+:where(.console) h1, :where(.console) h2, :where(.console) h3, :where(.console) p { margin: 0; }
+:where(.console) a { color: inherit; text-decoration: none; }
+:where(.console) button { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+:where(.console) img { max-width: 100%; }
+:where(.console) ul, :where(.console) ol { margin: 0; padding: 0; list-style: none; }
+
+.console ::selection { background: var(--accent); color: var(--on-accent); }
+.console * { scrollbar-width: thin; scrollbar-color: var(--line2) transparent; }
+.console *::-webkit-scrollbar { width: 9px; height: 9px; }
+.console *::-webkit-scrollbar-thumb { background: var(--line2); border-radius: 5px; }
+.console *::-webkit-scrollbar-track { background: transparent; }
+
+.console :focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ================================================================
+   Type helpers
+   ================================================================ */
+.console-hero {
+  font: var(--w-semi) var(--t-hero) / var(--t-hero-lh) var(--font-body);
+  letter-spacing: -0.02em;
+  /* Proportional figures on purpose: tabular makes a display number loose. */
+  font-variant-numeric: proportional-nums;
+}
+.console-metric {
+  font: var(--w-semi) var(--t-metric) / var(--t-metric-lh) var(--font-body);
+  letter-spacing: -0.015em;
+  font-variant-numeric: proportional-nums;
+}
+.console-h2 { font: var(--w-semi) var(--t-lg) / var(--t-lg-lh) var(--font-display); letter-spacing: -0.01em; }
+.console-caps {
+  font: var(--w-medium) var(--t-caps) / var(--t-caps-lh) var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.11em;
+  color: var(--ink3);
+}
+.console-muted { color: var(--ink3); font-size: var(--t-sm); }
+.console-strong { font-weight: var(--w-semi); color: var(--ink); }
+
+/* Tabular only where digits stack: table cells, axis ticks. */
+.console-num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  /* A reference must survive being read down a phone. */
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.console-note {
+  font-size: var(--t-sm);
+  color: var(--ink2);
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-left: 2px solid var(--line2);
+  border-radius: var(--r-sm);
+  padding: var(--space-3) var(--space-4);
+}
+.console-error {
+  font-size: var(--t-sm);
+  color: var(--danger);
+  background: var(--danger-dim);
+  border: 1px solid color-mix(in srgb, var(--danger) 32%, transparent);
+  border-radius: var(--r-sm);
+  padding: var(--space-3) var(--space-4);
+}
+
+/* ================================================================
+   Shell — rail (desktop) / icon rail (tablet) / bottom bar (phone)
+   ================================================================ */
+.console-shell { display: flex; min-height: 100dvh; }
+
+.console-rail {
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  height: 100dvh;
+  width: var(--rail-w);
+  flex: none;
+  background: var(--bg1);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-3);
+  gap: var(--space-1);
+  z-index: 20;
+}
+.console-rail-brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) var(--space-5);
+}
+.console-wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34em;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: var(--t-md);
+  letter-spacing: 0.07em;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.console-wordmark .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); flex: none; }
+
+.console-nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 40px;
+  padding: 0 var(--space-3);
+  border-radius: var(--r-sm);
+  color: var(--ink2);
+  font-size: var(--t-md);
+  font-weight: var(--w-medium);
+  position: relative;
+  transition: background 0.13s var(--ease), color 0.13s var(--ease);
+}
+.console-nav-item:hover { background: var(--bg2); color: var(--ink); }
+.console-nav-item.active { background: var(--accent-dim); color: var(--accent); }
+.console-nav-item.active::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 0;
+  top: 9px; bottom: 9px;
+  width: 3px;
+  border-radius: 0 2px 2px 0;
+  background: var(--accent);
+}
+.console-nav-item svg { flex: none; }
+.console-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: var(--space-1); }
+/* The rail has room for both utilities; only the phone bar needs the fold. */
+.console-rail-more { display: none; }
+.console-rail-utils { display: flex; flex-direction: column; gap: var(--space-1); }
+
+.console-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.console-page {
+  flex: 1;
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+  padding: var(--space-5) var(--gutter) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* ================================================================
+   THE CONTROL STRIP — the page's only chrome. No titles anywhere.
+   ================================================================ */
+.console-strip {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-5);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+}
+.console-strip-group { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.console-strip-label {
+  font: var(--w-medium) 10px/1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+.console-strip-label::before { content: "▸ "; color: var(--ink3); }
+.console-strip-controls { display: flex; gap: var(--space-2); flex-wrap: wrap; align-items: center; }
+
+/* Strip dropdowns size to their content instead of filling the row.
+   Written as `.console .console-*` (0-2-0) on purpose: the base rule is
+   `.console select` (0-1-1), which would otherwise win and force width:100%. */
+.console .console-select,
+.console .console-date {
+  width: auto;
+  height: 32px;
+  font-size: var(--t-sm);
+  background-color: var(--bg1);
+}
+.console .console-select { max-width: 200px; padding-inline-end: 26px; }
+.console .console-date { font-family: var(--font-mono); }
+@media (max-width: 767px) {
+  /* Fill the row, but never grow past it. A <select> is sized by its widest
+     *option*, not its selected one — with 48 piece titles in the list that is
+     ~300px, which pushed the whole strip to 636px on a 390px screen and made
+     the page scroll sideways. The cap is what stops that; `min-width: 0`
+     lets it shrink below its content, which flex items otherwise refuse. */
+  .console .console-select { flex: 1 1 140px; max-width: 100%; min-width: 0; }
+}
+/* A wrapped flex line sizes to its content, so without this a single wide
+   group can still make the strip wider than the page it sits on. */
+.console-strip-group,
+.console-strip-controls { max-width: 100%; }
+
+/* Says a block ignored the chosen scope. Quiet, but never absent — an
+   unlabelled shop-wide figure under a scoped heading is read as scoped. */
+.console-shopwide {
+  font: var(--w-medium) var(--t-caps) / 1 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink3);
+  background: var(--bg3);
+  border-radius: 999px;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+.console-strip-trailing {
+  margin-inline-start: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+/* ================================================================
+   Cards / panels
+   ================================================================ */
+.console-card {
+  position: relative;
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+}
+.console-card.pad-sm { padding: var(--space-4); }
+.console-card.flush { background: var(--bg2); box-shadow: none; }
+.console-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); }
+.console-card-sub { color: var(--ink3); font-size: var(--t-sm); }
+
+.console-grid { display: grid; gap: var(--space-4); min-width: 0; }
+.console-grid-2 { grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.console-stack { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.console-stack-sm { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+.console-row { display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap; min-width: 0; }
+.console-row-between { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); min-width: 0; }
+
+/* ================================================================
+   Stat tiles
+   ================================================================ */
+.console-stat-grid { display: grid; gap: var(--space-3); }
+.console-stat-grid.cols-3 { grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+.console-stat-grid.cols-4 { grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+
+.console-stat {
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  box-shadow: var(--shadow-card);
+  min-width: 0;
+  text-align: start;
+}
+a.console-stat, button.console-stat { transition: border-color 0.13s var(--ease), transform 0.13s var(--ease); }
+a.console-stat:hover, button.console-stat:hover { border-color: var(--line2); transform: translateY(-1px); }
+.console-stat-label { display: flex; align-items: center; gap: 6px; }
+.console-stat-caption { color: var(--ink3); font-size: var(--t-xs); display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+
+.console-delta { font-size: var(--t-xs); font-weight: var(--w-medium); }
+.console-delta.up { color: var(--ok); }
+.console-delta.down { color: var(--danger); }
+
+.console-help {
+  display: grid;
+  place-items: center;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  color: var(--ink3);
+  font-size: 10px;
+  line-height: 1;
+  flex: none;
+}
+.console-help:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ================================================================
+   Buttons
+   ================================================================ */
+.console-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: var(--control-h);
+  padding: 0 var(--space-4);
+  border-radius: var(--r-sm);
+  border: 1px solid var(--line2);
+  background: var(--bg1);
+  color: var(--ink);
+  font: var(--w-medium) var(--t-base) / 1 var(--font-body);
+  white-space: nowrap;
+  transition: background 0.13s var(--ease), border-color 0.13s var(--ease), color 0.13s var(--ease), box-shadow 0.13s var(--ease);
+}
+.console-btn:hover:not(:disabled) { background: var(--bg2); border-color: var(--line2); }
+.console-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.console-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); font-weight: var(--w-semi); }
+.console-btn-primary:hover:not(:disabled) { background: var(--accent-hi); border-color: var(--accent-hi); }
+
+.console-btn-ghost { background: transparent; border-color: transparent; color: var(--ink2); }
+.console-btn-ghost:hover:not(:disabled) { background: var(--bg2); color: var(--ink); }
+
+.console-btn-danger { background: var(--danger); border-color: var(--danger); color: #fff; font-weight: var(--w-semi); }
+.console-btn-danger:hover:not(:disabled) { filter: brightness(1.08); }
+
+.console-btn-sm { height: 30px; padding: 0 var(--space-3); font-size: var(--t-sm); }
+.console-btn-icon { width: var(--control-h); padding: 0; }
+.console-btn-icon.console-btn-sm { width: 30px; }
+.console-btn-block { width: 100%; }
+
+/* ================================================================
+   Pills — status. Colour never stands alone; a word always rides along.
+   ================================================================ */
+.console-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font: var(--w-medium) var(--t-caps) / 1.5 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.console-pill::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; flex: none; }
+.console-pill-success { color: var(--ok); background: var(--ok-dim); border-color: color-mix(in srgb, var(--ok) 28%, transparent); }
+.console-pill-warning { color: var(--warn); background: var(--warn-dim); border-color: color-mix(in srgb, var(--warn) 28%, transparent); }
+.console-pill-danger  { color: var(--danger); background: var(--danger-dim); border-color: color-mix(in srgb, var(--danger) 28%, transparent); }
+.console-pill-info    { color: var(--info); background: var(--info-dim); border-color: color-mix(in srgb, var(--info) 28%, transparent); }
+.console-pill-brand   { color: var(--accent); background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 28%, transparent); }
+.console-pill-neutral { color: var(--ink2); background: var(--bg2); border-color: var(--line2); }
+
+/* ================================================================
+   Segmented switch · chips
+   ================================================================ */
+.console-segmented {
+  display: inline-flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: var(--r-sm);
+}
+.console-segmented-option {
+  padding: 6px 13px;
+  border-radius: 5px;
+  font: var(--w-medium) var(--t-sm) / 1.4 var(--font-body);
+  color: var(--ink3);
+  white-space: nowrap;
+  transition: color 0.13s, background 0.13s;
+}
+.console-segmented-option:hover { color: var(--ink); }
+.console-segmented-option.active { background: var(--bg1); color: var(--accent); box-shadow: var(--shadow-card); }
+
+.console-chip-row { display: flex; gap: var(--space-2); overflow-x: auto; padding-bottom: 2px; }
+.console-chip {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: 999px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  color: var(--ink2);
+  font: var(--w-medium) var(--t-sm) / 1 var(--font-body);
+  white-space: nowrap;
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.console-chip:hover { background: var(--bg3); }
+.console-chip.active { background: var(--accent-dim); border-color: color-mix(in srgb, var(--accent) 32%, transparent); color: var(--accent); font-weight: var(--w-semi); }
+
+/* ================================================================
+   Forms
+   ================================================================ */
+.console-field { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.console-field-label {
+  font: var(--w-medium) 10.5px/1.4 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink3);
+}
+.console-field-hint { font-size: var(--t-xs); color: var(--ink3); }
+.console-field-error { font-size: var(--t-xs); color: var(--danger); }
+
+.console input, .console select, .console textarea {
+  font: var(--w-regular) var(--t-base) / 1.4 var(--font-body);
+  color: var(--ink);
+  background: var(--bg2);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-sm);
+  height: var(--control-h);
+  padding: 0 var(--space-3);
+  min-width: 0;
+  width: 100%;
+  transition: border-color 0.13s var(--ease), box-shadow 0.13s var(--ease);
+}
+.console textarea { height: auto; padding: var(--space-2) var(--space-3); resize: vertical; line-height: 1.55; }
+.console input:focus, .console select:focus, .console textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--glow-accent);
+}
+.console input[aria-invalid="true"], .console textarea[aria-invalid="true"] { border-color: var(--danger); }
+.console input::placeholder, .console textarea::placeholder { color: var(--ink3); }
+.console input[type="number"] { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.console input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.console input[type="range"] { height: auto; padding: 0; accent-color: var(--accent); background: transparent; border: 0; }
+
+.console select {
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink3) 50%),
+    linear-gradient(135deg, var(--ink3) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  padding-inline-end: 28px;
+}
+
+.console-check-row { display: flex; align-items: center; gap: var(--space-2); font-size: var(--t-base); color: var(--ink2); cursor: pointer; }
+.console-form-grid { display: grid; gap: var(--space-4); }
+.console-form-2 { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+
+.console-search { position: relative; min-width: 200px; }
+.console-search input { padding-inline-start: 34px; }
+.console-search svg { position: absolute; inset-inline-start: 11px; top: 50%; transform: translateY(-50%); color: var(--ink3); pointer-events: none; }
+
+/* ================================================================
+   Tables — sticky head, tabular numerals, hover row
+   ================================================================ */
+.console-table-wrap { overflow-x: auto; min-width: 0; }
+.console-table { width: 100%; border-collapse: collapse; font-size: var(--t-base); }
+.console-table th {
+  font: var(--w-medium) 10px/1.5 var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--ink3);
+  text-align: start;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line2);
+  white-space: nowrap;
+  background: var(--bg1);
+}
+.console-table.sticky th { position: sticky; top: 0; z-index: 2; }
+.console-table th.sortable { padding: 0; }
+.console-table th.sortable.align-right .console-th-sort { justify-content: flex-end; }
+.console-th-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 9px var(--space-3);
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+  user-select: none;
+}
+.console-th-sort:hover { color: var(--accent); }
+.console-table th .caret { font-size: 8px; color: var(--accent); }
+/* The idle state is a hint, not a claim — it must not read as "sorted by this". */
+.console-table th[aria-sort="none"] .caret { color: var(--ink3); opacity: 0.55; }
+.console-table td {
+  padding: 10px var(--space-3);
+  border-bottom: 1px solid var(--line);
+  color: var(--ink2);
+  vertical-align: middle;
+}
+.console-table td:first-child { color: var(--ink); }
+.console-table .align-right { text-align: end; }
+.console-table td.align-right { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--t-sm); }
+.console-table tbody tr { transition: background 0.1s; }
+.console-table tbody tr:hover { background: var(--bg2); }
+.console-table tbody tr:last-child td { border-bottom: 0; }
+.console-table tr.clickable { cursor: pointer; }
+.console-table tr.selected { background: var(--accent-dim); }
+.console-cell-sub { font: var(--w-regular) var(--t-xs) / 1.5 var(--font-mono); color: var(--ink3); }
+.console-row-actions { display: inline-flex; gap: var(--space-1); }
+
+/* A row that names a piece opens it. Underlined only on hover — forty-eight
+   permanently underlined rows would read as a wall of links, not a table. */
+.console-link { color: inherit; text-decoration: none; }
+.console-link:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+.console-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+
+/* The crosshair is keyboard-driven, so the focus ring is how you know it. */
+.console-trend { border-radius: var(--r-sm); }
+.console-trend:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* A chart's table twin. Collapsed by default — the chart is the point — but
+   never absent, because a hover-only value is a value some readers cannot get. */
+.console-chart-table { margin-top: var(--space-3); }
+.console-chart-table > summary {
+  font: var(--w-medium) var(--t-xs) / 1.4 var(--font-body);
+  color: var(--ink3);
+  cursor: pointer;
+  padding: 4px 0;
+  width: fit-content;
+}
+.console-chart-table > summary:hover { color: var(--accent); }
+.console-chart-table > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+.console-chart-table[open] > summary { margin-bottom: var(--space-2); }
+.console-chart-table .console-table { font-size: var(--t-sm); }
+.console-chart-table .console-table-wrap { max-height: 260px; overflow-y: auto; }
+
+/* A bar behind a number, for comparing down a column. */
+.console-microbar { position: relative; display: inline-block; min-width: 44px; padding: 1px 4px; }
+.console-microbar-fill {
+  position: absolute;
+  inset-block: 1px;
+  inset-inline-start: 0;
+  background: var(--chart-track);
+  border-radius: 3px;
+}
+.console-microbar > span { position: relative; }
+
+/* ================================================================
+   Meter — a ratio against a limit
+   ================================================================ */
+.console-meter { display: flex; flex-direction: column; gap: 6px; }
+.console-meter-track {
+  position: relative;
+  height: 8px;
+  background: var(--chart-track);
+  border-radius: 4px;
+  overflow: visible;
+}
+.console-meter-fill { position: absolute; inset-block: 0; inset-inline-start: 0; border-radius: 4px; background: var(--chart-nominal); }
+.console-meter-fill.tone-ok { background: var(--ok); }
+.console-meter-fill.tone-warn { background: var(--warn); }
+.console-meter-fill.tone-danger { background: var(--danger); }
+.console-meter-fill.tone-none { background: var(--ink3); }
+.console-meter-target { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--ink); border-radius: 1px; }
+.console-meter-legend { display: flex; justify-content: space-between; font-size: var(--t-xs); color: var(--ink3); }
+
+/* ================================================================
+   Drawer — record detail over the list. Never a separate page.
+   ================================================================ */
+.console-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(10, 12, 16, 0.42);
+  backdrop-filter: blur(2px);
+  animation: console-fade 0.15s var(--ease);
+}
+@keyframes console-fade { from { opacity: 0; } }
+
+.console-drawer {
+  position: fixed;
+  top: 0; bottom: 0; inset-inline-end: 0;
+  z-index: 91;
+  width: min(560px, 100vw);
+  background: var(--bg1);
+  border-inline-start: 1px solid var(--line2);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  animation: console-drawer-in 0.2s var(--ease);
+}
+@keyframes console-drawer-in { from { transform: translateX(24px); opacity: 0; } }
+.console-drawer-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+/* Actions sit directly under the head — reachable without scrolling. */
+.console-drawer-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+  flex: none;
+}
+.console-drawer-body { padding: var(--space-5); overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: var(--space-5); }
+
+/* ================================================================
+   Modal — confirms only
+   ================================================================ */
+.console-modal-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(3px);
+  animation: console-fade 0.14s var(--ease);
+}
+.console-modal {
+  width: min(440px, 100%);
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  animation: console-modal-in 0.18s var(--ease);
+}
+@keyframes console-modal-in { from { opacity: 0; transform: translateY(8px) scale(0.99); } }
+.console-modal-actions { display: flex; gap: var(--space-2); }
+
+/* ================================================================
+   Empty · error · loading
+   ================================================================ */
+.console-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-8) var(--space-4);
+  border: 1px dashed var(--line2);
+  border-radius: var(--r-md);
+  color: var(--ink3);
+}
+.console-empty-title { font: var(--w-semi) var(--t-md) / 1.4 var(--font-body); color: var(--ink2); }
+.console-empty-hint { font-size: var(--t-sm); max-width: 44ch; }
+
+/* Refetch never flashes a skeleton — the previous render dims in place. */
+.console-stale { opacity: 0.55; transition: opacity 0.15s var(--ease); pointer-events: none; }
+.console-skeleton { background: var(--bg2); border: 1px solid var(--line); border-radius: var(--r-md); }
+
+/* ================================================================
+   The signature — the batch tally
+   ================================================================ */
+.console-tally { display: inline-flex; flex-wrap: wrap; gap: 5px; }
+.console-tally-mark {
+  display: inline-grid;
+  place-items: center;
+  min-width: 30px;
+  height: 26px;
+  padding: 0 6px;
+  border-radius: 5px;
+  font: var(--w-medium) var(--t-sm) / 1 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  border: 1px solid transparent;
+}
+.console-tally-here    { background: var(--ink); color: var(--bg1); }
+.console-tally-sold    { background: var(--bg2); color: var(--ink3); border-color: var(--line); text-decoration: line-through; }
+.console-tally-reserved{ background: var(--warn-dim); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+.console-tally-kept    { background: var(--info-dim); color: var(--info); border-color: color-mix(in srgb, var(--info) 30%, transparent); }
+.console-tally-legend { display: flex; gap: var(--space-3); flex-wrap: wrap; font-size: var(--t-xs); color: var(--ink3); }
+
+/* ================================================================
+   Split view — list narrow, detail gets the room
+   ================================================================ */
+.console-split { display: grid; grid-template-columns: minmax(260px, 340px) minmax(0, 1fr); gap: var(--space-4); align-items: start; }
+.console-split-list { display: flex; flex-direction: column; min-width: 0; }
+.console-split-detail { min-width: 0; }
+
+/* ================================================================
+   Chat
+   ================================================================ */
+.console-chat { display: flex; flex-direction: column; gap: var(--space-4); max-width: 760px; margin-inline: auto; width: 100%; flex: 1; }
+.console-thread { display: flex; flex-direction: column; gap: var(--space-3); flex: 1; }
+.console-bubble {
+  border-radius: var(--r-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--t-md);
+  line-height: 1.6;
+  white-space: pre-line;
+  max-width: 86%;
+}
+.console-bubble-user { align-self: flex-end; background: var(--accent); color: var(--on-accent); border-end-end-radius: 4px; }
+.console-bubble-assistant { align-self: flex-start; background: var(--bg1); border: 1px solid var(--line); border-end-start-radius: 4px; }
+.console-composer {
+  position: sticky;
+  bottom: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-lg);
+  padding: var(--space-2);
+  box-shadow: var(--shadow-pop);
+}
+.console-composer textarea { border: 0; background: transparent; box-shadow: none; max-height: 160px; }
+.console-composer textarea:focus { box-shadow: none; }
+
+/* ================================================================
+   Sign in
+   ================================================================ */
+.console-signin { min-height: 100dvh; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(380px, 1fr); }
+.console-signin-hero {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--space-5);
+  padding: clamp(28px, 4vw, 56px);
+  overflow: hidden;
+  border-inline-end: 1px solid var(--line);
+  background: var(--bg1);
+}
+.console-signin-hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(520px 380px at 20% 20%, var(--accent-dim), transparent 66%);
+}
+.console-signin-hero > * { position: relative; }
+.console-signin-headline {
+  font: var(--w-semi) clamp(28px, 3.4vw, 44px) / 1.1 var(--font-body);
+  letter-spacing: -0.025em;
+  max-width: 13ch;
+}
+.console-signin-headline em { font-style: normal; color: var(--accent); }
+.console-signin-panel { display: grid; place-items: center; padding: var(--space-6); background: var(--bg0); }
+.console-signin-box { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: var(--space-4); }
+
+/* ================================================================
+   THE HEADER — filters · search · pages. Added beside the strip,
+   not in place of it: pages move over one at a time.
+   ================================================================ */
+.console-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-card);
+}
+.console-header-filters { display: flex; align-items: center; gap: var(--space-2); flex-wrap: wrap; min-width: 0; }
+/* The search takes the slack, so the two ends stay put as the page narrows. */
+.console-header-search { flex: 1 1 220px; min-width: 0; }
+.console-header-search .console-search { min-width: 0; width: 100%; }
+.console-header-pages { flex: none; }
+.console-header-trailing { display: flex; align-items: center; gap: var(--space-2); flex: none; }
+/* A date pair reads as one control, not two inputs that happen to be adjacent. */
+.console-range { display: inline-flex; align-items: center; gap: 6px; }
+.console-range span { font-size: var(--t-xs); color: var(--ink3); }
+
+/* ================================================================
+   Popup — a record, centred, with room to work. The drawer is for
+   reading; this is for editing a piece.
+   ================================================================ */
+.console-popup-wrap {
+  position: fixed;
+  inset: 0;
+  /* Below `.console-modal-wrap` (100) on purpose: a confirm raised from
+     inside a popup has to land on top of it, and both are portalled into
+     `.console`, where DOM order would otherwise decide it. */
+  z-index: 95;
+  display: grid;
+  place-items: center;
+  padding: var(--space-4);
+  background: rgba(10, 12, 16, 0.5);
+  backdrop-filter: blur(3px);
+  animation: console-fade 0.14s var(--ease);
+}
+.console-popup {
+  width: min(var(--popup-w, 940px), 100%);
+  max-height: min(88vh, 900px);
+  background: var(--bg1);
+  border: 1px solid var(--line2);
+  border-radius: var(--r-md);
+  box-shadow: var(--shadow-pop);
+  display: flex;
+  flex-direction: column;
+  animation: console-modal-in 0.18s var(--ease);
+}
+.console-popup-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  flex: none;
+}
+.console-popup-actions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line);
+  background: var(--bg2);
+  flex: none;
+}
+.console-popup-body {
+  padding: var(--space-5);
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+/* A cancelled order's whole row reads differently at a glance — the money
+   did not land, and a queue skimmed top to bottom should say so without a
+   second look at the status column. */
+.console-table tr.console-row-cancelled td,
+.console-table tr.console-row-danger td { color: var(--danger); }
+.console-table tr.console-row-cancelled td .console-muted,
+.console-table tr.console-row-cancelled td .console-cell-sub,
+.console-table tr.console-row-danger td .console-muted,
+.console-table tr.console-row-danger td .console-cell-sub { color: color-mix(in srgb, var(--danger) 70%, var(--ink3)); }
+
+/* Key/value pairs — the Aptiv intervention shape (customer desires, contact
+   channels) reused for the Custom modal. Not a table: these are a handful of
+   facts read top to bottom, not a dataset to scan a column of. */
+.console-detail-list { display: flex; flex-direction: column; }
+.console-detail-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--t-sm);
+}
+.console-detail-list > div:last-child { border-bottom: 0; }
+.console-detail-list dt { color: var(--ink3); flex: none; }
+.console-detail-list dd { text-align: end; }
+
+/* A colour, shown as a colour. */
+.console-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1px solid var(--line2);
+  flex: none;
+  display: inline-block;
+}
+/* One line of specification. Sits in a row with its own remove button. */
+.console-spec { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.console-spec-sub { font: var(--w-regular) var(--t-xs) / 1 var(--font-mono); color: var(--ink3); }
+/* The date a piece was last touched, under the date it was made. */
+.console-modified { font: var(--w-regular) var(--t-xs) / 1.5 var(--font-mono); color: var(--ok); }
+/* A price that has been reduced still shows what it was. */
+.console-was { text-decoration: line-through; color: var(--ink3); margin-inline-end: 6px; }
+
+/* ================================================================
+   Responsive
+   ================================================================ */
+@media (max-width: 1023px) {
+  .console-rail { width: var(--rail-icon-w); padding: var(--space-4) var(--space-2); align-items: center; }
+  .console-rail .console-nav-label, .console-rail-brand .console-wordmark span:not(.dot) { display: none; }
+  .console-nav-item { justify-content: center; padding: 0; width: 44px; }
+  .console-split { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 767px) {
+  .console-shell { flex-direction: column; }
+  .console-rail {
+    position: fixed;
+    inset: auto 0 0 0;
+    height: auto;
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-around;
+    border-right: 0;
+    border-top: 1px solid var(--line);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom));
+    z-index: 80;
+  }
+  .console-rail-brand { display: none; }
+  .console-rail-foot { margin-top: 0; flex: 1; position: relative; }
+  /* Six targets, none of them wrapping: five doors plus "More". Each
+     `.console-nav-item` is `flex: 1` below, so the row keeps sharing width
+     evenly whether there are four doors or five. */
+  .console-rail-more { display: flex; }
+  .console-rail-utils {
+    position: absolute;
+    bottom: calc(100% + 10px);
+    inset-inline-end: 0;
+    min-width: 190px;
+    padding: var(--space-2);
+    background: var(--bg1);
+    border: 1px solid var(--line2);
+    border-radius: var(--r-md);
+    box-shadow: var(--shadow-pop);
+    display: none;
+  }
+  .console-rail-utils.open { display: flex; }
+  .console-rail-utils .console-nav-item { flex-direction: row; gap: var(--space-3); height: 40px; font-size: var(--t-md); }
+  .console-nav-item { flex-direction: column; gap: 3px; height: auto; padding: 6px 4px; width: auto; flex: 1; font-size: 10px; }
+  .console-nav-item .console-nav-label { display: block; font-size: 10px; }
+  .console-nav-item.active::before { display: none; }
+  .console-nav-item.active { background: transparent; }
+  .console-page { padding: var(--space-4) var(--space-3) 96px; }
+  .console-drawer { inset-inline: 0; top: 8vh; width: 100%; border-inline-start: 0; border-top: 1px solid var(--line2); border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .console-signin { grid-template-columns: 1fr; }
+  .console-signin-hero { min-height: 30vh; border-inline-end: 0; border-bottom: 1px solid var(--line); }
+  .console-composer { bottom: 84px; }
+  /* A phone gets the whole screen for a piece — 88vh of a 940px-wide panel
+     is a form nobody can fill in. */
+  .console-popup-wrap { padding: 0; place-items: end stretch; }
+  .console-popup { max-height: 92vh; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .console-popup-head, .console-popup-actions, .console-popup-body { padding-inline: var(--space-4); }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .console { --control-h: 44px; }
+  .console input, .console select, .console textarea { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console *, .console *::before, .console *::after { animation: none !important; transition: none !important; }
+}
+
+/* ================================================================
+   Invoice — printed, not screened.
+   ================================================================
+   The sheet is always in the DOM (inside the order popup) but hidden
+   on screen; printing hides everything else instead. That is what
+   makes `window.print()` work with no new tab and no server-rendered
+   PDF — the browser is already printing the page, this just decides
+   what page that is. */
+.console-invoice-sheet { display: none; }
+@media print {
+  body * { visibility: hidden; }
+  .console-invoice-sheet, .console-invoice-sheet * { visibility: visible; }
+  .console-invoice-sheet {
+    display: block;
+    position: absolute;
+    inset: 0;
+    padding: 28px;
+    color: #000;
+    background: #fff;
+    font-family: var(--font-body);
+  }
+  .console-invoice-sheet h1 { font-size: 20px; margin: 0 0 4px; }
+  .console-invoice-sheet .console-invoice-meta { font-size: 12px; color: #444; margin-bottom: 18px; }
+  .console-invoice-sheet table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  .console-invoice-sheet th, .console-invoice-sheet td { text-align: left; padding: 6px 4px; border-bottom: 1px solid #ccc; }
+  .console-invoice-sheet th:last-child, .console-invoice-sheet td:last-child { text-align: right; }
+  .console-invoice-sheet .console-invoice-totals { margin-top: 14px; width: 260px; margin-inline-start: auto; font-size: 13px; }
+  .console-invoice-sheet .console-invoice-totals div { display: flex; justify-content: space-between; padding: 3px 0; }
+  .console-invoice-sheet .console-invoice-totals .total { font-weight: 700; border-top: 1px solid #000; margin-top: 4px; padding-top: 6px; }
+}

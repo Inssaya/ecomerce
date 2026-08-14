@@ -1,29 +1,43 @@
 """The catalogue — public reads, owner writes."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, status
-from sqlalchemy import func, select
+import logging
+from datetime import date, timedelta
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
+from pydantic import BaseModel
+from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
+from app.core.limits import RequestLimit, SignalLimit
 from app.core.slug import unique_slug
-from app.core.storage import ALLOWED_IMAGE_TYPES, MAX_IMAGE_BYTES, delete_object, upload_image
-from app.deps import DbSession, Lang, Owner, Paging
+from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
+from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import (
+    AttributeGroup,
     Category,
+    InteractionKind,
     Piece,
     PieceState,
     Product,
+    ProductAttribute,
     ProductKind,
     ProductMedia,
     ProductStatus,
     ProductVariant,
 )
-from app.modules.catalog import service
+from app.modules.catalog import alerts, interactions, service
 from app.modules.catalog.schemas import (
+    AlertRequest,
+    AttributeOut,
+    AttributePatch,
+    AttributeSuggestions,
+    AttributeWrite,
     CategoryAdmin,
     CategoryNode,
     CategoryWrite,
+    MediaPatch,
     MediaResponse,
     PieceAdmin,
     PieceBatchWrite,
@@ -33,8 +47,13 @@ from app.modules.catalog.schemas import (
     ProductPatch,
     ProductWrite,
     VariantOut,
+    VariantPatch,
     VariantWrite,
+    check_discount,
 )
+from app.modules.feed import embeddings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["catalog"])
 
@@ -48,6 +67,30 @@ async def category_tree(db: DbSession, lang: Lang) -> list[CategoryNode]:
         select(Category).where(Category.is_active.is_(True)).order_by(Category.display_order)
     )
     return service.build_tree(list(rows), lang)
+
+
+@router.get("/categories/{slug}", response_model=CategoryNode)
+async def get_category(slug: str, db: DbSession, lang: Lang) -> CategoryNode:
+    """One category, so its own page can 404 honestly and print its own name.
+
+    A slug that does not exist is a real 404, not a category page listing
+    nothing — the storefront's `resource()` helper depends on this exact
+    distinction to keep dead URLs out of the index.
+    """
+    category = await db.scalar(
+        select(Category).where(Category.slug == slug, Category.is_active.is_(True))
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    # A leaf node is fine — the page is going to list its own products, not its
+    # children, so the children field is unused here.
+    return CategoryNode(
+        id=category.id,
+        slug=category.slug,
+        name=category.name(lang),
+        icon_url=category.icon_url,
+        display_order=category.display_order,
+    )
 
 
 @router.get("/admin/categories", response_model=list[CategoryAdmin])
@@ -84,6 +127,62 @@ async def update_category(
     return category
 
 
+@router.delete(
+    "/admin/categories/{category_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_category(category_id: str, db: DbSession, owner: Owner) -> None:
+    """Only an empty line of work. A category with subcategories or products
+    still filed under it is not empty — move them first, or the tree the rail
+    reads and the feed narrows by would lose a branch out from under it."""
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    if await db.scalar(select(Category.id).where(Category.parent_id == category_id)):
+        raise conflict("This category still has subcategories — move or delete them first")
+    if await db.scalar(select(Product.id).where(Product.category_id == category_id)):
+        raise conflict("This category still has products in it — move them first")
+    icon_url = category.icon_url
+    await db.delete(category)
+    await db.commit()
+    if icon_url:
+        await delete_object(icon_url)
+
+
+@router.post("/admin/categories/{category_id}/icon", response_model=CategoryAdmin)
+async def upload_category_icon(
+    category_id: str, file: UploadFile, db: DbSession, owner: Owner
+) -> Category:
+    """The mark shown on the desktop rail. Same storage pipeline as a product
+    photo — an admin never has to pick from a bundled icon set."""
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    data = await file.read()
+    if not data:
+        raise bad_request("That file is empty")
+    if len(data) > MAX_IMAGE_BYTES:
+        raise HTTPException(status_code=413, detail="That icon is larger than 12 MB")
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Icons must be JPEG, PNG or WebP")
+
+    old_icon = category.icon_url
+    category.icon_url = await upload_image(data, content_type, prefix=f"categories/{category_id}")
+    await db.commit()
+    await db.refresh(category)
+    if old_icon:
+        await delete_object(old_icon)
+    return category
+
+
+@router.delete("/admin/categories/{category_id}/icon", response_model=CategoryAdmin)
+async def remove_category_icon(category_id: str, db: DbSession, owner: Owner) -> Category:
+    category = await get_or_404(db, Category, category_id, detail="Category not found")
+    old_icon = category.icon_url
+    category.icon_url = None
+    await db.commit()
+    await db.refresh(category)
+    if old_icon:
+        await delete_object(old_icon)
+    return category
+
+
 # ── Products, public ──────────────────────────────────────────────────────────
 
 
@@ -95,6 +194,12 @@ async def list_products(
     category: str | None = Query(default=None, description="Category slug"),
     kind: ProductKind | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=120),
+    seed: int | None = Query(
+        default=None,
+        ge=0,
+        le=2_147_483_647,
+        description="Shuffle the shelf deterministically. Same seed, same order.",
+    ),
 ) -> ProductPage:
     query = service.visible()
     if category:
@@ -108,12 +213,23 @@ async def list_products(
         query = query.where(service.text_match(q))
 
     total = await db.scalar(select(func.count()).select_from(query.order_by(None).subquery())) or 0
-    rows = await db.scalars(
-        query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
-    )
+
+    # The shelf, shuffled — but shuffled the *same way* for every page of one
+    # visit.
+    #
+    # `ORDER BY random()` would be a different order on every request, so page
+    # two would re-roll the whole shelf: some pieces would arrive twice and
+    # others would never be reachable at all. Hashing the id together with a
+    # seed the caller keeps for the session gives a fixed but arbitrary order,
+    # which is what "random" has to mean the moment there is paging.
+    if seed is None:
+        ordering = Product.created_at.desc()
+    else:
+        ordering = func.md5(func.concat(cast(Product.id, String), str(seed)))
+
+    rows = await db.scalars(query.order_by(ordering).offset(paging.offset).limit(paging.size))
     products = list(rows.unique())
-    left = await service.availability(db, [product.id for product in products])
-    items = [service.to_card(product, lang, left.get(product.id, 0)) for product in products]
+    items = [service.to_card(product, lang) for product in products]
     return ProductPage(
         items=items,
         total=total,
@@ -131,31 +247,62 @@ async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
     if product.status is not ProductStatus.active:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    left = await service.availability(db, [product.id])
-    per_variant = await service.variant_availability(db, product.id)
-    pieces = list(
-        await db.scalars(
-            select(Piece)
-            .where(Piece.product_id == product.id, Piece.state == PieceState.available)
-            .order_by(Piece.number)
-        )
-    )
-    return service.to_detail(
-        product,
-        lang,
-        available=left.get(product.id, 0),
-        per_variant=per_variant,
-        pieces=pieces,
-    )
+    return service.to_detail(product, lang)
 
 
 # ── Products, owner ───────────────────────────────────────────────────────────
 
 
-async def _admin_view(db: DbSession, product: Product) -> ProductAdmin:
-    left = await service.availability(db, [product.id])
-    per_variant = await service.variant_availability(db, product.id)
-    return service.to_admin(product, left.get(product.id, 0), per_variant)
+async def _reembed() -> None:
+    """Put the piece into meaning-space, after the response has gone.
+
+    This was the missing caller. The feed's ranking function weights
+    `cosine(visitor_vector, product_embedding)` at 0.8 — second only to a
+    visitor's own affinity — but nothing in the application had ever written a
+    product embedding. The column existed, the index existed, the term was in
+    the SQL, and it was multiplied by zero for every piece in the shop. Half of
+    what makes the store narrow around a visitor was switched off.
+
+    It runs in the background because embedding calls an external model, and
+    the owner pressing "publish" should not wait on it. It is idempotent and
+    skips anything whose words have not changed, so calling it on every save
+    costs one query and no money. It uses its own session — the request's is
+    closed by the time this runs.
+    """
+    from app.db import SessionLocal
+
+    try:
+        async with SessionLocal() as db:
+            result = await embeddings.refresh(db)
+        if result.get("embedded"):
+            logger.info("Embedded %s pieces", result["embedded"])
+    except Exception as exc:
+        # A piece that is not embedded is still for sale; it just ranks on
+        # everything except meaning until the next save or backfill.
+        logger.warning("Could not refresh embeddings: %s", exc)
+
+
+async def _admin_view(db: DbSession, product_id: str) -> ProductAdmin:
+    """Read the piece back with everything the console shows.
+
+    Re-queried through `service.LOADED` rather than a hand-listed
+    `refresh(attribute_names=...)`: the admin view now also reads `attributes`
+    and the category's *parent*, and a relationship that was never loaded
+    raises inside an async session rather than quietly emitting a query.
+    `populate_existing` is what makes the eager loaders run again for an
+    instance already sitting in the identity map.
+    """
+    product = (
+        await db.scalars(
+            select(Product)
+            .where(Product.id == product_id)
+            .options(*service.LOADED)
+            .execution_options(populate_existing=True)
+        )
+    ).unique().one()
+    totals = await interactions.totals_for(db, [product.id])
+    likes, saves = totals.get(product.id, (0, 0))
+    return service.to_admin(product, likes=likes, saves=saves)
 
 
 @router.get("/admin/products", response_model=list[ProductAdmin])
@@ -165,22 +312,52 @@ async def list_products_admin(
     paging: Paging,
     status_filter: ProductStatus | None = Query(default=None, alias="status"),
     kind: ProductKind | None = Query(default=None),
+    q: str | None = Query(default=None, min_length=1, max_length=120),
+    category_id: str | None = Query(default=None),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
 ) -> list[ProductAdmin]:
+    """The catalogue as a table.
+
+    Filtering happens here rather than in the browser because the console's
+    date range and category are the two the owner narrows by hardest, and
+    narrowing a page of sixty rows client-side narrows only that page.
+    """
     query = service.with_relations(select(Product))
     if status_filter is not None:
         query = query.where(Product.status == status_filter)
     if kind is not None:
         query = query.where(Product.kind == kind)
+    if q:
+        query = query.where(service.text_match(q))
+    if category_id:
+        # Choosing a line of work includes what is filed beneath it, the same
+        # way the storefront's category page does.
+        query = query.where(Product.category_id.in_(await service.descendant_ids(db, category_id)))
+    if date_from:
+        query = query.where(Product.created_at >= date_from)
+    if date_to:
+        query = query.where(Product.created_at < date_to + timedelta(days=1))
+
     rows = await db.scalars(
         query.order_by(Product.created_at.desc()).offset(paging.offset).limit(paging.size)
     )
     products = list(rows.unique())
-    left = await service.availability(db, [product.id for product in products])
-    return [service.to_admin(product, left.get(product.id, 0), None) for product in products]
+    totals = await interactions.totals_for(db, [product.id for product in products])
+    return [
+        service.to_admin(
+            product,
+            likes=totals.get(product.id, (0, 0))[0],
+            saves=totals.get(product.id, (0, 0))[1],
+        )
+        for product in products
+    ]
 
 
 @router.post("/admin/products", response_model=ProductAdmin, status_code=status.HTTP_201_CREATED)
-async def create_product(body: ProductWrite, db: DbSession, owner: Owner) -> ProductAdmin:
+async def create_product(
+    body: ProductWrite, db: DbSession, owner: Owner, background: BackgroundTasks
+) -> ProductAdmin:
     if body.category_id:
         await get_or_404(db, Category, body.category_id, detail="Category not found")
     if body.status is ProductStatus.active:
@@ -192,13 +369,13 @@ async def create_product(body: ProductWrite, db: DbSession, owner: Owner) -> Pro
     )
     db.add(product)
     await db.commit()
-    await db.refresh(product, attribute_names=["media", "variants", "category"])
-    return await _admin_view(db, product)
+    background.add_task(_reembed)
+    return await _admin_view(db, product.id)
 
 
 @router.patch("/admin/products/{product_id}", response_model=ProductAdmin)
 async def update_product(
-    product_id: str, body: ProductPatch, db: DbSession, owner: Owner
+    product_id: str, body: ProductPatch, db: DbSession, owner: Owner, background: BackgroundTasks
 ) -> ProductAdmin:
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=service.LOADED
@@ -211,23 +388,38 @@ async def update_product(
         # without one.
         if not product.media:
             raise bad_request("Add at least one photo of the piece before publishing it")
-        # A shelf piece with nothing on the shelf is not for sale. Publishing
-        # it would be advertising something that does not exist.
+        # The other half of §8: "ready in six days", never "soon". A workshop
+        # piece has this covered by the check constraint (`lead_time_days`); a
+        # shelf piece needs `delivery_days`. The old rule for shelf pieces was
+        # "add the pieces you made" — that was a stock check, and this shop
+        # does not track stock.
         if product.kind is ProductKind.shelf:
-            left = await service.availability(db, [product.id])
-            if not left.get(product.id):
-                raise bad_request("Add the pieces you made before publishing this")
+            promise = changes.get("delivery_days", product.delivery_days)
+            if not promise:
+                raise bad_request("Say how many days delivery takes before publishing this")
 
     if "category_id" in changes and changes["category_id"]:
         await get_or_404(db, Category, changes["category_id"], detail="Category not found")
     if product.kind is ProductKind.workshop and changes.get("lead_time_days") is None:
         changes.pop("lead_time_days", None)
 
+    # A reduction is three fields that can arrive in three separate requests,
+    # so the combination worth checking is the one that ends up on the row.
+    try:
+        check_discount(
+            changes.get("discount_kind", product.discount_kind),
+            changes.get("discount_value", product.discount_value),
+            changes.get("price", product.price),
+        )
+    except ValueError as problem:
+        raise bad_request(str(problem)) from problem
+
     for field, value in changes.items():
         setattr(product, field, value)
     await db.commit()
-    await db.refresh(product, attribute_names=["media", "variants", "category"])
-    return await _admin_view(db, product)
+    # Publishing, renaming or rewriting a piece all change what it means.
+    background.add_task(_reembed)
+    return await _admin_view(db, product.id)
 
 
 @router.delete(
@@ -237,6 +429,102 @@ async def archive_product(product_id: str, db: DbSession, owner: Owner) -> None:
     """Archived, never deleted — order history has to stay reconstructable."""
     product = await get_or_404(db, Product, product_id, detail="Product not found")
     product.status = ProductStatus.archived
+    await db.commit()
+
+
+# ── Specification: measures, colours, materials ───────────────────────────────
+#
+# This is what `product_variants` could not do. A variant is one buyable
+# configuration as a single string, so a piece in four colours and three sizes
+# is twelve rows to type and twelve to correct. These are independent lines of
+# description, added one at a time, in any combination — including none.
+
+
+@router.get("/admin/attribute-suggestions", response_model=AttributeSuggestions)
+async def attribute_suggestions(db: DbSession, owner: Owner) -> AttributeSuggestions:
+    """What to offer in the dropdowns: presets, plus what the shop already says.
+
+    Deliberately not a table the owner has to maintain. The vocabulary grows
+    by being used.
+    """
+    return await service.attribute_suggestions(db)
+
+
+@router.post(
+    "/admin/products/{product_id}/attributes",
+    response_model=AttributeOut,
+    status_code=status.HTTP_201_CREATED,
+)
+async def add_attribute(
+    product_id: str, body: AttributeWrite, db: DbSession, owner: Owner
+) -> AttributeOut:
+    await get_or_404(db, Product, product_id, detail="Product not found")
+
+    existing = list(
+        await db.scalars(
+            select(ProductAttribute).where(ProductAttribute.product_id == product_id)
+        )
+    )
+    # The same measure twice is a slip, not a piece that is "M" twice.
+    written = f"{body.name} {body.value}" if body.name else body.value
+    for item in existing:
+        if item.group is body.group and item.name == body.name and item.value == body.value:
+            raise conflict(f"'{written}' is already on this piece")
+
+    attribute = ProductAttribute(
+        product_id=product_id,
+        group=body.group,
+        name=body.name,
+        value=body.value,
+        hex=body.hex,
+        # Zero means "the caller did not care" — put it at the end rather than
+        # silently tying with whatever is already first.
+        display_order=body.display_order or len(existing),
+    )
+    db.add(attribute)
+    await db.commit()
+    await db.refresh(attribute)
+    return service.attribute_out(attribute)
+
+
+@router.patch("/admin/attributes/{attribute_id}", response_model=AttributeOut)
+async def update_attribute(
+    attribute_id: str, body: AttributePatch, db: DbSession, owner: Owner
+) -> AttributeOut:
+    attribute = await get_or_404(
+        db, ProductAttribute, attribute_id, detail="That line is not on this piece"
+    )
+    changes = body.model_dump(exclude_unset=True)
+    if "name" in changes:
+        changes["name"] = (changes["name"] or "").strip() or None
+    if "value" in changes:
+        changes["value"] = (changes["value"] or "").strip()
+        if not changes["value"]:
+            raise bad_request("A measure, colour or material needs a value")
+    if changes.get("hex") and attribute.group is not AttributeGroup.color:
+        raise bad_request("Only a colour carries a hex")
+
+    for field, value in changes.items():
+        setattr(attribute, field, value)
+    await db.commit()
+    await db.refresh(attribute)
+    return service.attribute_out(attribute)
+
+
+@router.delete(
+    "/admin/attributes/{attribute_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT
+)
+async def remove_attribute(attribute_id: str, db: DbSession, owner: Owner) -> None:
+    """Really deleted, unlike a variant.
+
+    Nothing points at these rows: an order stores a *snapshot* of what the
+    buyer picked, not a foreign key, precisely so that correcting a typo here
+    never reaches back into somebody's receipt.
+    """
+    attribute = await get_or_404(
+        db, ProductAttribute, attribute_id, detail="That line is not on this piece"
+    )
+    await db.delete(attribute)
     await db.commit()
 
 
@@ -264,7 +552,44 @@ async def add_variant(
         sku=variant.sku,
         option=variant.option_en,
         price=float(variant.price if variant.price is not None else product.price),
-        available=0 if product.kind is ProductKind.shelf else None,
+        available=None,
+    )
+
+
+@router.patch("/admin/variants/{variant_id}", response_model=VariantOut)
+async def update_variant(
+    variant_id: str, body: VariantPatch, db: DbSession, owner: Owner
+) -> VariantOut:
+    """Correct a variant.
+
+    Variants could only be created or retired, so a typo in "Matte black" was
+    permanent — the only fix was to retire the variant and make another, which
+    orphans it from the order lines that already point at it.
+    """
+    variant = await get_or_404(db, ProductVariant, variant_id, detail="Variant not found")
+    product = await get_or_404(db, Product, variant.product_id, detail="Product not found")
+
+    changes = body.model_dump(exclude_unset=True)
+    if "sku" in changes and changes["sku"] != variant.sku:
+        clash = await db.scalar(
+            select(ProductVariant.id).where(
+                ProductVariant.sku == changes["sku"], ProductVariant.id != variant_id
+            )
+        )
+        if clash:
+            raise conflict(f"SKU '{changes['sku']}' is already used")
+
+    for field, value in changes.items():
+        setattr(variant, field, value)
+    await db.commit()
+    await db.refresh(variant)
+
+    return VariantOut(
+        id=variant.id,
+        sku=variant.sku,
+        option=variant.option_en,
+        price=float(variant.price if variant.price is not None else product.price),
+        available=None,
     )
 
 
@@ -356,6 +681,10 @@ async def add_pieces(
     ]
     db.add_all(created)
     await db.commit()
+
+    # Everyone who asked to be told is told, without anyone having to remember.
+    await alerts.announce(db, product)
+
     return [
         PieceAdmin(
             id=piece.id,
@@ -379,8 +708,146 @@ async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
     piece = await get_or_404(db, Piece, piece_id, detail="Piece not found")
     if piece.state is not PieceState.available:
         raise conflict(f"That piece is {piece.state.value} — it cannot be removed")
+
+    product_id = piece.product_id
     await db.delete(piece)
+    await db.flush()
+
+    # The run got smaller, so say so. Adding pieces already rewrites every
+    # sibling's `batch_size` for exactly this reason — 04/08 becomes 04/12 when
+    # the batch grows — and taking one away has to do the same in reverse.
+    # Without this the shop keeps announcing "01 of 4" over three objects,
+    # which is the invented scarcity BRAND.md §10 rules out, pointing the other
+    # way. The highest surviving number is the size of the run: correcting a
+    # miscount at the end heals the labels, and removing from the middle leaves
+    # the numbers people were already shown alone.
+    remaining = await db.scalar(
+        select(func.coalesce(func.max(Piece.number), 0)).where(Piece.product_id == product_id)
+    )
+    await db.execute(
+        Piece.__table__.update()
+        .where(Piece.product_id == product_id)
+        .values(batch_size=remaining)
+    )
     await db.commit()
+
+
+# ── Hearts and saves ──────────────────────────────────────────────────────────
+#
+# Pinterest-shaped. A **like** is the same button on every social app; a
+# **save** is buy-later. The two are stored the same way but the feed reads
+# them differently — a save is a much stronger buying signal than a like.
+#
+# Kept on the storefront's own limiter (`SignalLimit`, 120 per minute) rather
+# than on `RequestLimit`: this is the same tempo as an impression signal, and
+# a customer scrolling a feed of thirty cards must not run out of taps.
+
+
+class InteractionState(BaseModel):
+    likes: int
+    saves: int
+    liked: bool
+    saved: bool
+
+
+class InteractionToggle(InteractionState):
+    active: bool
+
+
+async def _toggle_endpoint(
+    slug: str, kind: InteractionKind, db: DbSession, visitor: Visitor, user: OptionalUser
+) -> InteractionToggle:
+    if not visitor:
+        # Same rule as the feed: without a fingerprint there is nothing to
+        # attribute the tap to. A 400 rather than a silent no-op so the
+        # storefront can prompt to enable it rather than pretending it worked.
+        raise bad_request("A fingerprint is required to react to a piece")
+    product = await get_or_404(
+        db, Product, slug, field="slug", detail="Product not found"
+    )
+    if product.status is not ProductStatus.active:
+        raise HTTPException(status_code=404, detail="Product not found")
+
+    active = await interactions.toggle(
+        db,
+        product_id=product.id,
+        visitor_id=visitor,
+        user_id=user.id if user else None,
+        kind=kind,
+    )
+    state = await interactions.state_for(db, product_id=product.id, visitor_id=visitor)
+    return InteractionToggle(active=active, **state)
+
+
+@router.post("/products/{slug}/like", response_model=InteractionToggle)
+async def like_product(
+    slug: str,
+    db: DbSession,
+    visitor: Visitor,
+    user: OptionalUser,
+    _: SignalLimit,
+) -> InteractionToggle:
+    return await _toggle_endpoint(slug, InteractionKind.like, db, visitor, user)
+
+
+@router.post("/products/{slug}/save", response_model=InteractionToggle)
+async def save_product(
+    slug: str,
+    db: DbSession,
+    visitor: Visitor,
+    user: OptionalUser,
+    _: SignalLimit,
+) -> InteractionToggle:
+    return await _toggle_endpoint(slug, InteractionKind.save, db, visitor, user)
+
+
+@router.get("/products/{slug}/interactions", response_model=InteractionState)
+async def read_interactions(
+    slug: str, db: DbSession, visitor: Visitor
+) -> InteractionState:
+    """The counts, plus whether this visitor pressed either.
+
+    Reported in one call so the button paints correctly on the first load —
+    a separate "did I like this" fetch would flash unpressed for one tick and
+    pressed for the next.
+    """
+    product = await get_or_404(
+        db, Product, slug, field="slug", detail="Product not found"
+    )
+    state = await interactions.state_for(db, product_id=product.id, visitor_id=visitor)
+    return InteractionState(**state)
+
+
+# ── Waiting on a piece ────────────────────────────────────────────────────────
+
+
+@router.post("/products/{slug}/alert", status_code=status.HTTP_202_ACCEPTED)
+async def wait_for_more(
+    slug: str, body: AlertRequest, db: DbSession, lang: Lang, _: RequestLimit
+) -> dict:
+    """"Tell me when you make another."
+
+    A sold-out page is otherwise a dead end, and a dead end is a visitor we
+    paid to attract and then sent away. No account, one field.
+    """
+    product = await get_or_404(db, Product, slug, field="slug", detail="Product not found")
+    if product.status is not ProductStatus.active:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.kind is not ProductKind.shelf:
+        raise bad_request("This one is made to order — you can ask for it any time")
+
+    await alerts.add(db, product=product, phone=body.phone, email=body.email, lang=lang)
+    return {"waiting": True}
+
+
+@router.get("/admin/products/{product_id}/waiting")
+async def who_is_waiting(product_id: str, db: DbSession, owner: Owner) -> dict:
+    """How many people want this one back.
+
+    The sharpest answer to "what should I make next" the workshop gets: unlike
+    a search, it is attached to a real piece at a price they already saw.
+    """
+    return {"waiting": await alerts.waiting_for(db, product_id)}
 
 
 # ── Photography ───────────────────────────────────────────────────────────────
@@ -403,15 +870,17 @@ async def upload_product_photo(
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=(selectinload(Product.media),)
     )
-    content_type = (file.content_type or "").lower()
-    if content_type not in ALLOWED_IMAGE_TYPES:
-        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
-
+    # Read first, then decide what it is from its own bytes. The declared
+    # Content-Type is whatever the client typed and is never used.
     data = await file.read()
     if not data:
         raise bad_request("That file is empty")
     if len(data) > MAX_IMAGE_BYTES:
         raise HTTPException(status_code=413, detail="That photo is larger than 12 MB")
+
+    content_type = sniff_image(data)
+    if content_type is None:
+        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
 
     url = await upload_image(data, content_type, prefix=f"products/{product_id}")
     media = ProductMedia(
@@ -424,6 +893,24 @@ async def upload_product_photo(
         sort_order=len(product.media),
     )
     db.add(media)
+    await db.commit()
+    await db.refresh(media)
+    return service.media_out(media, "en")
+
+
+@router.patch("/admin/media/{media_id}", response_model=MediaResponse)
+async def update_photo(
+    media_id: str, body: MediaPatch, db: DbSession, owner: Owner
+) -> MediaResponse:
+    """Alt text, after the upload.
+
+    Alt text could only be set as a query parameter at upload time and the
+    console never sent it, so every photograph in the shop has none — which is
+    a real accessibility hole on a site whose entire product *is* the picture.
+    """
+    media = await get_or_404(db, ProductMedia, media_id, detail="Photo not found")
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(media, field, value)
     await db.commit()
     await db.refresh(media)
     return service.media_out(media, "en")
@@ -469,3 +956,37 @@ async def delete_photo(media_id: str, db: DbSession, owner: Owner) -> None:
             remaining.is_primary = True
     await db.commit()
     await delete_object(url)
+
+
+@router.get("/workshop")
+async def workshop_numbers(db: DbSession) -> dict:
+    """What the workshop has actually made.
+
+    Real counts, straight from the pieces table. This is the most
+    characteristic thing we can say and the one thing a reseller cannot say at
+    all: they do not know how many of anything exists, because they did not
+    make it.
+    """
+    made = await db.scalar(select(func.count()).select_from(Piece)) or 0
+    here = (
+        await db.scalar(
+            select(func.count()).select_from(Piece).where(Piece.state == PieceState.available)
+        )
+        or 0
+    )
+    kinds = (
+        await db.execute(
+            select(Product.kind, func.count())
+            .where(Product.status == ProductStatus.active)
+            .group_by(Product.kind)
+        )
+    ).all()
+    latest = await db.scalar(select(func.max(Piece.made_on)))
+    counts = {kind.value if hasattr(kind, "value") else str(kind): n for kind, n in kinds}
+    return {
+        "pieces_made": made,
+        "pieces_here": here,
+        "on_the_shelf": counts.get("shelf", 0),
+        "made_to_order": counts.get("workshop", 0),
+        "last_made_on": latest.isoformat() if latest else None,
+    }

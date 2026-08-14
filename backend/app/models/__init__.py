@@ -1,18 +1,25 @@
 """Every model in one package, so Alembic sees the whole schema at once."""
+from app.models.alerts import PieceAlert
 from app.models.base import BilingualMixin, TimestampMixin, new_id, uuid_fk, uuid_pk
+from app.models.contact import ContactMessage
 from app.models.catalog import (
     EMBEDDING_DIMENSIONS,
+    AttributeGroup,
     Category,
+    DiscountKind,
+    InteractionKind,
     Piece,
     PieceState,
     Product,
+    ProductAttribute,
     ProductEmbedding,
+    ProductInteraction,
     ProductKind,
     ProductMedia,
     ProductStatus,
     ProductVariant,
 )
-from app.models.notify import Notification
+from app.models.local import City, Service
 from app.models.orders import (
     ALLOWED_TRANSITIONS,
     TERMINAL_STATUSES,
@@ -27,6 +34,7 @@ from app.models.requests import (
     RequestEvent,
     RequestStatus,
 )
+from app.models.security import Blocklist, SecurityEvent, SecurityLevel
 from app.models.signals import (
     AFFINITY_HALF_LIFE_DAYS,
     DEFAULT_FEED_WEIGHTS,
@@ -40,7 +48,11 @@ from app.models.signals import (
 from app.models.user import RefreshToken, User, UserRole
 
 __all__ = [
+    "City",
+    "Service",
     "AFFINITY_HALF_LIFE_DAYS",
+    "ContactMessage",
+    "PieceAlert",
     "REQUEST_TRANSITIONS",
     "CustomRequest",
     "RequestEvent",
@@ -53,9 +65,12 @@ __all__ = [
     "MAX_DWELL_WEIGHT",
     "SIGNAL_WEIGHTS",
     "TERMINAL_STATUSES",
+    "AttributeGroup",
     "BilingualMixin",
+    "Blocklist",
     "Category",
-    "Notification",
+    "DiscountKind",
+    "InteractionKind",
     "Order",
     "OrderEvent",
     "OrderItem",
@@ -63,12 +78,16 @@ __all__ = [
     "Piece",
     "PieceState",
     "Product",
+    "ProductAttribute",
     "ProductEmbedding",
+    "ProductInteraction",
     "ProductKind",
     "ProductMedia",
     "ProductStatus",
     "ProductVariant",
     "RefreshToken",
+    "SecurityEvent",
+    "SecurityLevel",
     "Signal",
     "SignalType",
     "TimestampMixin",

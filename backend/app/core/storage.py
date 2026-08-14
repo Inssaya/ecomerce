@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import asyncio
 import io
+import json
 import logging
 import uuid
 
@@ -19,6 +20,26 @@ logger = logging.getLogger(__name__)
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 12 * 1024 * 1024
+
+#: What the file actually starts with. `Content-Type` on an upload is a string
+#: the client chose, so believing it means an attacker can label anything
+#: `image/jpeg` — an SVG carrying script, or an HTML page — and have us serve
+#: it back from our own storage domain. The bytes cannot be talked into lying.
+_MAGIC: tuple[tuple[bytes, str], ...] = (
+    (b"\xff\xd8\xff", "image/jpeg"),
+    (b"\x89PNG\r\n\x1a\n", "image/png"),
+)
+
+
+def sniff_image(data: bytes) -> str | None:
+    """The real type of an upload, or None if it is not an image we accept."""
+    for signature, mime in _MAGIC:
+        if data.startswith(signature):
+            return mime
+    # WebP is a RIFF container: "RIFF" then four length bytes then "WEBP".
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    return None
 
 _client: Minio | None = None
 
@@ -35,6 +56,37 @@ def _get_client() -> Minio:
     return _client
 
 
+def _read_only_policy(bucket: str) -> str:
+    """Anyone may read one object. Nobody may list the bucket.
+
+    Both halves matter.
+
+    Product photographs are public by definition — the URL goes into an
+    `<img>`, into an og:image WhatsApp fetches, and into structured data
+    Google fetches, none of which carry credentials. A bucket left at MinIO's
+    default of fully private serves 403 to every one of them, which shows as a
+    shop with no photographs and no error anywhere.
+
+    But `GetObject` is the *only* thing granted. `ListBucket` would turn the
+    media host into a directory of everything the workshop has ever uploaded —
+    including photographs on drafts that were never published and pieces that
+    were withdrawn — reachable by anyone who guesses the bucket URL.
+    """
+    return json.dumps(
+        {
+            "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Principal": {"AWS": ["*"]},
+                    "Action": ["s3:GetObject"],
+                    "Resource": [f"arn:aws:s3:::{bucket}/*"],
+                }
+            ],
+        }
+    )
+
+
 async def ensure_bucket() -> None:
     def _ensure() -> None:
         client = _get_client()
@@ -44,6 +96,10 @@ async def ensure_bucket() -> None:
         except S3Error as exc:
             if exc.code != "BucketAlreadyOwnedByYou":
                 raise
+        # Set every start, not only on creation: it is idempotent, and a bucket
+        # restored from a backup or made by hand would otherwise be silently
+        # unreadable.
+        client.set_bucket_policy(settings.media_bucket, _read_only_policy(settings.media_bucket))
 
     await asyncio.to_thread(_ensure)
 

@@ -18,6 +18,8 @@ reserve nothing — there is nothing yet to reserve, only a promise about when.
 """
 from __future__ import annotations
 
+import logging
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -35,14 +37,16 @@ from app.models import (
     Piece,
     PieceState,
     Product,
-    ProductKind,
     ProductStatus,
     ProductVariant,
     User,
 )
 from app.modules.catalog.service import primary_image
+from app.modules.local import service as local
 from app.modules.notify.service import notify_order_status
-from app.modules.orders.schemas import CartLine, CheckoutRequest
+from app.modules.orders.schemas import CheckoutRequest
+
+logger = logging.getLogger(__name__)
 
 #: Pieces move with the order they belong to.
 PIECE_STATE_FOR_ORDER: dict[OrderStatus, PieceState] = {
@@ -52,39 +56,85 @@ PIECE_STATE_FOR_ORDER: dict[OrderStatus, PieceState] = {
 }
 
 
-def delivery_fee_for(subtotal: Decimal) -> Decimal:
-    """Free over the threshold, flat otherwise. Stated on the page before
-    checkout — a delivery fee discovered at the door is a refused package."""
+#: How long an unconfirmed order may hold real objects. Cash on delivery has
+#: no payment step to abandon, so nothing else ever releases them.
+RESERVATION_HOURS = 48
+
+
+async def release_stale_reservations(db: AsyncSession) -> int:
+    """Give back the pieces held by orders nobody ever confirmed.
+
+    This closes a genuine hole rather than adding a feature. A shelf piece is
+    reserved the moment an order is placed, and an order that is never
+    confirmed used to hold it forever — so a handful of abandoned checkouts
+    would show the shop as sold out while nothing had been sold. There is no
+    payment step here to time out, so this is the only thing that frees them.
+
+    Runs on the way into checkout: one indexed query, and it means the sweep
+    happens without a scheduler to forget to deploy.
+    """
+    cutoff = datetime.now(UTC) - timedelta(hours=RESERVATION_HOURS)
+    stale = list(
+        await db.scalars(
+            select(Order)
+            .where(Order.status == OrderStatus.placed, Order.created_at < cutoff)
+            .limit(50)
+        )
+    )
+    for order in stale:
+        await change_status(
+            db,
+            order,
+            OrderStatus.cancelled,
+            f"Not confirmed within {RESERVATION_HOURS} hours",
+            actor="system",
+        )
+    if stale:
+        logger.info("Released the pieces held by %s unconfirmed orders", len(stale))
+    return len(stale)
+
+
+async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None) -> Decimal:
+    """Free over the threshold; otherwise what that city costs to reach.
+
+    Stated on the page before checkout — a delivery fee discovered at the door
+    is a refused package, and a refused package is the most expensive thing
+    that happens in this market. Which is why the city matters: the City model
+    carries an override "where a city genuinely costs more to reach", the city
+    page has always published it, and this used to charge the flat setting
+    regardless. Two numbers for one delivery, and the one the customer read was
+    not the one they were asked for.
+    """
     if subtotal >= Decimal(str(settings.free_delivery_over)):
         return Decimal("0")
-    return Decimal(str(settings.delivery_fee))
+    return Decimal(str(await local.fee_for_name(db, city)))
 
 
-async def _take_pieces(
-    db: AsyncSession, product: Product, line: CartLine
-) -> list[Piece]:
-    """Lock and reserve the pieces this line is buying."""
-    query = (
-        select(Piece)
-        .where(Piece.product_id == product.id, Piece.state == PieceState.available)
-        .order_by(Piece.number)
-        .limit(line.quantity)
-        .with_for_update()
-    )
-    if line.variant_id:
-        query = query.where(Piece.variant_id == line.variant_id)
+async def place_order(
+    db: AsyncSession,
+    body: CheckoutRequest,
+    customer: User | None,
+    visitor_id: str | None,
+) -> Order:
+    """Take the order. Nothing is reserved, because nothing is finite.
 
-    pieces = list(await db.scalars(query))
-    if len(pieces) < line.quantity:
-        raise conflict(
-            f"We have {len(pieces)} of '{product.title_en}' — we made that many"
-        )
-    for piece in pieces:
-        piece.state = PieceState.reserved
-    return pieces
+    This used to lock and reserve `Piece` rows for anything filed as `shelf`,
+    and refuse the line when there were not enough. The shop does not count
+    units — an order can never be short, and no row is taken off anything.
 
+    What is new here: the buyer's *choices* travel with the order. Their
+    fingerprint lands on `Order.visitor_id` (the join key that lets a customer
+    bucket collect their hearts and saves), the attributes they picked are
+    frozen as JSON on each line, and their name — capped at 20 characters —
+    goes on the line the workshop actually reads. The personalization markup
+    is applied here on the server, from `Product.personalization_markup_pct`,
+    so a client that lies about the markup still gets billed correctly.
 
-async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | None) -> Order:
+    `release_stale_reservations` still runs, for orders placed before this
+    changed that are still holding pieces. It is a no-op once they are done.
+    """
+    await release_stale_reservations(db)
+
     seen = {(line.product_id, line.variant_id) for line in body.items}
     if len(seen) != len(body.items):
         raise bad_request("The same piece appears twice in the cart")
@@ -113,48 +163,61 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
             if variant is None:
                 raise conflict("That option is no longer available")
 
-        unit_price = Decimal(variant.price if variant and variant.price is not None else product.price)
+        # Discount is applied by the server (see `Product.effective_price`),
+        # so a variant override still wins when it is set — that is how the
+        # catalogue has always worked — but the base price is the reduced one.
+        base_price = variant.price if variant and variant.price is not None else product.effective_price()
+        unit_price = Decimal(str(base_price))
 
-        if product.kind is ProductKind.shelf:
-            pieces = await _take_pieces(db, product, line)
-            # One line per physical object: the customer is buying piece 04 of
-            # 12, not "one of them".
-            for piece in pieces:
-                subtotal += unit_price
-                lines.append(
-                    OrderItem(
-                        product_id=product.id,
-                        variant_id=variant.id if variant else None,
-                        piece_id=piece.id,
-                        title=product.title(body.lang),
-                        variant_label=variant.option(body.lang) if variant else "",
-                        piece_label=piece.label if product.show_piece_numbers else "",
-                        unit_price=unit_price,
-                        quantity=1,
-                        subtotal=unit_price,
-                        image_url=piece.photo_url or primary_image(product),
-                    )
-                )
-        else:
-            line_total = unit_price * line.quantity
-            subtotal += line_total
-            lines.append(
-                OrderItem(
-                    product_id=product.id,
-                    variant_id=variant.id if variant else None,
-                    piece_id=None,
-                    title=product.title(body.lang),
-                    variant_label=variant.option(body.lang) if variant else "",
-                    # What we promised, on the day we promised it.
-                    lead_time_days=product.lead_time_days,
-                    unit_price=unit_price,
-                    quantity=line.quantity,
-                    subtotal=line_total,
-                    image_url=primary_image(product),
-                )
+        # Personalization: only if the piece allows it, and only if the buyer
+        # actually typed something. The markup is applied here rather than on
+        # the client so a rewritten checkout body still pays the right price.
+        personalization = (line.personalization or "").strip() or None
+        if personalization and not product.personalizable:
+            raise conflict(f"'{product.title_en}' cannot be personalised")
+        if personalization:
+            markup = Decimal(str(product.personalization_markup_pct or 0))
+            unit_price = (unit_price * (Decimal("100") + markup) / Decimal("100")).quantize(Decimal("0.01"))
+
+        line_total = unit_price * line.quantity
+        subtotal += line_total
+
+        # Snapshot of what they picked, so a typo corrected on a colour next
+        # month never rewrites this row. Empty list stored as null so the
+        # column reads honestly.
+        selection = [item.model_dump() for item in line.selection] or None
+
+        lines.append(
+            OrderItem(
+                product_id=product.id,
+                variant_id=variant.id if variant else None,
+                piece_id=None,
+                title=product.title(body.lang),
+                variant_label=variant.option(body.lang) if variant else "",
+                # What we promised, on the day we promised it. `delivery_days`
+                # is the field the console edits; `lead_time_days` is what old
+                # rows carry.
+                lead_time_days=product.delivery_days or product.lead_time_days,
+                unit_price=unit_price,
+                quantity=line.quantity,
+                subtotal=line_total,
+                image_url=primary_image(product),
+                selection=selection,
+                personalization=personalization,
             )
+        )
 
-    fee = delivery_fee_for(subtotal)
+    fee = await delivery_fee_for(db, subtotal, body.address.city)
+
+    # The date the countdown counts to, defaulted from the slowest promise on
+    # the order — a mixed cart is only as fast as its slowest line. Left null
+    # when nothing on the order carries a promise at all, rather than
+    # inventing one.
+    promises = [item.lead_time_days for item in lines if item.lead_time_days]
+    promised_for = (
+        (datetime.now(UTC).date() + timedelta(days=max(promises))) if promises else None
+    )
+
     order = Order(
         reference=new_order_reference(),
         tracking_token=new_tracking_token(),
@@ -162,12 +225,14 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
         customer_name=body.full_name,
         customer_phone=body.phone,
         customer_email=body.email,
+        visitor_id=visitor_id,
         lang=body.lang,
         address=body.address.model_dump(),
         city=body.address.city,
         subtotal=subtotal,
         delivery_fee=fee,
         total=subtotal + fee,
+        promised_for=promised_for,
         items=lines,
         events=[OrderEvent(status=OrderStatus.placed, actor="customer")],
     )
@@ -175,7 +240,7 @@ async def place_order(db: AsyncSession, body: CheckoutRequest, customer: User | 
     await db.commit()
     await db.refresh(order)
 
-    await notify_order_status(db, order)
+    await notify_order_status(order)
     return order
 
 
@@ -204,5 +269,60 @@ async def change_status(
     await db.commit()
     await db.refresh(order)
 
-    await notify_order_status(db, order)
+    await notify_order_status(order)
     return order
+
+
+async def set_promise(db: AsyncSession, order: Order, promised_for: date) -> Order:
+    """Move the date the countdown counts to.
+
+    A promise made on the day the order was placed sometimes has to move —
+    a supplier is late, a piece takes longer than expected — and the number
+    on the customer's tracking page should always be the one that is still
+    true, not the one that was true on day one.
+    """
+    order.promised_for = promised_for
+    await db.commit()
+    await db.refresh(order)
+    return order
+
+
+async def hide_order(db: AsyncSession, order: Order) -> Order:
+    """Archive it out of the console's default view. Reversible, and never
+    read by anything the customer can see — see `Order.hidden_at`."""
+    if order.hidden_at is None:
+        order.hidden_at = datetime.now(UTC)
+        await db.commit()
+        await db.refresh(order)
+    return order
+
+
+async def unhide_order(db: AsyncSession, order: Order) -> Order:
+    if order.hidden_at is not None:
+        order.hidden_at = None
+        await db.commit()
+        await db.refresh(order)
+    return order
+
+
+async def item_categories(db: AsyncSession, orders: list[Order]) -> dict[str, tuple[str | None, str | None]]:
+    """Category · sub-category for every line item across a page of orders,
+    resolved in one query rather than one per item.
+
+    Reuses `catalog.service.category_names` so an order line and the product
+    admin table describe a category the same way. Returns an empty pair for a
+    product that has since been archived or deleted — the order still has to
+    read, it just cannot say what it no longer knows.
+    """
+    from app.models import Category
+    from app.modules.catalog import service as catalog_service
+
+    product_ids = {item.product_id for order in orders for item in order.items}
+    if not product_ids:
+        return {}
+    rows = await db.scalars(
+        select(Product)
+        .where(Product.id.in_(product_ids))
+        .options(selectinload(Product.category).selectinload(Category.parent))
+    )
+    return {product.id: catalog_service.category_names(product) for product in rows.unique()}
