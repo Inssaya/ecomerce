@@ -101,7 +101,10 @@ class FindOrder(BaseModel):
 
 
 class OrderItemResponse(BaseModel):
-    product_id: str
+    #: Null on a custom-request line — it was described, not chosen from the
+    #: catalogue. Typed non-null here until that became possible, which would
+    #: have turned the first such order into a 500 on read.
+    product_id: str | None = None
     variant_id: str | None = None
     piece_id: str | None = None
     title: str

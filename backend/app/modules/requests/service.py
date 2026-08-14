@@ -127,18 +127,22 @@ async def approve(
         # entry to reassure them, only this date.
         promised_for=request.promised_for,
         note=request.description[:500],
+        # Always one line, and always without a product behind it.
+        #
+        # This used to be built only `if request.product_id`, which meant it
+        # was never built at all: a custom request starts from the customer's
+        # own idea, so there is no catalogue row to point at. Every approved
+        # request became an order with a total and nothing in it.
         items=[
             OrderItem(
-                product_id=request.product_id,
+                product_id=None,
                 title=request.description[:300],
                 unit_price=price,
                 quantity=1,
                 subtotal=price,
                 lead_time_days=request.lead_time_days,
             )
-        ]
-        if request.product_id
-        else [],
+        ],
         events=[OrderEvent(status=OrderStatus.placed, actor="customer")],
     )
     db.add(order)

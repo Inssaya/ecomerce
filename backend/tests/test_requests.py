@@ -110,6 +110,17 @@ async def test_nothing_is_owed_until_the_customer_approves(
 async def test_the_order_raised_on_approval_charges_the_quoted_price(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
+    """The money, and the thing the money is for.
+
+    The second half of this test is the part that matters. Every assertion
+    here used to be about totals, and the order was being written with **no
+    line items at all** — `approve()` built one only `if request.product_id`,
+    which a custom request never has. Totals were right, the order was empty,
+    and every test in this file passed.
+
+    The rule that follows: an order test asserts on what was sold, not only on
+    what it came to.
+    """
     request = await ask(client)
     await client.post(
         f"/api/admin/requests/{request['reference']}/quote",
@@ -124,9 +135,20 @@ async def test_the_order_raised_on_approval_charges_the_quoted_price(
         f"/api/admin/orders/{request['reference']}", headers=owner_headers
     )
     assert order.status_code == 200, order.text
-    assert order.json()["subtotal"] == 260.0
-    assert order.json()["delivery_fee"] == 0.0
-    assert order.json()["total"] == 260.0
+    body = order.json()
+    assert body["subtotal"] == 260.0
+    assert body["delivery_fee"] == 0.0
+    assert body["total"] == 260.0
+
+    # One line, carrying what they asked for at the price that was agreed.
+    assert len(body["items"]) == 1, "an approved request must produce a sellable line"
+    line = body["items"][0]
+    assert line["unit_price"] == 260.0
+    assert line["quantity"] == 1
+    assert line["subtotal"] == 260.0
+    # Described, not catalogued — there is no product behind a custom line.
+    assert line["product_id"] is None
+    assert line["title"].startswith("A bracket to hold a shelf")
 
 
 async def test_approving_something_never_quoted_is_refused(client: AsyncClient) -> None:

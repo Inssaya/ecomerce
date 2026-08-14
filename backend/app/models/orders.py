@@ -120,8 +120,13 @@ class OrderItem(Base):
 
     id: Mapped[str] = uuid_pk()
     order_id: Mapped[str] = uuid_fk("orders.id")
-    product_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
+    #: Null for a custom-request line. A custom request starts from the
+    #: customer's own idea, not a catalogue entry — there is no product row for
+    #: "a lamp like this, but in brass" — so the line carries the description
+    #: and the agreed price instead. `RESTRICT` still protects the store lines
+    #: that do point at a product: an order must stay reconstructable.
+    product_id: Mapped[str | None] = mapped_column(
+        UUID(as_uuid=False), ForeignKey("products.id", ondelete="RESTRICT"), nullable=True, index=True
     )
     variant_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),

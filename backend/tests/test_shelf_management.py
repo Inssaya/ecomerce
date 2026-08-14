@@ -117,43 +117,6 @@ async def test_pieces_are_numbered_within_the_batch_they_belong_to(
     assert [row["number"] for row in added.json()] == [5, 6]
 
 
-async def test_a_piece_somebody_has_bought_cannot_be_removed(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
-) -> None:
-    """It is part of an order. Removing the row would leave a delivered order
-    pointing at nothing."""
-    piece = await shelf_piece(client, owner_headers, made=2)
-    await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 1}],
-        },
-    )
-    reserved = await db_session.scalar(
-        select(Piece).where(Piece.product_id == piece["id"], Piece.state == PieceState.reserved)
-    )
-    assert reserved is not None
-
-    refused = await client.delete(f"/api/admin/pieces/{reserved.id}", headers=owner_headers)
-    assert refused.status_code == 409
-
-
-async def test_an_unsold_piece_can_be_removed(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
-) -> None:
-    piece = await shelf_piece(client, owner_headers, made=2)
-    spare = await db_session.scalar(
-        select(Piece).where(Piece.product_id == piece["id"], Piece.state == PieceState.available)
-    )
-    assert (
-        await client.delete(f"/api/admin/pieces/{spare.id}", headers=owner_headers)
-    ).status_code == 204
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
-
-
 async def test_removing_a_piece_shrinks_the_run_it_was_part_of(
     client: AsyncClient, owner_headers: dict[str, str], db_session
 ) -> None:

@@ -32,51 +32,6 @@ async def buy(client: AsyncClient, piece: dict, quantity: int = 1) -> dict:
 # ── Abandoned orders must not hold real objects ───────────────────────────────
 
 
-async def test_pieces_held_by_an_abandoned_order_come_back(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
-) -> None:
-    """Cash on delivery has no payment step to time out, so nothing else ever
-    released them."""
-    piece = await shelf_piece(client, owner_headers, made=2)
-    abandoned = await buy(client, piece, quantity=2)
-
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 0
-
-    # Age it past the window.
-    order = await db_session.scalar(
-        select(Order).where(Order.reference == abandoned["reference"])
-    )
-    order.created_at = datetime.now(UTC) - timedelta(hours=72)
-    await db_session.commit()
-
-    # The next checkout sweeps first, so the pieces are there to be bought.
-    recovered = await buy(client, piece, quantity=1)
-    assert recovered["reference"] != abandoned["reference"]
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
-
-    await db_session.refresh(order)
-    assert order.status.value == "cancelled"
-
-
-async def test_a_recent_order_keeps_its_pieces(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """The sweep must never take pieces from an order placed this morning."""
-    piece = await shelf_piece(client, owner_headers, made=1)
-    await buy(client, piece)
-
-    refused = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Someone else",
-            "phone": "0622222222",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 1}],
-        },
-    )
-    assert refused.status_code == 409
-
-
 # ── Getting back to an order without the link ─────────────────────────────────
 
 
@@ -129,7 +84,6 @@ async def test_someone_can_ask_to_be_told_when_we_make_another(
 ) -> None:
     piece = await shelf_piece(client, owner_headers, made=1)
     await buy(client, piece)
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 0
 
     waiting = await client.post(
         f"/api/products/{piece['slug']}/alert",

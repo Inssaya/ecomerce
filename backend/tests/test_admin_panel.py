@@ -72,8 +72,8 @@ async def test_money_collected_counts_only_what_was_delivered(
     await walk(client, owner_headers, delivered, *TO_THE_DOOR, "delivered")
     money = (await client.get("/api/admin/money", headers=owner_headers)).json()
     assert money["revenue"]["orders_delivered"] == 1
-    assert money["revenue"]["collected_mad"] == 210.0  # 180 + 30 delivery
-    assert money["revenue"]["average_order_mad"] == 210.0
+    assert money["revenue"]["collected_mad"] == 180.0  # delivery is free on everything
+    assert money["revenue"]["average_order_mad"] == 180.0
 
 
 async def test_the_refusal_rate_is_the_number_that_decides_the_business(
@@ -148,18 +148,6 @@ async def test_decide_answers_what_should_i_make_next(
     assert searched["brass lamp"] == 2
 
 
-async def test_decide_flags_what_is_running_out(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    plenty = await shelf_piece(client, owner_headers, title="Plenty left", made=9)
-    scarce = await shelf_piece(client, owner_headers, title="Nearly gone", made=1)
-
-    decide = (await client.get("/api/admin/decide", headers=owner_headers)).json()
-    running_out = {row["slug"] for row in decide["shelf"]["running_out"]}
-    assert scarce["slug"] in running_out
-    assert plenty["slug"] not in running_out
-
-
 async def test_best_sellers_rank_by_money_actually_collected(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
@@ -200,7 +188,9 @@ async def test_every_number_can_explain_itself_in_both_languages(
 ) -> None:
     """A metric nobody understands changes no decision."""
     english = (await client.get("/api/admin/explain", headers=owner_headers)).json()
-    assert {row["name"] for row in english} >= {"refusal_rate", "average_order", "not_moving"}
+    # `not_moving` was here too, until the shelf panel it explained was deleted
+    # for counting stock this shop does not keep.
+    assert {row["name"] for row in english} >= {"refusal_rate", "average_order"}
     assert all(row["explanation"] for row in english)
 
     arabic = (await client.get("/api/admin/explain?lang=ar", headers=owner_headers)).json()
@@ -276,8 +266,8 @@ async def test_customers_lists_guests_and_registered_accounts_separately(
     assert guest["has_account"] is False
     assert guest["created_account_at"] is None
     assert guest["is_active"] is None
-    assert guest["time_on_site_seconds"] is None  # no visitor_id on Order — decided out of scope
-    assert guest["revenue_mad"] == 210.0  # 180 + 30 delivery
+    assert guest["time_on_site_seconds"] is None  # nothing browsed in this test
+    assert guest["revenue_mad"] == 180.0  # delivery is free on everything
     assert guest["products_bought"] == 1
 
     assert account["has_account"] is True
@@ -303,7 +293,7 @@ async def test_customers_split_bought_from_cancelled(
     assert row["orders_count"] == 2
     assert row["products_bought"] == 1
     assert row["products_cancelled"] == 1
-    assert row["revenue_mad"] == 210.0  # only the delivered one counts (180 + 30 delivery)
+    assert row["revenue_mad"] == 180.0  # only the delivered one counts; delivery is free
 
 
 async def test_customers_can_be_searched(

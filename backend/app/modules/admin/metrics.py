@@ -341,47 +341,16 @@ async def what_to_make_next(db: AsyncSession, period: Period) -> dict:
     }
 
 
-async def shelf_state(db: AsyncSession) -> dict:
-    """What is running out and what is not moving.
-
-    Dead stock is capital sitting on a bench. In a workshop it is worse than in
-    a shop, because it is also machine hours that could have made something
-    someone wanted.
-    """
-    rows = (
-        await db.execute(
-            select(
-                Product.id,
-                Product.title_en,
-                Product.slug,
-                func.count(Piece.id).filter(Piece.state == PieceState.available).label("available"),
-                func.count(Piece.id).filter(Piece.state == PieceState.sold).label("sold"),
-                Product.created_at,
-            )
-            .join(Piece, Piece.product_id == Product.id, isouter=True)
-            .where(Product.status == ProductStatus.active, Product.kind == "shelf")
-            .group_by(Product.id)
-        )
-    ).all()
-
-    running_out, not_moving = [], []
-    stale_before = date.today() - timedelta(days=45)
-    for product_id, title, slug, available, sold, created_at in rows:
-        # The id was selected and then discarded, so every shelf row named a
-        # piece the owner had no way to open. It is the whole point of the row.
-        entry = {"product_id": product_id, "title": title, "slug": slug, "available": available, "sold": sold}
-        if available == 0:
-            entry["note"] = "nothing left"
-            running_out.append(entry)
-        elif available <= 2:
-            running_out.append(entry)
-        elif sold == 0 and created_at.date() < stale_before:
-            not_moving.append(entry)
-
-    return {
-        "running_out": sorted(running_out, key=lambda row: row["available"]),
-        "not_moving": sorted(not_moving, key=lambda row: -row["available"]),
-    }
+# `shelf_state()` used to live here — "what is running out and what is not
+# moving", counted from `Piece` rows. It is gone because it had started
+# lying: pieces stopped being created when the shop dropped stock, so every
+# active product reported `available = 0` and was filed under "running out"
+# with the note "nothing left". The Board showed an empty shop and led with
+# "47 pieces are running out" over a catalogue that was entirely fine.
+#
+# There is nothing to replace it with. A shop that makes what is ordered
+# cannot run out, and "not moving" is answered by `best_sellers` from the
+# other end.
 
 
 async def best_sellers(db: AsyncSession, period: Period, limit: int = 10) -> dict:
@@ -544,12 +513,5 @@ KPI_EXPLANATIONS: dict[str, tuple[str, str]] = {
         "Out of every hundred people who visited, how many ordered. Low single digits are "
         "normal. Watch which way it moves, not what it is.",
         "من كل مئة زائر، كم واحداً طلب. الأرقام المنخفضة طبيعية. المهم اتجاه الرقم لا قيمته.",
-    ),
-    "not_moving": (
-        "Pieces on the shelf that nobody has bought in six weeks. In a workshop this is worse "
-        "than in a shop: it is not only money sitting there, it is machine hours that could "
-        "have made something someone actually wanted.",
-        "قطع على الرف لم يشترها أحد منذ ستة أسابيع. في الورشة هذا أسوأ منه في المتجر: ليست "
-        "أموالاً معطّلة فحسب، بل ساعات آلة كان يمكن أن تصنع شيئاً يريده أحدهم فعلاً.",
     ),
 }

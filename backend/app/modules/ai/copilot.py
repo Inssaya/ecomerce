@@ -60,9 +60,6 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
     async def what_to_make_next(date_from: str | None = None, date_to: str | None = None) -> dict:
         return await metrics.what_to_make_next(db, period_from(date_from, date_to))
 
-    async def get_shelf_state() -> dict:
-        return await metrics.shelf_state(db)
-
     async def get_best_sellers(
         date_from: str | None = None, date_to: str | None = None, limit: int = 10
     ) -> dict:
@@ -101,7 +98,6 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
         "get_refusals": get_refusals,
         "get_conversion": get_conversion,
         "what_to_make_next": what_to_make_next,
-        "get_shelf_state": get_shelf_state,
         "get_best_sellers": get_best_sellers,
         "get_funnel": get_funnel,
         "get_piece_performance": get_piece_performance,
@@ -128,7 +124,6 @@ def build(db: AsyncSession, *, lang: str) -> Toolbox:
             "What people asked us to make, searched for, and which categories pull attention.",
             _PERIOD,
         ),
-        spec("get_shelf_state", "What is running out and what has not sold in six weeks.", {}),
         spec(
             "get_funnel",
             "Where people stop: came, saw a piece, opened one, read it, carted it, ordered. "

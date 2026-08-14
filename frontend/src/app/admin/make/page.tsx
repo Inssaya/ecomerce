@@ -76,8 +76,6 @@ export default function WhatToMake() {
   const searchedNothing = analytics.data?.unmet.searched_and_found_nothing ?? [];
   const asked = decide.data?.demand.people_asked_us_to_make ?? [];
   const categories = decide.data?.demand.categories_earning_attention ?? [];
-  const runningOut = decide.data?.shelf.running_out ?? [];
-  const notMoving = decide.data?.shelf.not_moving ?? [];
   const bestSellers = decide.data?.best_sellers.pieces ?? [];
   const rows = forecast.data?.items.filter((row) => row.expected > 0) ?? [];
   const horizon = forecast.data?.horizon_days ?? 7;
@@ -165,45 +163,11 @@ export default function WhatToMake() {
               )}
             </Card>
 
-            {/* ── The shelf as it stands ──────────────────────────────────── */}
-            <div className="console-grid console-grid-2">
-              <Card>
-                <CardHead title="Running out" sub="Two left or fewer." />
-                {runningOut.length === 0 ? (
-                  <p className="console-muted">Nothing is running low.</p>
-                ) : (
-                  <ul className="console-stack-sm">
-                    {runningOut.slice(0, 10).map((row) => (
-                      <li key={row.slug} className="console-row-between" style={{ fontSize: "var(--t-md)" }}>
-                        <PieceLink productId={row.product_id} title={row.title} />
-                        <Pill tone={row.available === 0 ? "danger" : "warning"}>
-                          {row.available === 0 ? "none left" : `${row.available} left`}
-                        </Pill>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-
-              <Card>
-                <CardHead
-                  title="Not moving"
-                  sub="Made over six weeks ago and never sold — machine hours that could have made something someone wanted."
-                />
-                {notMoving.length === 0 ? (
-                  <p className="console-muted">Nothing is sitting.</p>
-                ) : (
-                  <ul className="console-stack-sm">
-                    {notMoving.slice(0, 10).map((row) => (
-                      <li key={row.slug} className="console-row-between" style={{ fontSize: "var(--t-md)" }}>
-                        <PieceLink productId={row.product_id} title={row.title} />
-                        <span className="console-muted console-num">{row.available} on the shelf</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </Card>
-            </div>
+            {/* "Running out" and "Not moving" used to sit here. Both counted
+                pieces on a shelf, and this shop keeps no stock — so every
+                product reported none left and the pair said the catalogue was
+                empty. What is worth making is answered by demand above and by
+                what actually sells below. */}
 
             {/* ── The next N days ─────────────────────────────────────────── */}
             {forecast.data ? (

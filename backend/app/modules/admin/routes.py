@@ -65,17 +65,15 @@ async def today(
     period = _period(date_from, date_to, 30)
     scope = metrics.Scope(category_id=category_id, product_id=product_id)
 
-    now, wallet, audience, funnel, shelf = (
+    now, wallet, audience, funnel = (
         await metrics.pulse(db),
         await metrics.money_block(db, period, scope),
         await analytics_service.audience(db, period, scope),
         await analytics_service.funnel(db, period, scope),
-        await metrics.shelf_state(db),
     )
 
     refusals = wallet["refusals"]
     revenue = wallet["revenue"]
-    running_out = len(shelf["running_out"])
 
     # Enough deliveries to draw a conclusion from? One refusal out of two is
     # 50% and means nothing; saying so is worth more than a red number.
@@ -104,12 +102,6 @@ async def today(
             "value": str(now["open_orders"]),
             "sentence": "orders are still open.",
         }
-    elif running_out:
-        lead = {
-            "kind": "shelf",
-            "value": str(running_out),
-            "sentence": f"{'piece is' if running_out == 1 else 'pieces are'} running out.",
-        }
     else:
         lead = {
             "kind": "revenue",
@@ -123,7 +115,7 @@ async def today(
             **scope.as_dict(),
             # Named so the screen can label them rather than silently showing
             # shop-wide figures under a scoped heading.
-            "shop_wide": ["queue", "lead", "shelf"] if scope.active else [],
+            "shop_wide": ["queue", "lead"] if scope.active else [],
         },
         "lead": lead,
         "queue": {
@@ -165,15 +157,14 @@ async def decide(
 ) -> dict:
     """*What should I make next* — the only question a workshop really has.
 
-    Assembled in one response rather than four, because the answer is the four
-    read together: what people asked us for, what they searched and did not
-    find, what is running out, and what has been sitting there for six weeks.
+    Assembled in one response rather than two, because the answer is the two
+    read together: what people asked us for and searched for without finding,
+    against what is actually selling.
     """
     period = _period(date_from, date_to, 30)
     return {
         "period": period.as_dict(),
         "demand": await metrics.what_to_make_next(db, period),
-        "shelf": await metrics.shelf_state(db),
         "best_sellers": await metrics.best_sellers(db, period),
     }
 

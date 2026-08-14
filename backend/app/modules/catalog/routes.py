@@ -385,18 +385,15 @@ async def update_product(
     if changes.get("status") is ProductStatus.active:
         # BRAND.md §8, the real-photo rule: the image is the actual piece.
         # Nothing can prove a file is genuine, but nothing goes on sale
-        # without one.
+        # without one. This is the whole gate.
+        #
+        # A `delivery_days` requirement briefly lived here too and was wrong
+        # twice over: the delivery estimate is admin-only and deliberately not
+        # shown to anyone yet, so blocking publication on a number no customer
+        # will read stops the shop for no one's benefit. It also silently
+        # broke publishing for every product that had not been given one.
         if not product.media:
             raise bad_request("Add at least one photo of the piece before publishing it")
-        # The other half of §8: "ready in six days", never "soon". A workshop
-        # piece has this covered by the check constraint (`lead_time_days`); a
-        # shelf piece needs `delivery_days`. The old rule for shelf pieces was
-        # "add the pieces you made" — that was a stock check, and this shop
-        # does not track stock.
-        if product.kind is ProductKind.shelf:
-            promise = changes.get("delivery_days", product.delivery_days)
-            if not promise:
-                raise bad_request("Say how many days delivery takes before publishing this")
 
     if "category_id" in changes and changes["category_id"]:
         await get_or_404(db, Category, changes["category_id"], detail="Category not found")
