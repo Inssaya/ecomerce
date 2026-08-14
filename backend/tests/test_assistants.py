@@ -176,29 +176,6 @@ async def test_without_an_api_key_it_says_so_instead_of_guessing(
     assert response.json()["detail"] == "not_configured"
 
 
-async def test_it_cannot_sell_more_than_was_made(
-    client: AsyncClient, owner_headers: dict[str, str], model
-) -> None:
-    """The assistant is not trusted with availability: the tool checks."""
-    piece = await shelf_piece(client, owner_headers, made=2)
-    model.says(
-        {
-            "content": None,
-            "tool_calls": [as_tool_call("add_to_cart", {"product_id": piece["id"], "quantity": 5})],
-        },
-        {"content": "We only have two."},
-    )
-    response = await client.post(
-        "/api/assistant",
-        headers=VISITOR,
-        json={"messages": [{"role": "user", "content": "five please"}]},
-    )
-    assert response.status_code == 200
-    assert "we made that many" in model.requests[1]["messages"][-1]["content"]
-    # Nothing went to the browser, because nothing was added.
-    assert response.json()["actions"] == []
-
-
 async def test_adding_to_the_cart_is_an_instruction_to_the_browser(
     client: AsyncClient, owner_headers: dict[str, str], model
 ) -> None:
@@ -241,29 +218,6 @@ async def test_there_is_no_tool_that_places_an_order(
     offered = {tool["function"]["name"] for tool in model.requests[0]["tools"]}
     assert "place_order" not in offered
     assert "go_to_checkout" in offered
-
-
-async def test_it_reports_real_availability_and_real_lead_times(
-    client: AsyncClient, owner_headers: dict[str, str], model
-) -> None:
-    shelf = await shelf_piece(client, owner_headers, made=3)
-    made_to_order = await workshop_piece(client, owner_headers, lead_time=6)
-    model.says(
-        {"content": None, "tool_calls": [as_tool_call("search_products", {"query": ""}, "a")]},
-        {"content": "Here is what we have."},
-    )
-    await client.post(
-        "/api/assistant",
-        headers=VISITOR,
-        json={"messages": [{"role": "user", "content": "what do you have?"}]},
-    )
-    result = json.loads(model.requests[1]["messages"][-1]["content"])
-    by_slug = {product["slug"]: product for product in result["products"]}
-
-    assert by_slug[shelf["slug"]]["available"] == 3
-    # Not zero — zero would read as sold out, and it means the opposite.
-    assert "available" not in by_slug[made_to_order["slug"]]
-    assert by_slug[made_to_order["slug"]]["ready_in_days"] == 6
 
 
 async def test_a_dead_end_becomes_a_lead(

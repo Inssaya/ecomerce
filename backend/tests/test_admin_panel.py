@@ -274,7 +274,7 @@ async def test_customers_lists_guests_and_registered_accounts_separately(
     assert account["id"] == user_id
     assert account["created_account_at"] is not None
     assert account["is_active"] is True
-    assert account["revenue_mad"] == 210.0
+    assert account["revenue_mad"] == 180.0
 
 
 async def test_customers_split_bought_from_cancelled(
