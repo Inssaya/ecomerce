@@ -148,10 +148,12 @@ function MorePieces({
 }) {
   const ar = lang === "ar";
   return (
-    <section className="shell border-t border-rule pt-10 pb-16">
+    <section className="page-wide border-t border-sand pt-10 pb-16">
       {/* A rule and a label. The paragraph that used to sit here explained
           what "more of this kind" meant, which the heading already says. */}
-      <h2 className="eyebrow">{ar ? "من النوع نفسه" : "More of this kind"}</h2>
+      <h2 className="text-[13px] font-medium uppercase tracking-widest text-ink-soft">
+        {ar ? "من النوع نفسه" : "More of this kind"}
+      </h2>
       <ul className="mt-6 grid grid-cols-2 gap-x-3 gap-y-8 md:grid-cols-3 md:gap-x-5 xl:grid-cols-4">
         {pieces.map((piece) => (
           <li key={piece.id}>

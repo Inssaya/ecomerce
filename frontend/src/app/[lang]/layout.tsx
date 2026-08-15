@@ -6,7 +6,6 @@ import type { ReactNode } from "react";
 import "@/app/globals.css";
 import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
-import { AmbientProvider } from "@/components/ambient";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
 import { alternates, siteUrl } from "@/lib/server";
 
@@ -130,11 +129,9 @@ export default async function LangLayout({
       className={`${text.variable} ${arabic.variable} ${stamp.variable}`}
     >
       <body className={text.className}>
-        <AmbientProvider>
-          <CartProvider>
-            <Chrome lang={language}>{children}</Chrome>
-          </CartProvider>
-        </AmbientProvider>
+        <CartProvider>
+          <Chrome lang={language}>{children}</Chrome>
+        </CartProvider>
       </body>
     </html>
   );

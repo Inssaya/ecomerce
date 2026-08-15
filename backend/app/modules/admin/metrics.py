@@ -13,7 +13,8 @@ in the panel is worth as much as knowing that number and what drives it.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -39,6 +40,19 @@ REFUSED_STATUSES = (OrderStatus.failed, OrderStatus.returned)
 #: Money actually collected.
 PAID_STATUSES = (OrderStatus.delivered,)
 
+#: The shop is in Morocco; every "today" the panel reports is Morocco's today,
+#: not the container's. `date.today()` reads the process clock — UTC in every
+#: deployment here — so an order placed at 00:30 local (23:30 UTC the day
+#: before) was landing in yesterday's bucket for the whole first hour of every
+#: day. Morocco has not observed DST since 2018 except for a fixed reversion
+#: to UTC+0 during Ramadan, which is exactly the kind of rule `zoneinfo` gets
+#: right and a hardcoded `+1` gets wrong.
+SHOP_TZ = ZoneInfo("Africa/Casablanca")
+
+
+def _shop_today() -> date:
+    return datetime.now(SHOP_TZ).date()
+
 
 @dataclass(slots=True)
 class Period:
@@ -47,7 +61,7 @@ class Period:
 
     @classmethod
     def last(cls, days: int) -> Period:
-        today = date.today()
+        today = _shop_today()
         return cls(start=today - timedelta(days=days - 1), end=today)
 
     @property
@@ -117,7 +131,16 @@ WHOLE_SHOP = Scope()
 
 
 def _within(column, period: Period):
-    return column.between(period.start, period.end + timedelta(days=1))
+    """`>= start AND < end + 1 day`, not `BETWEEN`.
+
+    `BETWEEN` is inclusive on both ends, so a row at exactly `end + 1 day
+    00:00:00` matched this period *and* the next one — two adjacent periods
+    that should partition time were instead overlapping by one instant, and a
+    revenue figure summed over both double-counted whatever landed there.
+    """
+    end_exclusive = datetime.combine(period.end + timedelta(days=1), datetime.min.time())
+    start_inclusive = datetime.combine(period.start, datetime.min.time())
+    return (column >= start_inclusive) & (column < end_exclusive)
 
 
 def _scoped(query, scope: Scope, *, orders: bool = False):

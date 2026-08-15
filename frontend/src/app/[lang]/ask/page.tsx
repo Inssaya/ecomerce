@@ -13,36 +13,18 @@ import { type Lang, isLang } from "@/lib/i18n";
 /**
  * Custom orders.
  *
- * The form and nothing else. It used to open with a headline and a strapline
- * saying what the page was, and close with a three-step "what happens next"
- * panel — a screen and a half of reassurance wrapped around the one control
- * that does anything. Both are gone: somebody who clicked "Custom" already
- * knows what this page is for, and the promise that nothing is owed until they
- * agree a price is worth one line under the button, not a column beside it.
+ * The form and nothing else — no reassurance panel around the one control
+ * that does anything; the promise that nothing is owed until a price is
+ * agreed is one line under the button.
  *
- * What was actually broken, beyond the copy:
+ * Category chips are read from the API (`category_id`) rather than typed
+ * copy, so twenty wordings for "a lamp" resolve to one countable number.
+ * Photo attachments upload to `/requests/references` as they are chosen, so
+ * the URLs — not just filenames — land on `CustomRequest.references`.
  *
- * * **The attachments were fiction.** Files were read into browser memory and
- *   their *filenames* pasted into the description. The workshop got the text
- *   "Files: IMG_4471.jpg" and no picture, and the customer believed they had
- *   sent one. They now upload to `/requests/references` as they are chosen, and
- *   the URLs go on the request where `CustomRequest.references` has always
- *   expected them.
- * * **The page was English only.** Every string was hardcoded, on a site whose
- *   other half is Arabic, so an Arabic visitor met an English form.
- * * **The category chips were hardcoded**, under a comment claiming they were
- *   read from the API. They are now the shop's real lines of work, and the one
- *   the customer picks is sent as `category_id` — which is the whole point of
- *   that column: twenty wordings for "a lamp" become one countable number.
- * * **Every label was `sr-only`, with the placeholder standing in for it.** A
- *   placeholder disappears the moment you type, so a half-filled form is a
- *   column of anonymous boxes.
- * * The "preferred contact" pair was two pills, one of them a sentence long,
- *   which wrapped into a mess at every width under a laptop.
- *
- * Email is required alongside the phone. It was marked optional and the copy
- * said so, but a quote is a document — a price, a date, a mockup to approve —
- * and sending that to a phone number alone is how a custom order stalls.
+ * Email is required alongside phone: a quote is a document (price, date, a
+ * mockup to approve), and a document sent to a phone number alone is how a
+ * custom order stalls.
  */
 export default function AskPage({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = use(params);

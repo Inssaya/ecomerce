@@ -1,3 +1,4 @@
+import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_TEL } from "@/lib/contact";
 import { type Lang } from "@/lib/i18n";
 
 /**
@@ -21,14 +22,14 @@ export function BlockedScreen({ lang }: { lang: Lang }) {
           : "Contact support on this number"}
       </p>
       <p className="mt-1 stamp text-[17px] font-semibold" dir="ltr">
-        <a href="tel:+212623842535">0623842535</a>
+        <a href={`tel:${CONTACT_PHONE_TEL}`}>{CONTACT_PHONE}</a>
       </p>
       <p className="mt-3 text-[15px] text-ink-soft leading-relaxed">
         {ar ? "أو راسلنا على البريد التالي" : "Or leave an email"}
       </p>
       <p className="mt-1 text-[15px]" dir="ltr">
-        <a href="mailto:mostyle.service@gmail.com" className="underline underline-offset-4">
-          mostyle.service@gmail.com
+        <a href={`mailto:${CONTACT_EMAIL}`} className="underline underline-offset-4">
+          {CONTACT_EMAIL}
         </a>
       </p>
     </div>

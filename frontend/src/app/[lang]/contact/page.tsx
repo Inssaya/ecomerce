@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ContactComposer } from "@/components/ContactComposer";
 import { ChatPanel } from "@/components/ChatPanel";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 import { alternates, siteUrl, workshopPhone } from "@/lib/server";
 
@@ -49,7 +50,7 @@ export default async function ContactPage({
   const ar = lang === "ar";
   const digits = workshopPhone?.replace(/\D/g, "") ?? null;
   const whatsappHref = digits ? `https://wa.me/${digits}` : null;
-  const emailHref = "mailto:workshop@mostyle.ma";
+  const emailHref = `mailto:${CONTACT_EMAIL}`;
 
   return (
     <div className="page-wide pt-8 pb-16">

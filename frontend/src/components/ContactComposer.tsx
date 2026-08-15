@@ -3,9 +3,8 @@
 import { useMemo, useState } from "react";
 
 import { api, ApiError } from "@/lib/api";
+import { CONTACT_EMAIL } from "@/lib/contact";
 import { type Lang, translator } from "@/lib/i18n";
-
-const CONTACT_EMAIL = "workshop@mostyle.ma";
 
 export function ContactComposer({
   lang,

@@ -90,7 +90,18 @@ async def place_order(
     is applied here on the server, from `Product.personalization_markup_pct`,
     so a client that lies about the markup still gets billed correctly.
     """
-    seen = {(line.product_id, line.variant_id) for line in body.items}
+    # Personalization and the attribute selection are part of identity, not
+    # just quantity — two of the same mug, one engraved "Yassin" and one
+    # "Sara", are two different lines, not one line refused for repeating.
+    seen = {
+        (
+            line.product_id,
+            line.variant_id,
+            line.personalization,
+            tuple(sorted((item.group, item.name, item.value) for item in line.selection)),
+        )
+        for line in body.items
+    }
     if len(seen) != len(body.items):
         raise bad_request("The same piece appears twice in the cart")
 
@@ -118,11 +129,16 @@ async def place_order(
             if variant is None:
                 raise conflict("That option is no longer available")
 
-        # Discount is applied by the server (see `Product.effective_price`),
-        # so a variant override still wins when it is set — that is how the
-        # catalogue has always worked — but the base price is the reduced one.
-        base_price = variant.price if variant and variant.price is not None else product.effective_price()
-        unit_price = Decimal(str(base_price))
+        # Discount is applied by the server (see `Product.effective_price`).
+        # A priced variant overrides the product's price, not its discount —
+        # the same reduction the product's own price gets is applied to the
+        # variant's price too, so a product on 20% off still charges 20% off
+        # every variant of it, not the variant's untouched sticker price.
+        if variant and variant.price is not None:
+            discounted_ratio = Decimal(str(product.effective_price())) / Decimal(str(product.price))
+            unit_price = (Decimal(str(variant.price)) * discounted_ratio).quantize(Decimal("0.01"))
+        else:
+            unit_price = Decimal(str(product.effective_price()))
 
         # Personalization: only if the piece allows it, and only if the buyer
         # actually typed something. The markup is applied here rather than on

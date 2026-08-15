@@ -49,7 +49,7 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
               <li key={step} className="flex gap-3">
                 <div className="flex flex-col items-center">
                   <span
-                    className={`h-3 w-3 rounded-full transition-colors duration-gentle ${
+                    className={`h-3 w-3 rounded-full transition-colors ease-gentle ${
                       done ? "bg-clay" : "bg-sand"
                     }`}
                   />

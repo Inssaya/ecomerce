@@ -12,9 +12,9 @@ import { AdminShell } from "./AdminShell";
  * A sibling of `[lang]/layout.tsx`, not nested inside it — this owns its own
  * `<html>`/`<body>` because the real root layout is a passthrough. The owner
  * is one account and this screen is never bilingual, so none of the
- * storefront's Chrome, CartProvider, AmbientProvider, or Arabic font loads
- * here. Nor does the storefront's Tailwind theme — the console's palette and
- * type scale come entirely from `console.css`'s own custom properties.
+ * storefront's Chrome, CartProvider, or Arabic font loads here. Nor does the
+ * storefront's Tailwind theme — the console's palette and type scale come
+ * entirely from `console.css`'s own custom properties.
  */
 const display = Space_Grotesk({
   subsets: ["latin"],

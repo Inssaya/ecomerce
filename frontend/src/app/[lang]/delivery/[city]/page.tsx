@@ -205,7 +205,7 @@ export default async function CityLanding({
               <Link
                 key={item.slug}
                 href={`/${lang}/make/${item.slug}`}
-                className="card block p-4 shadow-soft active:scale-[0.99] transition-transform duration-gentle"
+                className="card block p-4 shadow-soft active:scale-[0.99] transition-transform ease-gentle"
               >
                 <h3 className="text-[16px] font-semibold">{item.name}</h3>
                 <p className="mt-1 text-[14px] text-ink-soft leading-relaxed">{item.summary}</p>
