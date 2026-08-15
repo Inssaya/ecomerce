@@ -75,9 +75,16 @@ async def test_a_category_cannot_be_its_own_parent(
     assert refused.status_code == 400
 
 
-async def test_variants_carry_their_own_price_and_availability(
+async def test_variants_carry_their_own_price(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
+    """A variant either inherits the product's price or overrides it.
+
+    This used to assert per-variant availability as well. The shop stopped
+    counting stock, so `available` is null everywhere by design and there is
+    nothing left to assert — the price behaviour is the part that still means
+    something.
+    """
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
@@ -98,31 +105,27 @@ async def test_variants_carry_their_own_price_and_availability(
     )
     assert medium.status_code == 201 and large.status_code == 201
 
-    # Two mediums made, one large.
-    for variant, quantity in ((medium.json()["id"], 2), (large.json()["id"], 1)):
-        response = await client.post(
-            f"/api/admin/products/{product['id']}/pieces",
-            headers=owner_headers,
-            json={"quantity": quantity, "variant_id": variant},
-        )
-        assert response.status_code == 201, response.text
-
     await client.patch(
         f"/api/admin/products/{product['id']}", headers=owner_headers, json={"status": "active"}
     )
     page = (await client.get(f"/api/products/{product['slug']}")).json()
 
-    assert page["available"] == 3
     by_option = {variant["option"]: variant for variant in page["variants"]}
     assert by_option["M"]["price"] == 200.0  # inherits the product price
     assert by_option["L"]["price"] == 220.0  # its own
-    assert by_option["M"]["available"] == 2
-    assert by_option["L"]["available"] == 1
 
 
-async def test_buying_a_variant_takes_a_piece_of_that_variant(
+async def test_buying_a_variant_records_which_one_was_bought(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
+    """The order line remembers the option the buyer chose.
+
+    Formerly `..._takes_a_piece_of_that_variant`: it also asserted that the
+    medium was decremented to zero and that a second one was refused with a
+    409. Nothing is reserved and no order is ever refused for want of stock,
+    so both halves are gone. What the line records is what still matters —
+    it is what the workshop reads when packing.
+    """
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
@@ -166,23 +169,6 @@ async def test_buying_a_variant_takes_a_piece_of_that_variant(
     assert order.status_code == 201, order.text
     assert order.json()["items"][0]["variant_id"] == medium["id"]
 
-    page = (await client.get(f"/api/products/{product['slug']}")).json()
-    by_option = {variant["option"]: variant["available"] for variant in page["variants"]}
-    assert by_option == {"M": 0, "L": 1}
-
-    # The medium is gone; asking for another one is refused, not silently
-    # served from the large.
-    refused = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Salma B.",
-            "phone": "0612345678",
-            "address": {"line1": "12 Rue des Oliviers", "city": "Casablanca"},
-            "items": [{"product_id": product["id"], "variant_id": medium["id"], "quantity": 1}],
-        },
-    )
-    assert refused.status_code == 409
-
 
 async def test_a_duplicate_sku_is_refused(
     client: AsyncClient, owner_headers: dict[str, str]
@@ -198,29 +184,6 @@ async def test_a_duplicate_sku_is_refused(
         f"/api/admin/products/{piece['id']}/variants", headers=owner_headers, json=body
     )
     assert clash.status_code == 409
-
-
-async def test_a_sold_piece_cannot_be_deleted(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """It is part of an order. Removing it would rewrite history."""
-    piece = await shelf_piece(client, owner_headers, made=1)
-    await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": {"line1": "1 Rue Zerktouni", "city": "Marrakech"},
-            "items": [{"product_id": piece["id"], "quantity": 1}],
-        },
-    )
-    pieces = (
-        await client.get(f"/api/admin/products/{piece['id']}/pieces", headers=owner_headers)
-    ).json()
-    refused = await client.delete(
-        f"/api/admin/pieces/{pieces[0]['id']}", headers=owner_headers
-    )
-    assert refused.status_code == 409
 
 
 async def test_made_to_order_pieces_have_no_shelf(

@@ -158,23 +158,6 @@ async def test_a_piece_nobody_has_bought_yet_is_not_forecast_at_zero(
 # ── What to do about it ───────────────────────────────────────────────────────
 
 
-async def test_it_says_how_many_to_make_when_the_shelf_will_not_cover_it(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """The recommendation covers the top of the range, not the middle: running
-    out costs a sale, one piece too many costs a shelf."""
-    piece = await shelf_piece(client, owner_headers, title="Fast hook", made=8)
-    for _ in range(5):
-        await buy(client, piece)
-
-    data = await forecast(client, owner_headers)
-    row = row_for(data, "Fast hook")
-    assert row["on_the_shelf"] == 3
-    assert row["make"] == max(row["range"][1] - 3, 0)
-    if row["make"]:
-        assert any(item["title"] == "Fast hook" for item in data["make_now"])
-
-
 async def test_made_to_order_is_never_short(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:

@@ -136,14 +136,11 @@ LEFT JOIN affinity_scaled a ON a.category_id = p.category_id
 LEFT JOIN product_embeddings e ON e.product_id = p.id
 LEFT JOIN popularity pop ON pop.product_id = p.id
 LEFT JOIN fatigue f ON f.product_id = p.id
+-- Published is the whole condition. This used to also demand either
+-- `kind = 'workshop'` or an available `pieces` row, which quietly excluded
+-- every shelf product once the shop stopped creating pieces — the feed
+-- returned made-to-order work and nothing else.
 WHERE p.status = 'active'
-  AND (
-      p.kind = 'workshop'
-      OR EXISTS (
-          SELECT 1 FROM pieces pc
-          WHERE pc.product_id = p.id AND pc.state = 'available'
-      )
-  )
 """
 )
 

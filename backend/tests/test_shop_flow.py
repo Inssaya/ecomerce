@@ -112,27 +112,6 @@ async def test_a_piece_cannot_be_published_without_a_photograph(
     assert "photo" in refused.json()["detail"].lower()
 
 
-async def test_a_shelf_piece_cannot_be_published_with_an_empty_shelf(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """Publishing with nothing made would be advertising an object that does
-    not exist — the thing this whole model is built to prevent."""
-    created = await client.post(
-        "/api/admin/products",
-        headers=owner_headers,
-        json={"kind": "shelf", "title_en": "Nothing made yet", "price": 100},
-    )
-    await photograph(client, owner_headers, created.json()["id"])
-
-    refused = await client.patch(
-        f"/api/admin/products/{created.json()['id']}",
-        headers=owner_headers,
-        json={"status": "active"},
-    )
-    assert refused.status_code == 400
-    assert "pieces you made" in refused.json()["detail"]
-
-
 async def test_a_made_to_order_piece_needs_a_real_lead_time(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
@@ -166,15 +145,13 @@ async def test_the_storefront_only_shows_published_pieces(
 async def test_the_two_offers_read_differently(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    """A shelf piece says how many are left. A made-to-order piece says how
-    long it takes — and says nothing about availability, because there is
-    nothing to run out of."""
+    """The two offers still read differently by kind and by lead time. Neither
+    reports availability any more — the shop does not count units."""
     shelf = await shelf_piece(client, owner_headers, made=3)
     workshop = await workshop_piece(client, owner_headers, lead_time=6)
 
     on_shelf = (await client.get(f"/api/products/{shelf['slug']}")).json()
     assert on_shelf["kind"] == "shelf"
-    assert on_shelf["available"] == 3
     assert on_shelf["lead_time_days"] is None
 
     made_to_order = (await client.get(f"/api/products/{workshop['slug']}")).json()
@@ -195,35 +172,6 @@ async def test_arabic_is_served_as_arabic(
     assert arabic["title"] == "خطّاف أسود مطفي"
     assert arabic["description"] == "مطبوع ومصقول يدوياً في الورشة."
     assert arabic["story"] == "طُبع ليلاً، ثم بُرد وزُيّت يدوياً."
-
-
-async def test_piece_numbers_are_shown_only_when_the_batch_earns_them(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """The rows exist either way. Numbering is presentation, not inventory."""
-    plain = await shelf_piece(client, owner_headers, made=3, numbered=False)
-    assert (await client.get(f"/api/products/{plain['slug']}")).json()["pieces"] == []
-
-    numbered = await shelf_piece(
-        client, owner_headers, title="Oiled walnut tray", made=3, numbered=True
-    )
-    shown = (await client.get(f"/api/products/{numbered['slug']}")).json()
-    assert [piece["label"] for piece in shown["pieces"]] == ["01/03", "02/03", "03/03"]
-
-
-async def test_growing_a_batch_renumbers_it_honestly(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """Making four more means the first four are part of a run of eight.
-    Still saying "01 of 4" would be inventing scarcity."""
-    piece = await shelf_piece(client, owner_headers, made=4, numbered=True)
-    await client.post(
-        f"/api/admin/products/{piece['id']}/pieces", headers=owner_headers, json={"quantity": 4}
-    )
-
-    shown = (await client.get(f"/api/products/{piece['slug']}")).json()
-    assert shown["available"] == 8
-    assert [item["label"] for item in shown["pieces"]][:2] == ["01/08", "02/08"]
 
 
 # ── Buying ────────────────────────────────────────────────────────────────────
@@ -251,27 +199,6 @@ async def test_checkout_prices_from_the_database_not_the_request(
     assert body["total"] == 360.0
 
 
-async def test_buying_a_shelf_piece_reserves_specific_objects(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    piece = await shelf_piece(client, owner_headers, made=3, numbered=True)
-    order = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 2}],
-        },
-    )
-    items = order.json()["items"]
-    # One line per object, lowest numbers first — you know which ones are yours.
-    assert len(items) == 2
-    assert [item["piece_label"] for item in items] == ["01/03", "02/03"]
-    assert all(item["piece_id"] for item in items)
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
-
-
 async def test_a_made_to_order_line_records_what_was_promised(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
@@ -289,79 +216,6 @@ async def test_a_made_to_order_line_records_what_was_promised(
     assert item["lead_time_days"] == 6
     assert item["piece_id"] is None
     assert item["quantity"] == 2
-
-
-async def test_you_cannot_buy_more_than_was_made(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """BRAND.md §10: three left because we made three."""
-    piece = await shelf_piece(client, owner_headers, made=3)
-    refused = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Nadia K.",
-            "phone": "0655555555",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 4}],
-        },
-    )
-    assert refused.status_code == 409
-    assert "3" in refused.json()["detail"]
-
-
-async def test_pieces_come_back_to_the_shelf_when_an_order_is_cancelled(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    piece = await shelf_piece(client, owner_headers, made=3)
-    order = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 2}],
-        },
-    )
-    reference = order.json()["reference"]
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
-
-    cancelled = await client.post(
-        f"/api/admin/orders/{reference}/status",
-        headers=owner_headers,
-        json={"status": "cancelled"},
-    )
-    assert cancelled.status_code == 200
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 3
-
-
-async def test_delivering_marks_the_pieces_sold_not_available(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    piece = await shelf_piece(client, owner_headers, made=2)
-    order = await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Hamza L.",
-            "phone": "0644444444",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 1}],
-        },
-    )
-    reference = order.json()["reference"]
-    for step in ("confirmed", "preparing", "ready", "out_for_delivery", "delivered"):
-        moved = await client.post(
-            f"/api/admin/orders/{reference}/status", headers=owner_headers, json={"status": step}
-        )
-        assert moved.status_code == 200, moved.text
-
-    assert (await client.get(f"/api/products/{piece['slug']}")).json()["available"] == 1
-    states = [
-        item["state"]
-        for item in (
-            await client.get(f"/api/admin/products/{piece['id']}/pieces", headers=owner_headers)
-        ).json()
-    ]
-    assert sorted(states) == ["available", "sold"]
 
 
 # ── The order's life ──────────────────────────────────────────────────────────
@@ -458,30 +312,3 @@ async def test_the_phone_number_is_normalised_to_something_dialable(
     assert order.json()["customer_phone"] == "0612345678"
 
 
-async def test_the_page_shows_what_was_made_not_only_what_is_left(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """Three of four struck through is honest scarcity you can see. A bare
-    "1 left" is a claim the visitor has to take on trust — and it is exactly
-    what every reseller's fake countdown looks like."""
-    piece = await shelf_piece(client, owner_headers, made=4, numbered=True)
-    await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": CASABLANCA,
-            "items": [{"product_id": piece["id"], "quantity": 3}],
-        },
-    )
-
-    page = (await client.get(f"/api/products/{piece['slug']}")).json()
-    assert page["available"] == 1
-    # The whole batch is still on the page, with what happened to each.
-    assert [item["label"] for item in page["pieces"]] == ["01/04", "02/04", "03/04", "04/04"]
-    assert [item["state"] for item in page["pieces"]] == [
-        "reserved",
-        "reserved",
-        "reserved",
-        "available",
-    ]

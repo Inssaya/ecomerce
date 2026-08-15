@@ -125,7 +125,10 @@ export interface Analytics {
   };
 }
 
-/** What to make next — four sources, in falling order of directness. */
+/** What to make next — demand from one end, what actually sells from the other.
+ *  `shelf` (running out / not moving) used to sit between them and is gone: it
+ *  counted stock this shop does not keep, so it reported every product as
+ *  "nothing left". */
 export interface Decide {
   period: Period;
   demand: {
@@ -133,10 +136,6 @@ export interface Decide {
     people_asked_us_to_make: string[];
     searched_for: { query: string; times: number }[];
     categories_earning_attention: { category: string; score: number }[];
-  };
-  shelf: {
-    running_out: { product_id: string; title: string; slug: string; available: number; sold: number; note?: string }[];
-    not_moving: { product_id: string; title: string; slug: string; available: number; sold: number }[];
   };
   best_sellers: {
     period: Period;

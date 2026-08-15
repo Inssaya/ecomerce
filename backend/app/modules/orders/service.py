@@ -268,11 +268,17 @@ async def item_categories(db: AsyncSession, orders: list[Order]) -> dict[str, tu
     admin table describe a category the same way. Returns an empty pair for a
     product that has since been archived or deleted — the order still has to
     read, it just cannot say what it no longer knows.
+
+    Custom-request lines carry no `product_id` at all, so they are dropped
+    before the query rather than turned into an `IN (NULL)` that matches
+    nothing and warns about it.
     """
     from app.models import Category
     from app.modules.catalog import service as catalog_service
 
-    product_ids = {item.product_id for order in orders for item in order.items}
+    product_ids = {
+        item.product_id for order in orders for item in order.items if item.product_id
+    }
     if not product_ids:
         return {}
     rows = await db.scalars(

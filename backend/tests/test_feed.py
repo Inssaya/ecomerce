@@ -201,41 +201,6 @@ async def test_a_piece_shown_over_and_over_sinks(
     assert after.index(seen["slug"]) > before.index(seen["slug"])
 
 
-async def test_the_feed_never_offers_something_that_is_gone(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """A shelf piece with nothing left must leave the feed. A made-to-order
-    piece never leaves it — there is nothing to run out of."""
-    sold_out = await publish(client, owner_headers, title="Last one", made=1)
-    created = await client.post(
-        "/api/admin/products",
-        headers=owner_headers,
-        json={"kind": "workshop", "title_en": "To order", "price": 300, "lead_time_days": 6},
-    )
-    await photograph(client, owner_headers, created.json()["id"])
-    await client.patch(
-        f"/api/admin/products/{created.json()['id']}",
-        headers=owner_headers,
-        json={"status": "active"},
-    )
-
-    slugs = {item["slug"] for item in (await client.get("/api/feed", headers=ALICE)).json()["items"]}
-    assert sold_out["slug"] in slugs
-
-    await client.post(
-        "/api/orders",
-        json={
-            "full_name": "Omar T.",
-            "phone": "0611111111",
-            "address": {"line1": "1 Rue Zerktouni", "city": "Marrakech"},
-            "items": [{"product_id": sold_out["id"], "quantity": 1}],
-        },
-    )
-    after = {item["slug"] for item in (await client.get("/api/feed", headers=ALICE)).json()["items"]}
-    assert sold_out["slug"] not in after
-    assert created.json()["slug"] in after
-
-
 # ── The owner's levers ────────────────────────────────────────────────────────
 
 
