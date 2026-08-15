@@ -98,6 +98,24 @@ export const workshopPhone = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER
   ? `+${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER.replace(/\D/g, "")}`
   : null;
 
+/**
+ * How to reach the shop — the owner's own email and phone, editable from the
+ * console (`/api/settings/contact`, `/api/admin/settings/contact`).
+ *
+ * Used to be four hardcoded copies of the same two values, in two different
+ * pairs, across as many files. `FALLBACK_CONTACT` in `lib/contact.ts` is what
+ * a page falls back to only if this fetch fails — the shop must still show
+ * *a* way to reach it if the API is briefly unreachable, but the settings row
+ * is the source of truth.
+ */
+export async function contact(
+  lang: Lang,
+): Promise<{ email: string; phone: string } | null> {
+  return fromApi<{ email: string; phone: string }>("/settings/contact", lang, {
+    revalidate: 300,
+  });
+}
+
 function apiBase(): string {
   return process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000";
 }

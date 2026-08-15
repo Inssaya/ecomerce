@@ -2,7 +2,9 @@
 
 Single owner, single workshop: there is no seller role, no marketplace, and no
 KYC queue — those tables and their review flow were deleted with the
-seller-service, not ported.
+seller-service, not ported. Verified against the rest of the codebase: `UserRole`
+below has only `owner` and `customer`; `models/orders.py`'s own docstring and
+`modules/auth/routes.py`'s independently confirm the same removal.
 
 An account is never required to buy. In a cash-on-delivery market the phone
 number is the identity that matters; an account only exists for the owner, and

@@ -1,12 +1,14 @@
 /**
- * The one address and number the shop gives out.
+ * The fallback shown only if `/api/settings/contact` cannot be reached.
  *
- * Written once because it was written four times, in two different pairs —
- * `workshop@mostyle.ma` twice and `mostyle.service@gmail.com` once, alongside
- * a phone number nowhere else repeated it against. `workshop@mostyle.ma` is
- * the domain the shop controls and what the customer-facing pages already
- * used, so it is the one that survives.
+ * The owner edits the real values from the console; this exists so a blocked
+ * visitor or a page rendered while the API is briefly down still sees *a* way
+ * to reach the shop, rather than a blank field. Do not read this directly for
+ * anything a visitor sees in the normal path — fetch the live value with
+ * `lib/server.ts`'s `contact()` (server components) or `api.contact()`
+ * (client components) instead.
  */
-export const CONTACT_EMAIL = "workshop@mostyle.ma";
-export const CONTACT_PHONE = "0623842535";
-export const CONTACT_PHONE_TEL = "+212623842535";
+export const FALLBACK_CONTACT = {
+  email: "workshop@mostyle.ma",
+  phone: "0623842535",
+};

@@ -51,6 +51,7 @@ const PAGES = [
   { href: "/admin/manage", label: "Products", active: true },
   { href: "/admin/manage/customers", label: "Customers" },
   { href: "/admin/manage/feed", label: "Feed" },
+  { href: "/admin/manage/settings", label: "Settings" },
 ];
 
 const STATUSES = [

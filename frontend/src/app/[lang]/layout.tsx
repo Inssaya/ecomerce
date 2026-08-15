@@ -6,8 +6,9 @@ import type { ReactNode } from "react";
 import "@/app/globals.css";
 import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
+import { FALLBACK_CONTACT } from "@/lib/contact";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
-import { alternates, siteUrl } from "@/lib/server";
+import { alternates, contact, siteUrl } from "@/lib/server";
 
 /**
  * One family for both scripts.
@@ -121,6 +122,7 @@ export default async function LangLayout({
   const { lang } = await params;
   if (!isLang(lang)) notFound();
   const language = lang as Lang;
+  const shopContact = (await contact(language)) ?? FALLBACK_CONTACT;
 
   return (
     <html
@@ -130,7 +132,9 @@ export default async function LangLayout({
     >
       <body className={text.className}>
         <CartProvider>
-          <Chrome lang={language}>{children}</Chrome>
+          <Chrome lang={language} contact={shopContact}>
+            {children}
+          </Chrome>
         </CartProvider>
       </body>
     </html>

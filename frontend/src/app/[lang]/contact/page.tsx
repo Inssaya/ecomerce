@@ -3,9 +3,9 @@ import Link from "next/link";
 
 import { ContactComposer } from "@/components/ContactComposer";
 import { ChatPanel } from "@/components/ChatPanel";
-import { CONTACT_EMAIL } from "@/lib/contact";
+import { FALLBACK_CONTACT } from "@/lib/contact";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { alternates, siteUrl, workshopPhone } from "@/lib/server";
+import { alternates, contact, siteUrl, workshopPhone } from "@/lib/server";
 
 /**
  * Where the workshop can be reached.
@@ -50,7 +50,8 @@ export default async function ContactPage({
   const ar = lang === "ar";
   const digits = workshopPhone?.replace(/\D/g, "") ?? null;
   const whatsappHref = digits ? `https://wa.me/${digits}` : null;
-  const emailHref = `mailto:${CONTACT_EMAIL}`;
+  const shopContact = (await contact(lang)) ?? FALLBACK_CONTACT;
+  const emailHref = `mailto:${shopContact.email}`;
 
   return (
     <div className="page-wide pt-8 pb-16">
@@ -62,7 +63,7 @@ export default async function ContactPage({
       <h1 className="sr-only">{t("navContact")}</h1>
 
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        <ContactComposer lang={lang} whatsappNumber={digits} />
+        <ContactComposer lang={lang} whatsappNumber={digits} contactEmail={shopContact.email} />
 
         <aside className="space-y-4">
           <Panel

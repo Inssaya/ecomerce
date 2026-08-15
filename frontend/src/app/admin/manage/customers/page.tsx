@@ -46,6 +46,7 @@ const PAGES = [
   { href: "/admin/manage", label: "Products" },
   { href: "/admin/manage/customers", label: "Customers", active: true },
   { href: "/admin/manage/feed", label: "Feed" },
+  { href: "/admin/manage/settings", label: "Settings" },
 ];
 
 export default function Customers() {

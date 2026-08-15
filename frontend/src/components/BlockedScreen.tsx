@@ -1,4 +1,3 @@
-import { CONTACT_EMAIL, CONTACT_PHONE, CONTACT_PHONE_TEL } from "@/lib/contact";
 import { type Lang } from "@/lib/i18n";
 
 /**
@@ -7,10 +6,22 @@ import { type Lang } from "@/lib/i18n";
  * Reached from `Chrome.tsx`, which listens for `BLOCKED_EVENT` and swaps its
  * children for this — the block itself is enforced server-side by the
  * blocklist middleware, this is only the explanation. The two ways to reach
- * a person are the owner's own words, not paraphrased.
+ * a person are the owner's own words, not paraphrased. `contact` is threaded
+ * down from `[lang]/layout.tsx`, which already fetched it for `Chrome`, so a
+ * blocked visitor is not the one request that has to hit the API a second
+ * time to learn how to reach the shop.
  */
-export function BlockedScreen({ lang }: { lang: Lang }) {
+export function BlockedScreen({
+  lang,
+  contact,
+}: {
+  lang: Lang;
+  contact: { email: string; phone: string };
+}) {
   const ar = lang === "ar";
+  // The stored phone is Morocco's normalised local form (0XXXXXXXXX); tel:
+  // needs the international form.
+  const phoneTel = `+212${contact.phone.replace(/^0/, "")}`;
   return (
     <div className="page pt-24 pb-16 text-center" dir={ar ? "rtl" : "ltr"}>
       <h1 className="text-[22px] font-semibold">
@@ -22,14 +33,14 @@ export function BlockedScreen({ lang }: { lang: Lang }) {
           : "Contact support on this number"}
       </p>
       <p className="mt-1 stamp text-[17px] font-semibold" dir="ltr">
-        <a href={`tel:${CONTACT_PHONE_TEL}`}>{CONTACT_PHONE}</a>
+        <a href={`tel:${phoneTel}`}>{contact.phone}</a>
       </p>
       <p className="mt-3 text-[15px] text-ink-soft leading-relaxed">
         {ar ? "أو راسلنا على البريد التالي" : "Or leave an email"}
       </p>
       <p className="mt-1 text-[15px]" dir="ltr">
-        <a href={`mailto:${CONTACT_EMAIL}`} className="underline underline-offset-4">
-          {CONTACT_EMAIL}
+        <a href={`mailto:${contact.email}`} className="underline underline-offset-4">
+          {contact.email}
         </a>
       </p>
     </div>

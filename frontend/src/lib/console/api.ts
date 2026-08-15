@@ -158,6 +158,13 @@ export const api = {
     call<AdminProduct>(`/admin/products/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   archiveProduct: (id: string) => call<void>(`/admin/products/${id}`, { method: "DELETE" }),
 
+  contact: () => call<{ email: string; phone: string }>("/settings/contact"),
+  updateContact: (body: { email: string; phone: string }) =>
+    call<{ email: string; phone: string }>("/admin/settings/contact", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+
   categories: () => call<AdminCategory[]>("/admin/categories"),
   createCategory: (body: { name_en: string; name_ar?: string; parent_id?: string | null; display_order?: number }) =>
     call<AdminCategory>("/admin/categories", { method: "POST", body: JSON.stringify(body) }),

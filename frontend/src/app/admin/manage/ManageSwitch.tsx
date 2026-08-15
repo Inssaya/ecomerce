@@ -19,15 +19,21 @@ const SECTIONS = [
   { value: "pieces" as const, label: "Products" },
   { value: "customers" as const, label: "Customers" },
   { value: "feed" as const, label: "Feed" },
+  { value: "settings" as const, label: "Settings" },
 ];
 
 const PATHS: Record<string, string> = {
   pieces: "/admin/manage",
   customers: "/admin/manage/customers",
   feed: "/admin/manage/feed",
+  settings: "/admin/manage/settings",
 };
 
-export function ManageSwitch({ current }: { current: "pieces" | "customers" | "feed" }) {
+export function ManageSwitch({
+  current,
+}: {
+  current: "pieces" | "customers" | "feed" | "settings";
+}) {
   const router = useRouter();
   return (
     <Segmented

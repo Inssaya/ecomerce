@@ -28,7 +28,15 @@ import { type Lang, translator } from "@/lib/i18n";
  * invitation to play with it and every message costs money at an AI provider,
  * so it lives on `/contact`, behind a sign-in.
  */
-export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) {
+export function Chrome({
+  lang,
+  contact,
+  children,
+}: {
+  lang: Lang;
+  contact: { email: string; phone: string };
+  children: ReactNode;
+}) {
   const t = translator(lang);
   const path = usePathname();
   const { count } = useCart();
@@ -225,7 +233,7 @@ export function Chrome({ lang, children }: { lang: Lang; children: ReactNode }) 
           marks sit on would shove the whole wall off-centre by exactly the
           width of the rail, which reads as a mistake rather than as a margin. */}
       <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>
-        {blocked ? <BlockedScreen lang={lang} /> : children}
+        {blocked ? <BlockedScreen lang={lang} contact={contact} /> : children}
       </main>
     </div>
   );

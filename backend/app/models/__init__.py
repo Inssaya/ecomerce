@@ -1,7 +1,6 @@
 """Every model in one package, so Alembic sees the whole schema at once."""
 from app.models.alerts import PieceAlert
 from app.models.base import BilingualMixin, TimestampMixin, new_id, uuid_fk, uuid_pk
-from app.models.contact import ContactMessage
 from app.models.catalog import (
     EMBEDDING_DIMENSIONS,
     AttributeGroup,
@@ -19,6 +18,7 @@ from app.models.catalog import (
     ProductStatus,
     ProductVariant,
 )
+from app.models.contact import ContactMessage
 from app.models.local import City, Service
 from app.models.orders import (
     ALLOWED_TRANSITIONS,
@@ -35,6 +35,7 @@ from app.models.requests import (
     RequestStatus,
 )
 from app.models.security import Blocklist, SecurityEvent, SecurityLevel
+from app.models.settings import SETTINGS_ID, ShopSettings
 from app.models.signals import (
     AFFINITY_HALF_LIFE_DAYS,
     DEFAULT_FEED_WEIGHTS,
@@ -88,6 +89,8 @@ __all__ = [
     "RefreshToken",
     "SecurityEvent",
     "SecurityLevel",
+    "SETTINGS_ID",
+    "ShopSettings",
     "Signal",
     "SignalType",
     "TimestampMixin",

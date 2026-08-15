@@ -316,6 +316,13 @@ export const api = {
 
   categories: (lang: Lang) => request<CategoryNode[]>(`/categories`, { lang }),
 
+  /** How to reach the shop. Owner-edited, read by any client component that
+   *  cannot use the server-side `lib/server.ts` `contact()` reader. Named
+   *  `shopContact` rather than `contact` — that name is already the contact
+   *  *form submission* call, below. */
+  shopContact: (lang: Lang) =>
+    request<{ email: string; phone: string }>(`/settings/contact`, { lang }),
+
   checkout: (lang: Lang, body: unknown) =>
     request<OrderView>("/orders", { lang, method: "POST", body: JSON.stringify(body) }),
 

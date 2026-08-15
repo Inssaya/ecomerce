@@ -3,15 +3,16 @@
 import { useMemo, useState } from "react";
 
 import { api, ApiError } from "@/lib/api";
-import { CONTACT_EMAIL } from "@/lib/contact";
 import { type Lang, translator } from "@/lib/i18n";
 
 export function ContactComposer({
   lang,
   whatsappNumber,
+  contactEmail,
 }: {
   lang: Lang;
   whatsappNumber: string | null;
+  contactEmail: string;
 }) {
   const t = translator(lang);
   const ar = lang === "ar";
@@ -67,7 +68,7 @@ export function ContactComposer({
   const whatsappHref = whatsappNumber
     ? `https://wa.me/${whatsappNumber.replace(/\D/g, "")}?text=${encodeURIComponent(draft)}`
     : null;
-  const mailHref = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}`;
+  const mailHref = `mailto:${contactEmail}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(draft)}`;
 
   return (
     <section className="rounded-[28px] border border-sand bg-surface p-5 sm:p-6">

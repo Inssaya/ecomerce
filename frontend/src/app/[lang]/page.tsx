@@ -12,9 +12,11 @@ import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/serve
  * buttons, no counters. The photographs start at the top of the page.
  *
  * The order is shuffled per visit, so the shelf does not always open on the
- * same six pieces. The seed is minted here, on the server, and handed to the
- * feed — every later page of this visit is drawn from that same arrangement,
- * which is the only way a shuffled list can be paged without repeating itself.
+ * same six pieces. The seed is minted here, on the server (`seed` below), and
+ * handed to `ProductFeed` — every later page of this visit is drawn from that
+ * same arrangement, which is the only way a shuffled list can be paged
+ * without repeating itself. Verified: the fetch on line ~55 and the
+ * `<ProductFeed seed={seed}>` prop both carry the same value minted here.
  */
 export const dynamic = "force-dynamic";
 

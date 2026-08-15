@@ -35,6 +35,7 @@ from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
 from app.modules.security import service as security_service
 from app.modules.security.routes import router as security_router
+from app.modules.settings.routes import router as settings_router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 logger = logging.getLogger("mostyle")
@@ -167,6 +168,7 @@ api.include_router(local_router)
 api.include_router(admin_router)
 api.include_router(ai_router)
 api.include_router(security_router)
+api.include_router(settings_router)
 app.include_router(api)
 
 
