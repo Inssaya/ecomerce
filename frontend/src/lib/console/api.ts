@@ -162,6 +162,14 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
+  /** Owner-only — includes `alert_emails`, which `contact()` (public) never does. */
+  adminSettings: () =>
+    call<{ email: string; phone: string; alert_emails: string }>("/admin/settings"),
+  updateAlertEmails: (alert_emails: string) =>
+    call<{ email: string; phone: string; alert_emails: string }>("/admin/settings/alerts", {
+      method: "PATCH",
+      body: JSON.stringify({ alert_emails }),
+    }),
 
   categories: () => call<AdminCategory[]>("/admin/categories"),
   createCategory: (body: { name_en: string; name_ar?: string; parent_id?: string | null; display_order?: number }) =>

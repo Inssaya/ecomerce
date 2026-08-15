@@ -19,12 +19,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.cache import get_redis
 from app.models import Blocklist, SecurityEvent, SecurityLevel
 from app.modules.notify.email import send_email
+from app.modules.settings import service as settings_service
 
 logger = logging.getLogger(__name__)
-
-#: Who hears about a `danger` event. Fixed addresses, not configuration —
-#: the owner asked for these two specifically.
-ALERT_RECIPIENTS = ("yassinsinif4@gmail.com", "Yassine.Sinif@emsi-edu.ma")
 
 #: An IP block always expires — an address can be a whole café, and a
 #: permanent ban there punishes strangers. A fingerprint block does not.
@@ -61,12 +58,15 @@ async def log(
     await db.commit()
     await db.refresh(event)
     if level is SecurityLevel.danger:
-        await _alert(event)
+        await _alert(db, event)
     return event
 
 
-async def _alert(event: SecurityEvent) -> None:
-    """Email the owner. Debounced so a flood is one email, not one per hit."""
+async def _alert(db: AsyncSession, event: SecurityEvent) -> None:
+    """Email whoever the owner has set to hear about this. Debounced so a
+    flood is one email, not one per hit. Recipients are
+    `ShopSettings.alert_emails`, admin-editable — not fixed addresses in
+    source, which is what this used to be."""
     debounce_key = f"sec-alert:{event.kind}:{event.ip or event.visitor_id or 'unknown'}"
     try:
         redis = get_redis()
@@ -79,6 +79,11 @@ async def _alert(event: SecurityEvent) -> None:
         # unreported — send anyway rather than staying quiet.
         logger.error("Alert debounce unavailable, sending anyway: %s", exc)
 
+    settings_row = await settings_service.get(db)
+    recipients = [address.strip() for address in settings_row.alert_emails.split(",") if address.strip()]
+    if not recipients:
+        return
+
     subject = f"[M-Style] {event.kind}"
     html = (
         f"<p><strong>{event.kind}</strong></p>"
@@ -87,7 +92,7 @@ async def _alert(event: SecurityEvent) -> None:
         f"IP: {event.ip or '—'} · Visitor: {event.visitor_id or '—'} · "
         f"{event.created_at.isoformat() if event.created_at else ''}</p>"
     )
-    for recipient in ALERT_RECIPIENTS:
+    for recipient in recipients:
         with suppress(Exception):
             await send_email(recipient, subject, html)
 

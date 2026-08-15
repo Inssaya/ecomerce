@@ -21,3 +21,11 @@ async def update(db: AsyncSession, *, email: str, phone: str) -> ShopSettings:
     await db.commit()
     await db.refresh(row)
     return row
+
+
+async def update_alert_emails(db: AsyncSession, *, alert_emails: str) -> ShopSettings:
+    row = await get(db)
+    row.alert_emails = alert_emails
+    await db.commit()
+    await db.refresh(row)
+    return row
