@@ -119,15 +119,6 @@ export interface ServicePage extends ServiceSummary {
   places: Place[];
 }
 
-/** What the workshop has actually made. Real counts, no rounding up. */
-export interface WorkshopNumbers {
-  pieces_made: number;
-  pieces_here: number;
-  on_the_shelf: number;
-  made_to_order: number;
-  last_made_on: string | null;
-}
-
 export interface OrderView {
   reference: string;
   tracking_token: string;
@@ -246,9 +237,6 @@ async function request<T>(
 }
 
 export const api = {
-  feed: (lang: Lang, page = 1) =>
-    request<{ items: Piece[]; page: number; has_more: boolean }>(`/feed?page=${page}`, { lang }),
-
   piece: (lang: Lang, slug: string) => request<PieceDetail>(`/products/${slug}`, { lang }),
 
   /**
@@ -276,11 +264,6 @@ export const api = {
         (seed === undefined ? "" : `&seed=${seed}`),
       { lang },
     ),
-
-  workshop: (lang: Lang) => request<WorkshopNumbers>("/workshop", { lang }),
-
-  search: (lang: Lang, query: string) =>
-    request<{ items: Piece[]; total: number }>(`/products?q=${encodeURIComponent(query)}`, { lang }),
 
   /** "Tell me when you make another." Phone only — nobody makes an account
    *  to be told about a hook. */

@@ -203,14 +203,6 @@ async def list_requests(
     return await _out_many(db, list(rows.unique()), lang)
 
 
-@router.get("/admin/requests/{reference}", response_model=RequestOut)
-async def read_request(reference: str, db: DbSession, owner: Owner, lang: Lang) -> RequestOut:
-    request = await get_or_404(
-        db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
-    )
-    return await _out(db, request, lang)
-
-
 @router.post("/admin/requests/{reference}/quote", response_model=RequestOut)
 async def send_quote(
     reference: str, body: Quote, db: DbSession, owner: Owner, lang: Lang

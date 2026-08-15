@@ -87,7 +87,6 @@ export const api = {
     return call<AdminOrder[]>(`/admin/orders?${parts.join("&")}`);
   },
   orderCities: () => call<string[]>("/admin/orders/cities"),
-  order: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}`),
   moveOrder: (reference: string, status: string, note?: string) =>
     call<AdminOrder>(`/admin/orders/${reference}/status`, {
       method: "POST",
@@ -112,7 +111,6 @@ export const api = {
     if (options.hidden) parts.push("hidden=true");
     return call<AdminRequest[]>(`/admin/requests?${parts.join("&")}`);
   },
-  request: (reference: string) => call<AdminRequest>(`/admin/requests/${reference}`),
   quote: (reference: string, price: number, note = "") =>
     call<AdminRequest>(`/admin/requests/${reference}/quote`, {
       method: "POST",
@@ -172,6 +170,9 @@ export const api = {
   updateCategory: (id: string, body: Record<string, unknown>) =>
     call<AdminCategory>(`/admin/categories/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteCategory: (id: string) => call<void>(`/admin/categories/${id}`, { method: "DELETE" }),
+  /** No control in the category edit popup sets `icon_url` yet — the
+   *  storefront's category rail reads it, but nothing in the console writes
+   *  it. Ready for a file input on AddPopup's edit form. */
   uploadCategoryIcon: (categoryId: string, file: File) => {
     const body = new FormData();
     body.append("file", file);
@@ -238,7 +239,9 @@ export const api = {
     if (options.limit) parts.push(`limit=${options.limit}`);
     return call<SecurityEvent[]>(`/admin/security/logs${parts.length ? `?${parts.join("&")}` : ""}`);
   },
-  securityEvent: (id: string) => call<SecurityEvent>(`/admin/security/events/${id}`),
+  /** No screen lists or removes a block yet — the owner can only add one from
+   *  Logs today. `createBlock` is used; `blocklist` and `removeBlock` are
+   *  ready for that screen when it is built. */
   blocklist: () => call<BlockEntry[]>("/admin/security/blocklist"),
   createBlock: (body: { reason: string; visitor_id?: string | null; ip?: string | null }) =>
     call<BlockEntry[]>("/admin/security/block", { method: "POST", body: JSON.stringify(body) }),

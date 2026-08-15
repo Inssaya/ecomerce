@@ -24,27 +24,17 @@ const copy = {
     "Everything else online came from a container. Ours came from a workshop. Free delivery on everything.",
     "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة. التوصيل مجاني على كل شيء.",
   ],
-  ifWeDontHaveIt: ["If we don't have it, we make it.", "إن لم نجده لك، صنعناه لك."],
 
   // Navigation and shell.
-  // Plain words. The bar is read by someone who may not be fluent in English,
-  // so it says what it means: "All" rather than "Everything we carry".
-  everything: ["All", "الكل"],
   theShelf: ["The Shelf", "الرف"],
   theWorkshop: ["The Workshop", "الورشة"],
-  shelfMeaning: ["Pieces we have already made.", "قطع صنعناها بالفعل."],
-  workshopMeaning: ["You describe it, we make it.", "تصفه لنا، فنصنعه."],
   // The five destinations in the bar, in the order a shopper needs them.
-  navHome: ["Home", "الرئيسية"],
   navShop: ["Shop", "المتجر"],
   navCustom: ["Custom", "حسب الطلب"],
   navAbout: ["About", "من نحن"],
   navContact: ["Contact", "اتصل بنا"],
   filter: ["Filter", "تصفية"],
   allPieces: ["Everything", "كل القطع"],
-  priceLowHigh: ["Price: low to high", "الثمن: من الأقل"],
-  priceHighLow: ["Price: high to low", "الثمن: من الأعلى"],
-  newestFirst: ["Newest first", "الأحدث أولاً"],
 
   // Accounts. Buying never needs one; talking to the assistant does.
   signIn: ["Sign in", "تسجيل الدخول"],
@@ -63,7 +53,6 @@ const copy = {
     "املأ هذا مرة واحدة ولن تحتاج إلى ملء صفحة الطلب بعدها — نحتفظ برقمك وعنوانك فلا تكتبهما مجدداً.",
   ],
   whereWeDeliver: ["Where we deliver to you", "أين نوصّل إليك"],
-  yourDetails: ["Your details", "معلوماتك"],
   editDetails: ["Change", "تغيير"],
   saveDetails: ["Save", "احفظ"],
   detailsSaved: ["Saved.", "تم الحفظ."],
@@ -101,8 +90,6 @@ const copy = {
   browse: ["See what we have", "شاهد ما لدينا"],
   askUs: ["Tell us what you need", "أخبرنا بما تحتاج"],
   cart: ["Cart", "السلة"],
-  back: ["Back", "رجوع"],
-  ourStory: ["Who we are", "من نحن"],
 
   // Pieces.
   //
@@ -126,20 +113,7 @@ const copy = {
     "Nothing here matches that — but we can make it.",
     "لا شيء هنا يطابق ذلك — لكن يمكننا صنعه.",
   ],
-  searchClear: ["Clear", "مسح"],
   searchFound: ["{n} pieces", "{n} قطعة"],
-
-  // Waiting on a piece that has gone.
-  tellMeWhenMade: ["Tell me when you make another", "أخبرني حين نصنع أخرى"],
-  tellMeWhy: [
-    "One message on this number when it is back on the shelf. Nothing else, ever.",
-    "رسالة واحدة على هذا الرقم حين تعود إلى الرف. لا شيء غير ذلك، أبداً.",
-  ],
-  tellMeDone: [
-    "We'll tell you. You are the reason we make another.",
-    "سنخبرك. أنت سبب صنعنا لأخرى.",
-  ],
-  tellMeSend: ["Tell me", "أخبرني"],
 
   // Cart and checkout.
   yourCart: ["Your cart", "سلتك"],
@@ -168,10 +142,7 @@ const copy = {
   placing: ["Placing…", "جارٍ التأكيد…"],
 
   // Orders and requests.
-  orderPlaced: ["We have your order", "وصلنا طلبك"],
   yourReference: ["Your reference", "رقمك"],
-  trackIt: ["Follow your order", "تابع طلبك"],
-  alreadyOrdered: ["Already ordered?", "طلبت من قبل؟"],
   findYourOrder: ["Find your order", "ابحث عن طلبك"],
   findYourOrderLead: [
     "Lost the link? Your reference and the number you gave us is enough.",
@@ -203,20 +174,10 @@ const copy = {
   },
 
   // The custom request.
-  tellUs: ["Tell us what you need", "أخبرنا بما تحتاج"],
   tellUsLead: [
     "Describe it in your own words. We read every one of these ourselves, and we come back with a price and a real date.",
     "صِفه بكلماتك. نقرأ كل طلب بأنفسنا، ونعود إليك بالثمن وبتاريخ حقيقي.",
   ],
-  whatIsIt: ["What is it?", "ما هو؟"],
-  whatKind: ["What kind of thing? (optional)", "من أي نوع؟ (اختياري)"],
-  whatIsItHint: [
-    "Size, colour, material, what it is for — whatever you know.",
-    "المقاس، اللون، المادة، ولأي غرض — كل ما تعرفه.",
-  ],
-  budget: ["What you'd like to spend (optional)", "ما تودّ إنفاقه (اختياري)"],
-  send: ["Send it", "أرسل"],
-  sending: ["Sending…", "جارٍ الإرسال…"],
   nothingOwed: ["Nothing is owed until you agree a price.", "لا شيء عليك حتى تتّفق على الثمن."],
   theQuote: ["The price", "الثمن"],
   approveQuote: ["Yes, make it", "نعم، اصنعها"],
@@ -224,10 +185,6 @@ const copy = {
 
   // The assistant.
   assistant: ["Ask us", "اسألنا"],
-  assistantOpener: [
-    "Ask me anything about a piece — the size, how it was made, when it would reach you.",
-    "اسألني عن أي قطعة — المقاس، كيف صُنعت، ومتى تصلك.",
-  ],
   assistantPlaceholder: ["Type your question", "اكتب سؤالك"],
   talkToAPerson: ["Talk to a person", "تحدّث إلى شخص"],
 
@@ -258,7 +215,6 @@ const copy = {
   somethingWentWrong: ["Something went wrong.", "حدث خطأ ما."],
   tryAgain: ["Try again", "أعد المحاولة"],
   notFound: ["We couldn't find that.", "لم نجد ذلك."],
-  currency: ["MAD", "درهم"],
 } as const;
 
 type Copy = typeof copy;
