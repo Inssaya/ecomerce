@@ -381,7 +381,6 @@ function CommissionPopup({
       {request.quote_price ? (
         <p className="console-note">
           You sent <Money value={request.quote_price} />
-          {request.promised_for ? ` · ready by ${new Date(request.promised_for).toLocaleDateString()}` : ""}
           {request.order_reference ? (
             <>
               {" · became order "}
@@ -404,24 +403,21 @@ function QuoteForm({ request, onDone }: { request: AdminRequest; onDone: () => v
   const { mutate, busy, problem } = useMutation();
   const confirm = useConfirm();
   const [price, setPrice] = useState(request.quote_price ? String(request.quote_price) : "");
-  const [days, setDays] = useState(request.lead_time_days ? String(request.lead_time_days) : "");
   const [note, setNote] = useState("");
-  const [errors, setErrors] = useState<{ price?: string; days?: string }>({});
+  const [errors, setErrors] = useState<{ price?: string }>({});
 
   const reQuoting = request.status === "quoted";
 
   function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const nextErrors: { price?: string; days?: string } = {};
+    const nextErrors: { price?: string } = {};
     const priceValue = Number(price);
-    const dayValue = Number(days);
     if (!(priceValue > 0)) nextErrors.price = "A price above zero";
-    if (!(dayValue >= 1 && dayValue <= 365)) nextErrors.days = "Between 1 and 365 days";
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) return;
 
     const send = () =>
-      mutate(() => api.quote(request.reference, priceValue, dayValue, note), {
+      mutate(() => api.quote(request.reference, priceValue, note), {
         invalidates: ["quoteSent"],
         onDone,
       });
@@ -441,7 +437,7 @@ function QuoteForm({ request, onDone }: { request: AdminRequest; onDone: () => v
   return (
     <form onSubmit={submit} className="console-stack">
       <p className="console-caps">{reQuoting ? "Send a different price" : "Send a price"}</p>
-      <div className="console-form-grid console-form-2">
+      <div className="console-form-grid">
         <Field label="Price" htmlFor={`price-${request.reference}`} error={errors.price}>
           <input
             id={`price-${request.reference}`}
@@ -452,18 +448,6 @@ function QuoteForm({ request, onDone }: { request: AdminRequest; onDone: () => v
             value={price}
             onChange={(event) => setPrice(event.target.value)}
             aria-invalid={Boolean(errors.price)}
-          />
-        </Field>
-        <Field label="Ready in (days)" htmlFor={`days-${request.reference}`} error={errors.days} hint="A real date reads as competence; vagueness does not.">
-          <input
-            id={`days-${request.reference}`}
-            type="number"
-            min={1}
-            max={365}
-            inputMode="numeric"
-            value={days}
-            onChange={(event) => setDays(event.target.value)}
-            aria-invalid={Boolean(errors.days)}
           />
         </Field>
       </div>

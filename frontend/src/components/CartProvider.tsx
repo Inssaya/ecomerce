@@ -96,7 +96,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     try {
-      setLines(JSON.parse(localStorage.getItem(KEY) ?? "[]"));
+      const saved = JSON.parse(localStorage.getItem(KEY) ?? "[]") as CartLine[];
+      // Carts written before selections and personalization existed have
+      // neither key. Filling them in here means every reader downstream can
+      // treat them as present — the cart page could not, and threw on
+      // `undefined.map`, emptying a real customer's basket.
+      setLines(
+        saved.map((line) => ({
+          ...line,
+          selection: line.selection ?? [],
+          personalization: line.personalization ?? null,
+        })),
+      );
     } catch {
       // A corrupted cart is not worth a broken shop.
       localStorage.removeItem(KEY);

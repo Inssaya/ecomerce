@@ -93,11 +93,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ status, note: note || null }),
     }),
-  setOrderPromise: (reference: string, promisedFor: string) =>
-    call<AdminOrder>(`/admin/orders/${reference}/promise`, {
-      method: "POST",
-      body: JSON.stringify({ promised_for: promisedFor }),
-    }),
   hideOrder: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}/hide`, { method: "POST" }),
   unhideOrder: (reference: string) => call<AdminOrder>(`/admin/orders/${reference}/unhide`, { method: "POST" }),
 
@@ -118,10 +113,10 @@ export const api = {
     return call<AdminRequest[]>(`/admin/requests?${parts.join("&")}`);
   },
   request: (reference: string) => call<AdminRequest>(`/admin/requests/${reference}`),
-  quote: (reference: string, price: number, leadTimeDays: number, note = "") =>
+  quote: (reference: string, price: number, note = "") =>
     call<AdminRequest>(`/admin/requests/${reference}/quote`, {
       method: "POST",
-      body: JSON.stringify({ price, lead_time_days: leadTimeDays, note_en: note, note_ar: note }),
+      body: JSON.stringify({ price, note_en: note, note_ar: note }),
     }),
   moveRequest: (reference: string, status: string, note?: string) =>
     call<AdminRequest>(`/admin/requests/${reference}/status`, {

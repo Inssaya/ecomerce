@@ -3,13 +3,17 @@
 Two offers, one table. `kind` says which:
 
 * **shelf** — a piece the shop sells like any store sells anything: a name, a
-  price, a photo. Nothing in the schema counts units of it. If it ever runs
-  out for real, the workshop calls the buyer — that is a phone conversation,
-  not a piece of software.
-* **workshop** — made to order. The buyer knows before they order how long it
-  takes, because the page says so. `lead_time_days` is that promise, and a
-  workshop piece without one has nothing honest to put on the page (BRAND.md
-  §8: "ready in six days", never "soon"). A check constraint keeps that true.
+  price, a photo.
+* **workshop** — made to order.
+
+**The shop states no time, to anyone.** Not a lead time, not a delivery
+estimate, not a countdown — the columns for all three are gone, not merely
+hidden. When a buyer needs to know when their thing arrives, the workshop
+tells them on the phone. Nothing in the schema can promise a date, so nothing
+on any screen can accidentally print one.
+
+Nothing here counts units either. If a piece is physically gone, that is the
+same phone call.
 
 The `Piece` and `ProductVariant` tables are still here because live order
 lines point at them and history has to keep reading correctly. **They are no
@@ -160,14 +164,9 @@ class Product(Base, TimestampMixin, BilingualMixin):
     """
 
     __tablename__ = "products"
-    __table_args__ = (
-        # A made-to-order piece without a lead time has nothing honest to put
-        # on the page. BRAND.md §8: "ready in six days", never "soon".
-        CheckConstraint(
-            "kind <> 'workshop' OR lead_time_days IS NOT NULL",
-            name="ck_workshop_has_lead_time",
-        ),
-    )
+    # `ck_workshop_has_lead_time` used to live here, tying made-to-order
+    # pieces to a lead time. The shop does not state a time to anyone, so
+    # there is no column left for it to constrain.
 
     id: Mapped[str] = uuid_pk()
     kind: Mapped[ProductKind] = mapped_column(
@@ -208,10 +207,6 @@ class Product(Base, TimestampMixin, BilingualMixin):
     discount_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     # ── both kinds ──
-    # How long until it is in their hands. `lead_time_days` is the workshop's
-    # promise about *making* the thing and still governs its copy; this is the
-    # delivery estimate the console sets on any piece, shelf or workshop.
-    delivery_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Their name on the piece. Off by default, and worth a percentage on top
     # when it is on, because it is hand work on a specific object.
     personalizable: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
@@ -229,8 +224,6 @@ class Product(Base, TimestampMixin, BilingualMixin):
     # rows either way — this only decides whether we say so.
     show_piece_numbers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    # ── workshop only ──
-    lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # An upper bound when the work varies with what is asked for: "from 180 MAD".
     price_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 

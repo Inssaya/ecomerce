@@ -110,7 +110,6 @@ export default function ManageProducts() {
       category: (row) => row.category_name ?? "",
       subcategory: (row) => row.subcategory_name ?? "",
       price: (row) => row.effective_price,
-      delivery: (row) => row.delivery_days ?? 0,
       saves: (row) => row.total_saves,
       likes: (row) => row.total_likes,
     },
@@ -198,18 +197,6 @@ export default function ManageProducts() {
           </>
         ) : (
           <Money value={product.price} />
-        ),
-    },
-    {
-      key: "delivery",
-      header: "Delivery",
-      align: "right",
-      sortable: true,
-      render: (product) =>
-        product.delivery_days ? (
-          <span className="console-num">{product.delivery_days}d</span>
-        ) : (
-          <span className="console-muted">—</span>
         ),
     },
     {

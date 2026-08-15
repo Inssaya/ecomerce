@@ -19,13 +19,12 @@ import { statusLabel } from "@/lib/i18n";
 import { Button, LinkButton, Money, Pill, Popup, Text, useConfirm } from "../ui/primitives";
 import { HEAVY_ORDER_MOVES, ORDER_MOVE_MEANS, orderTone } from "../ui/status";
 
+/** The whole lifecycle, in the order it happens. */
+const ALL_ORDER_STATUSES = Object.keys(NEXT_ORDER_STATUSES);
+
 /** "Width: 10 cm", "Red", or their name — however the line reads best. */
 function pickLabel(pick: NonNullable<AdminOrder["items"][number]["selection"]>[number]): string {
   return pick.name ? `${pick.name}: ${pick.value}` : pick.value;
-}
-
-function daysLeft(promisedFor: string): number {
-  return Math.ceil((new Date(promisedFor).getTime() - Date.now()) / 86_400_000);
 }
 
 export function OrderPopup({
@@ -39,10 +38,8 @@ export function OrderPopup({
 }) {
   const { mutate, busy, problem } = useMutation();
   const confirm = useConfirm();
-  const [promiseDraft, setPromiseDraft] = useState(order.promised_for ?? "");
 
   const moves = NEXT_ORDER_STATUSES[order.status] ?? [];
-  const promiseDirty = promiseDraft !== (order.promised_for ?? "");
 
   function move(next: string) {
     const label = statusLabel("en", "orderStatus", next);
@@ -83,12 +80,33 @@ export function OrderPopup({
       onClose={onClose}
       actions={
         <>
-          {moves.map((next) => (
-            <Button key={next} variant={HEAVY_ORDER_MOVES.has(next) ? "default" : "primary"} disabled={busy} onClick={() => move(next)}>
-              {statusLabel("en", "orderStatus", next)}
-            </Button>
-          ))}
-          {moves.length === 0 ? <Pill tone={orderTone(order.status)}>{statusLabel("en", "orderStatus", order.status)}</Pill> : null}
+          {/* One control that sets the status, rather than a row of buttons
+              you had to guess your way along. Every status is listed; the
+              ones this order cannot legally reach are shown but disabled and
+              say why, so the whole lifecycle is visible instead of only the
+              next step in it. */}
+          <Pill tone={orderTone(order.status)}>{statusLabel("en", "orderStatus", order.status)}</Pill>
+          <select
+            className="console-select"
+            value=""
+            disabled={busy || moves.length === 0}
+            aria-label="Set status"
+            onChange={(event) => {
+              if (event.target.value) move(event.target.value);
+              event.target.value = "";
+            }}
+          >
+            <option value="">{moves.length === 0 ? "This order is finished" : "Set status…"}</option>
+            {ALL_ORDER_STATUSES.filter((s) => s !== order.status).map((next) => {
+              const legal = moves.includes(next);
+              return (
+                <option key={next} value={next} disabled={!legal}>
+                  {statusLabel("en", "orderStatus", next)}
+                  {legal ? "" : "  — not from here"}
+                </option>
+              );
+            })}
+          </select>
           <Button size="sm" onClick={printInvoice}>
             Print invoice
           </Button>
@@ -156,45 +174,6 @@ export function OrderPopup({
             <Text>{order.address.notes}</Text>
           </p>
         ) : null}
-      </section>
-
-      <section className="console-stack-sm">
-        <p className="console-caps">Delivery promise</p>
-        <div className="console-row" style={{ gap: "var(--space-2)" }}>
-          <input
-            type="date"
-            className="console-date"
-            value={promiseDraft}
-            onChange={(event) => setPromiseDraft(event.target.value)}
-            aria-label="Promised for"
-          />
-          {order.promised_for ? (
-            (() => {
-              const left = daysLeft(order.promised_for);
-              return left < 0 ? (
-                <Pill tone="danger">{Math.abs(left)}d overdue</Pill>
-              ) : left === 0 ? (
-                <Pill tone="warning">today</Pill>
-              ) : (
-                <span className="console-num">{left}d left</span>
-              );
-            })()
-          ) : (
-            <span className="console-muted">No promise set yet.</span>
-          )}
-          <Button
-            size="sm"
-            disabled={busy || !promiseDirty || !promiseDraft}
-            onClick={() =>
-              void mutate(() => api.setOrderPromise(order.reference, promiseDraft), {
-                invalidates: ["orderChanged"],
-                onDone: onChanged,
-              })
-            }
-          >
-            Save
-          </Button>
-        </div>
       </section>
 
       <section className="console-stack-sm">

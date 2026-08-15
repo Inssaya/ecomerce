@@ -119,12 +119,8 @@ export default async function ServiceLanding({
       <p className="mt-3 text-[17px] text-ink-soft leading-relaxed">{found.summary}</p>
 
       <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2 text-[14px]">
-        {found.lead_time_days ? (
-          <span>
-            <span className="stamp font-semibold">{found.lead_time_days}</span>{" "}
-            <span className="text-ink-soft">{ar ? "أيام عادةً" : "days, usually"}</span>
-          </span>
-        ) : null}
+        {/* "N days, usually" used to sit here. The shop states no time to
+            anyone — when a buyer needs to know, the workshop tells them. */}
         {found.from_price ? (
           <span>
             <span className="text-ink-soft">{ar ? "من" : "from"}</span>{" "}

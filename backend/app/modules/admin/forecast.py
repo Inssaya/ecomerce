@@ -200,7 +200,6 @@ async def next_seven_days(db: AsyncSession) -> dict:
                 Product.kind,
                 Product.category_id,
                 Product.price,
-                Product.lead_time_days,
                 func.count(Piece.id)
                 .filter(Piece.state == PieceState.available)
                 .label("on_the_shelf"),

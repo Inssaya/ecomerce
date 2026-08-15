@@ -40,14 +40,14 @@ class RequestCreate(BaseModel):
 
 
 class Quote(BaseModel):
-    """What it will cost and when it will be ready.
+    """What it will cost.
 
-    Both are required. A quote without a date is the vagueness BRAND.md §8
-    rules out, and it is what makes someone refuse the package later.
+    A price and nothing else. The quote used to carry a lead time in days and
+    compute a promised date from it; the shop states no time to anyone, so
+    when it will be ready is a phone call.
     """
 
     price: float = Field(gt=0)
-    lead_time_days: int = Field(ge=1, le=365)
     note_en: str = Field(default="", max_length=2000)
     note_ar: str = Field(default="", max_length=2000)
 
@@ -92,8 +92,6 @@ class RequestOut(BaseModel):
     status: RequestStatus
     quote_price: float | None
     quote_note: str = ""
-    lead_time_days: int | None
-    promised_for: date | None
     order_reference: str | None = None
     events: list[RequestEventOut]
     created_at: datetime

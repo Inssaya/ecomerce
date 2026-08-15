@@ -23,10 +23,33 @@ os.environ.setdefault("JWT_SECRET", "test-secret-not-used-in-production")
 # The rate limiter counts in Redis and fails open when it cannot reach one, so
 # without this the limit tests would silently pass by never limiting anything.
 os.environ.setdefault("REDIS_URL", os.environ.get("TEST_REDIS_URL", "redis://127.0.0.1:6379/1"))
-os.environ.setdefault(
-    "DATABASE_URL",
-    os.environ.get("TEST_DATABASE_URL", "postgresql+asyncpg://mostyle:mostyle@127.0.0.1:5432/mostyle"),
-)
+
+# `TEST_DATABASE_URL` **overrides** DATABASE_URL. It must not be a
+# `setdefault`, and this is not a style preference — it destroyed the shop's
+# data once.
+#
+# `clean_db` TRUNCATEs every table. Run inside a container where DATABASE_URL
+# already points at the real database, `setdefault` is a no-op: the variable
+# is already set, TEST_DATABASE_URL is silently ignored, and the suite wipes
+# production. Setting it unconditionally is what makes the throwaway database
+# actually take effect.
+if os.environ.get("TEST_DATABASE_URL"):
+    os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+else:
+    os.environ.setdefault(
+        "DATABASE_URL", "postgresql+asyncpg://mostyle:mostyle@127.0.0.1:5432/mostyle_test"
+    )
+
+# Last line of defence. Even with the above right, a stray DATABASE_URL that
+# does not name a throwaway database must stop the run before the first
+# TRUNCATE rather than after it.
+_target = os.environ["DATABASE_URL"].rsplit("/", 1)[-1]
+if not (_target.endswith("_test") or _target.startswith("test")):
+    raise RuntimeError(
+        f"Refusing to run: DATABASE_URL points at '{_target}', which is not a test database. "
+        "These tests TRUNCATE every table. Set TEST_DATABASE_URL to a throwaway database "
+        "whose name ends in '_test'."
+    )
 
 from app.core import storage  # noqa: E402
 from app.core.cache import close_redis, get_redis  # noqa: E402

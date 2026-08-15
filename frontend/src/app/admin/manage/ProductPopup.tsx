@@ -57,7 +57,6 @@ function formOf(product: AdminProduct) {
     description_ar: product.description_ar,
     price: String(product.price),
     category_id: product.category_id ?? "",
-    delivery_days: product.delivery_days ? String(product.delivery_days) : "",
     discount_kind: product.discount_kind ?? "",
     discount_value: product.discount_value != null ? String(product.discount_value) : "",
     discount_active: product.discount_active,
@@ -90,18 +89,10 @@ export function ProductPopup({
   const guard = useDirtyGuard(dirty);
 
   const live = product.status === "active";
-  // Said before the click rather than after it. A photo is required either
-  // way; the promise is `lead_time_days` for a workshop piece and
-  // `delivery_days` for a shelf one — BRAND.md §8, "ready in six days", never
-  // "soon". No stock check, either way.
-  const blocker =
-    product.images.length === 0
-      ? "Needs a real photo first"
-      : product.kind === "workshop" && !product.lead_time_days
-        ? "Needs a lead time first"
-        : product.kind === "shelf" && !(Number(form.delivery_days) || product.delivery_days)
-          ? "Needs a delivery time first"
-          : null;
+  // Said before the click rather than after it. One rule: a real photo.
+  // BRAND.md §8's other half used to live here as a required time; the shop
+  // states none, so there is nothing left to require.
+  const blocker = product.images.length === 0 ? "Needs a real photo first" : null;
 
   const save = () =>
     void mutate(
@@ -113,7 +104,6 @@ export function ProductPopup({
           description_ar: form.description_ar,
           price: Number(form.price),
           category_id: form.category_id || null,
-          delivery_days: form.delivery_days ? Number(form.delivery_days) : null,
           // A reduction is off and empty, or on and complete. Sending a kind
           // without a value is the one combination the server refuses.
           discount_kind: form.discount_kind || null,
@@ -273,7 +263,7 @@ export function ProductPopup({
 
       {/* ── What it costs, and how long it takes ── */}
       <Card>
-        <CardHead title="Price and delivery" sub="Open orders keep the price they were placed at." />
+        <CardHead title="Price" sub="Open orders keep the price they were placed at." />
 
         <div className="console-form-grid console-form-2">
           <Field label="Price" htmlFor="pp-price">
@@ -283,16 +273,6 @@ export function ProductPopup({
               min={1}
               value={form.price}
               onChange={(event) => setForm({ ...form, price: event.target.value })}
-            />
-          </Field>
-          <Field label="Delivery time (days)" htmlFor="pp-delivery" hint="What the shop promises on this piece.">
-            <input
-              id="pp-delivery"
-              type="number"
-              min={1}
-              max={365}
-              value={form.delivery_days}
-              onChange={(event) => setForm({ ...form, delivery_days: event.target.value })}
             />
           </Field>
         </div>

@@ -231,8 +231,6 @@ export interface AdminOrder {
   note: string | null;
   created_at: string;
   whatsapp_url: string;
-  /** The date the countdown counts to. Admin-editable. */
-  promised_for: string | null;
   /** Guest vs Verified — derived, never stored. */
   has_account: boolean;
   /** Archived out of the default queue. Recoverable from the Hidden view. */
@@ -292,8 +290,6 @@ export interface AdminRequest {
   status: string;
   quote_price: number | null;
   quote_note: string;
-  lead_time_days: number | null;
-  promised_for: string | null;
   order_reference: string | null;
   events: { status: string; note: string | null; created_at: string; actor: string }[];
   created_at: string;
@@ -390,9 +386,7 @@ export interface AdminProduct {
   /** The backend enum includes `paused`; the old client's union omitted it. */
   status: "draft" | "active" | "paused" | "archived";
   available: number | null;
-  lead_time_days: number | null;
   /** Days until it is in their hands — set on any piece, shelf or workshop. */
-  delivery_days: number | null;
   personalizable: boolean;
   /** How much the price goes up when their name goes on it. */
   personalization_markup_pct: number;

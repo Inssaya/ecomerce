@@ -271,11 +271,6 @@ export function PieceView({
                 {money(withName, lang)}
               </p>
             )}
-            {piece.kind === "workshop" && piece.lead_time_days ? (
-              <p className="text-[14px] text-ink-mute">
-                {t("readyInDays", { n: piece.lead_time_days })}
-              </p>
-            ) : null}
           </div>
 
           {piece.description ? (
@@ -457,12 +452,6 @@ export function PieceView({
             />
             {piece.made_on ? (
               <Spec k={t("madeIn")} v={new Date(piece.made_on).toLocaleDateString(lang)} />
-            ) : null}
-            {piece.lead_time_days ? (
-              <Spec
-                k={ar ? "الجاهزية" : "Ready in"}
-                v={t("readyInDays", { n: piece.lead_time_days })}
-              />
             ) : null}
           </dl>
         </div>

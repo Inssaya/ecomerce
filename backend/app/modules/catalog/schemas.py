@@ -90,8 +90,6 @@ class ProductCard(BaseModel):
     #: now — the shop does not track units. Kept in the shape so an old cart
     #: written by a previous tab still loads without a shrug.
     available: int | None = None
-    #: Workshop: days until it is ready. Shelf: the delivery estimate.
-    lead_time_days: int | None = None
     #: What it costs today. Computed on the server, once, so the card and the
     #: cart cannot disagree with the piece page about the number the buyer sees.
     effective_price: float
@@ -206,10 +204,8 @@ class ProductWrite(BaseModel):
     batch_closed: bool = False
     show_piece_numbers: bool = False
 
-    lead_time_days: int | None = Field(default=None, ge=1, le=365)
     price_max: float | None = Field(default=None, gt=0)
 
-    delivery_days: int | None = Field(default=None, ge=1, le=365)
     personalizable: bool = False
     personalization_markup_pct: float = Field(default=0, ge=0, le=500)
 
@@ -224,16 +220,11 @@ class ProductWrite(BaseModel):
 
     @model_validator(mode="after")
     def coherent_for_its_kind(self) -> ProductWrite:
-        if self.kind is ProductKind.workshop:
-            if self.lead_time_days is None:
-                raise ValueError(
-                    "A made-to-order piece needs a lead time in days — "
-                    "'ready in six days', never 'soon'"
-                )
-            if self.price_max is not None and self.price_max < self.price:
-                raise ValueError("The upper price cannot be below the starting price")
-        elif self.lead_time_days is not None or self.price_max is not None:
-            raise ValueError("A piece already made has no lead time and no price range")
+        # Was also where a workshop piece was forced to declare a lead time.
+        # The shop states no time to anyone now, so the only rule left is that
+        # a price range reads the right way round.
+        if self.price_max is not None and self.price_max < self.price:
+            raise ValueError("The upper price cannot be below the starting price")
         return self
 
 
@@ -251,10 +242,8 @@ class ProductPatch(BaseModel):
     made_on: date | None = None
     batch_closed: bool | None = None
     show_piece_numbers: bool | None = None
-    lead_time_days: int | None = Field(default=None, ge=1, le=365)
     price_max: float | None = Field(default=None, gt=0)
 
-    delivery_days: int | None = Field(default=None, ge=1, le=365)
     personalizable: bool | None = None
     personalization_markup_pct: float | None = Field(default=None, ge=0, le=500)
 
@@ -414,8 +403,6 @@ class ProductAdmin(BaseModel):
     variants: list[VariantOut]
     attributes: list[AttributeOut] = []
     available: int | None = None
-    lead_time_days: int | None = None
-    delivery_days: int | None = None
     personalizable: bool = False
     personalization_markup_pct: float = 0
     discount_kind: DiscountKind | None = None

@@ -149,10 +149,6 @@ async def place_order(
                 piece_id=None,
                 title=product.title(body.lang),
                 variant_label=variant.option(body.lang) if variant else "",
-                # What we promised, on the day we promised it. `delivery_days`
-                # is the field the console edits; `lead_time_days` is what old
-                # rows carry.
-                lead_time_days=product.delivery_days or product.lead_time_days,
                 unit_price=unit_price,
                 quantity=line.quantity,
                 subtotal=line_total,
@@ -164,14 +160,6 @@ async def place_order(
 
     fee = await delivery_fee_for(db, subtotal, body.address.city)
 
-    # The date the countdown counts to, defaulted from the slowest promise on
-    # the order — a mixed cart is only as fast as its slowest line. Left null
-    # when nothing on the order carries a promise at all, rather than
-    # inventing one.
-    promises = [item.lead_time_days for item in lines if item.lead_time_days]
-    promised_for = (
-        (datetime.now(UTC).date() + timedelta(days=max(promises))) if promises else None
-    )
 
     order = Order(
         reference=new_order_reference(),
@@ -187,7 +175,6 @@ async def place_order(
         subtotal=subtotal,
         delivery_fee=fee,
         total=subtotal + fee,
-        promised_for=promised_for,
         items=lines,
         events=[OrderEvent(status=OrderStatus.placed, actor="customer")],
     )
@@ -225,20 +212,6 @@ async def change_status(
     await db.refresh(order)
 
     await notify_order_status(order)
-    return order
-
-
-async def set_promise(db: AsyncSession, order: Order, promised_for: date) -> Order:
-    """Move the date the countdown counts to.
-
-    A promise made on the day the order was placed sometimes has to move —
-    a supplier is late, a piece takes longer than expected — and the number
-    on the customer's tracking page should always be the one that is still
-    true, not the one that was true on day one.
-    """
-    order.promised_for = promised_for
-    await db.commit()
-    await db.refresh(order)
     return order
 
 

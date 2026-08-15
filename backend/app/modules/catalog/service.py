@@ -98,7 +98,6 @@ def to_card(product: Product, lang: str) -> ProductCard:
         category_slug=product.category.slug if product.category else None,
         category_name=product.category.name(lang) if product.category else None,
         available=None,
-        lead_time_days=product.delivery_days or product.lead_time_days,
         effective_price=product.effective_price(),
         discount_active=product.discount_active,
     )
@@ -189,8 +188,6 @@ def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmi
         variants=variants_out(product, "en"),
         attributes=[attribute_out(item) for item in product.attributes],
         available=None,
-        lead_time_days=product.lead_time_days,
-        delivery_days=product.delivery_days,
         personalizable=product.personalizable,
         personalization_markup_pct=float(product.personalization_markup_pct or 0),
         discount_kind=product.discount_kind,

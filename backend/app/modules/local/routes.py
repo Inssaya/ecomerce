@@ -31,7 +31,6 @@ def _service(item: Service, lang: str, *, full: bool = False) -> dict:
         "name": item.name_ar if ar else item.name_en,
         "summary": item.summary_ar if ar else item.summary_en,
         "from_price": float(item.from_price) if item.from_price is not None else None,
-        "lead_time_days": item.lead_time_days,
         "category_slug": item.category_slug,
     }
     if full:

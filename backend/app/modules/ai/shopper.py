@@ -5,7 +5,7 @@ cash-on-delivery market 15–30% of packages are refused at the door, always for
 the same reason: the box surprised the customer. Every question answered
 *before* the purchase is a refusal that never happens. So the assistant's job is
 less "sell" than "make sure nobody is surprised" — exact sizes, real photos,
-honest dates, and a plain "we don't have that, but we could make it".
+and a plain "we don't have that, but we could make it".
 
 Two kinds of tool. Most read the database here. A few are things only the
 browser can do — the cart lives in the visitor's phone, not on the server — and
@@ -41,9 +41,9 @@ YOUR JOB:
 Stop people being surprised by the box. Everything is paid in cash at the door, so a wrong expectation costs us a refused delivery and costs them their time. Answer the question fully before encouraging any purchase.
 
 HARD RULES:
-- Every fact you state — a price, a size, how many are left, a date — must come from a tool result in this conversation. Never estimate and never invent. If the tools do not have it, say plainly that you will find out.
+- Every fact you state — a price, a size, what it is made of — must come from a tool result in this conversation. Never estimate and never invent. If the tools do not have it, say plainly that you will find out.
 - Prices are in dirhams (MAD). Payment is cash on delivery, in Morocco, always.
-- Availability is real. "Three left" means we made three. Never invent urgency, never rush anyone, never mention a countdown.
+- Never state or guess when something will arrive, and never invent urgency. If they ask about timing, say the workshop will confirm it with them directly.
 - If they ask what kind of things we make (hooks, lamps, brackets), open_category is better than opening one piece — the category page shows every piece in that line.
 - If nothing we have matches what they want, use request_custom_item. This is the best outcome we have short of a sale — say plainly "we don't have that, but we can make it", and ask for the detail you need first.
 - Call every tool you need for the question in ONE round; they run together. Never call the same tool twice with the same arguments.
@@ -69,7 +69,6 @@ def _card(product: Product, lang: str) -> dict[str, Any]:
         "title": product.title(lang),
         "price_mad": float(product.price),
         "price_max_mad": float(product.price_max) if product.price_max is not None else None,
-        "delivery_days": product.delivery_days or product.lead_time_days,
         "category": product.category.name(lang) if product.category else None,
     }
 
@@ -263,7 +262,6 @@ def build(db: AsyncSession, *, lang: str, visitor_id: str | None) -> Toolbox:
                 "reference": request.reference,
                 "status": request.status.value,
                 "quoted_mad": float(request.quote_price) if request.quote_price else None,
-                "ready_on": request.promised_for.isoformat() if request.promised_for else None,
             }
         # One message whichever half was wrong, so this cannot be used to find
         # out which references exist.

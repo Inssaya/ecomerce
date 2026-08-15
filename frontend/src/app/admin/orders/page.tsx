@@ -65,15 +65,6 @@ function totalQuantity(order: AdminOrder): number {
   return order.items.reduce((sum, item) => sum + item.quantity, 0);
 }
 
-/** Days left until the promise, or how overdue it is — read at a glance. */
-function Countdown({ promisedFor }: { promisedFor: string | null }) {
-  if (!promisedFor) return <span className="console-muted">—</span>;
-  const days = Math.ceil((new Date(promisedFor).getTime() - Date.now()) / 86_400_000);
-  if (days < 0) return <Pill tone="danger">{Math.abs(days)}d overdue</Pill>;
-  if (days === 0) return <Pill tone="warning">today</Pill>;
-  return <span className="console-num">{days}d left</span>;
-}
-
 export default function Orders() {
   const router = useRouter();
   const params = useSearchParams();
@@ -118,7 +109,6 @@ export default function Orders() {
       city: (row) => row.city,
       qty: (row) => totalQuantity(row),
       total: (row) => row.total,
-      countdown: (row) => (row.promised_for ? new Date(row.promised_for).getTime() : Infinity),
       status: (row) => row.status,
     },
     { key: "date", asc: false },
@@ -161,13 +151,6 @@ export default function Orders() {
     },
     { key: "qty", header: "Qty", align: "right", sortable: true, render: (order) => <Num value={totalQuantity(order)} /> },
     { key: "total", header: "Total", align: "right", sortable: true, render: (order) => money(order.total, "en") },
-    {
-      key: "countdown",
-      header: "Delivery",
-      align: "right",
-      sortable: true,
-      render: (order) => <Countdown promisedFor={order.promised_for} />,
-    },
     {
       key: "status",
       header: "Status",

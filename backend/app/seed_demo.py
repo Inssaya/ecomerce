@@ -286,7 +286,6 @@ async def seed() -> None:
             )
             if status in (RequestStatus.quoted, RequestStatus.approved, RequestStatus.in_production):
                 request.quote_price = random.choice([350, 600, 900])
-                request.lead_time_days = random.choice([5, 7, 10])
             request.events = [RequestEvent(status=RequestStatus.requested, actor="customer", created_at=asked)]
             db.add(request)
 

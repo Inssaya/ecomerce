@@ -61,9 +61,15 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
           // Their choices, one per row, so the cart shows exactly what was
           // picked at add-to-cart time — a piece bought in "Red / M" reads
           // as "Red · M", not as a mystery line.
+          // `?? []` is not defensive padding: a cart saved before selections
+          // existed has no `selection` key at all, and this page is the first
+          // thing that reads it back out of localStorage. Without it the whole
+          // cart throws on `undefined.map` and the customer loses the order.
           const picks = [
             line.option || null,
-            ...line.selection.map((pick) => (pick.name ? `${pick.name}: ${pick.value}` : pick.value)),
+            ...(line.selection ?? []).map((pick) =>
+              pick.name ? `${pick.name}: ${pick.value}` : pick.value,
+            ),
             line.personalization ? `“${line.personalization}”` : null,
           ].filter(Boolean) as string[];
           return (

@@ -113,7 +113,6 @@ const copy = {
   // "one left" copy.
   madeIn: ["Made in", "صُنعت في"],
   howItWasMade: ["How it was made", "كيف صُنعت"],
-  readyInDays: ["Ready in {n} days.", "جاهزة خلال {n} أيام."],
   madeToOrder: ["Made after you order it.", "تُصنع بعد أن تطلبها."],
   piece: ["Piece", "قطعة"],
   choose: ["Choose", "اختر"],
@@ -220,7 +219,6 @@ const copy = {
   sending: ["Sending…", "جارٍ الإرسال…"],
   nothingOwed: ["Nothing is owed until you agree a price.", "لا شيء عليك حتى تتّفق على الثمن."],
   theQuote: ["The price", "الثمن"],
-  readyOn: ["Ready on", "جاهز في"],
   approveQuote: ["Yes, make it", "نعم، اصنعها"],
   declineQuote: ["Not this time", "ليس هذه المرة"],
 

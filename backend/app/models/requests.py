@@ -105,9 +105,6 @@ class CustomRequest(Base, TimestampMixin):
     quote_price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     quote_note_en: Mapped[str] = mapped_column(Text, default="", nullable=False)
     quote_note_ar: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    #: A real number of days, decided when quoting. Never "soon".
-    lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    promised_for: Mapped[date | None] = mapped_column(Date, nullable=True)
 
     #: The order raised once the customer approves the quote.
     order_id: Mapped[str | None] = mapped_column(

@@ -90,11 +90,6 @@ class Order(Base, TimestampMixin):
     )
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    #: The date the countdown on the order page counts to. Defaulted at
-    #: checkout from the items' delivery promise (see `orders/service.py`),
-    #: and admin-editable afterwards — a promise made on day one sometimes
-    #: has to move, and the customer should see the number that is still true.
-    promised_for: Mapped[date | None] = mapped_column(Date, nullable=True)
     #: Soft-delete. An order is never actually deleted — it is an accounting
     #: record — so "Delete" in the console archives it out of the default
     #: view. Never filtered on by the customer-facing tracking endpoints: a
@@ -147,9 +142,6 @@ class OrderItem(Base):
     # reads correctly after a variant is renamed or a batch is closed.
     variant_label: Mapped[str] = mapped_column(String(160), default="", nullable=False)
     piece_label: Mapped[str] = mapped_column(String(20), default="", nullable=False)
-    # For a made-to-order line: what we promised, in days, on the day we
-    # promised it. BRAND.md §8 — the timeline has to stay auditable.
-    lead_time_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
     unit_price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, nullable=False)
     subtotal: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)

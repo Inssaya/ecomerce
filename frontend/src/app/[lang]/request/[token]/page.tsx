@@ -80,11 +80,6 @@ export default function RequestPage({
             <span>{t("theQuote")}</span>
             <span className="stamp">{money(request.quote_price, lang)}</span>
           </div>
-          {request.promised_for ? (
-            <p className="mt-1.5 text-[15px] text-ink-soft">
-              {t("readyOn")} {request.promised_for}
-            </p>
-          ) : null}
           {request.quote_note ? (
             <p className="mt-3 text-[15px] text-ink-soft leading-relaxed">{request.quote_note}</p>
           ) : null}

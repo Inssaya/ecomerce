@@ -111,8 +111,6 @@ class OrderItemResponse(BaseModel):
     variant_label: str = ""
     #: "04/12" when the workshop numbered this batch.
     piece_label: str = ""
-    #: Days promised at the time of ordering, for made-to-order work.
-    lead_time_days: int | None = None
     unit_price: float
     quantity: int
     subtotal: float
@@ -159,9 +157,6 @@ class OrderResponse(BaseModel):
     note: str | None
     created_at: datetime
     whatsapp_url: str = ""
-    #: The countdown's target date. Admin-editable; shown to the customer as
-    #: "arrives by" on their tracking page.
-    promised_for: date | None = None
     #: Guest vs Verified — derived from whether the order carries an account,
     #: never stored. `visitor_id` is deliberately absent from this schema: the
     #: fingerprint is an admin-internal join key, not something either side
@@ -178,13 +173,6 @@ class OrderResponse(BaseModel):
 class StatusChange(BaseModel):
     status: OrderStatus
     note: str | None = Field(default=None, max_length=500)
-
-
-class PromiseChange(BaseModel):
-    """Moving the date the countdown counts to. A real date, same rule as
-    everywhere else in this shop — BRAND.md §8, never "soon"."""
-
-    promised_for: date
 
 
 class MyOrders(BaseModel):

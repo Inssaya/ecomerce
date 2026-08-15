@@ -62,17 +62,7 @@ export async function generateMetadata({
 
   if (!found) return { title: t("notFound") };
 
-  // The one line under the title in search snippets and share previews: the
-  // price, and — for a workshop piece — how long it takes to make. No stock
-  // claim; the shop does not track units, so a "how many left" sentence here
-  // would be one the site cannot back up. A claim we cannot keep is worse
-  // than no claim.
-  const madeNote =
-    found.kind === "workshop" && found.lead_time_days
-      ? t("readyInDays", { n: found.lead_time_days })
-      : "";
-
-  const description = `${money(found.price, lang)}${madeNote ? ` · ${madeNote}` : ""} ${found.description || t("taglineSupport")}`
+  const description = `${money(found.price, lang)} ${found.description || t("taglineSupport")}`
     .replace(/\s+/g, " ")
     .slice(0, 200);
   const path = `/${lang}/piece/${found.slug}`;

@@ -72,18 +72,15 @@ async def quote(db: AsyncSession, request: CustomRequest, body: Quote) -> Custom
         )
 
     request.quote_price = body.price
-    request.lead_time_days = body.lead_time_days
     request.quote_note_en = body.note_en
     request.quote_note_ar = body.note_ar
-    # A real date, computed from today, so the page never has to say "soon".
-    request.promised_for = date.today() + timedelta(days=body.lead_time_days)
     request.status = RequestStatus.quoted
     db.add(
         RequestEvent(
             request_id=request.id,
             status=RequestStatus.quoted,
             actor="workshop",
-            note=f"{body.price:.0f} MAD, {body.lead_time_days} days",
+            note=f"{body.price:.0f} MAD",
         )
     )
     await db.commit()
@@ -121,11 +118,6 @@ async def approve(
         subtotal=price,
         delivery_fee=fee,
         total=price + fee,
-        # The date already agreed at quoting time. Without carrying it over,
-        # the countdown on the tracking page is empty for exactly the path
-        # that needs it most: the buyer of a custom piece has no catalogue
-        # entry to reassure them, only this date.
-        promised_for=request.promised_for,
         note=request.description[:500],
         # Always one line, and always without a product behind it.
         #
@@ -140,7 +132,6 @@ async def approve(
                 unit_price=price,
                 quantity=1,
                 subtotal=price,
-                lead_time_days=request.lead_time_days,
             )
         ],
         events=[OrderEvent(status=OrderStatus.placed, actor="customer")],

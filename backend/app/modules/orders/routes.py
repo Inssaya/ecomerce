@@ -22,7 +22,6 @@ from app.modules.orders.schemas import (
     FindOrder,
     MyOrders,
     OrderResponse,
-    PromiseChange,
     StatusChange,
 )
 
@@ -225,19 +224,6 @@ async def set_status(
         db, Order, reference.upper(), field="reference", detail="Order not found"
     )
     order = await service.change_status(db, order, body.status, body.note, actor="workshop")
-    return await _out(db, order)
-
-
-@router.post("/admin/orders/{reference}/promise", response_model=OrderResponse)
-async def set_promise(
-    reference: str, body: PromiseChange, db: DbSession, owner: Owner
-) -> OrderResponse:
-    """Move the date the countdown counts to — no email, no status change,
-    just the number the order and tracking pages both read."""
-    order = await get_or_404(
-        db, Order, reference.upper(), field="reference", detail="Order not found"
-    )
-    order = await service.set_promise(db, order, body.promised_for)
     return await _out(db, order)
 
 

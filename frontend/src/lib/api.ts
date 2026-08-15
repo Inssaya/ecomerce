@@ -21,7 +21,6 @@ export interface Piece {
   category_slug: string | null;
   category_name: string | null;
   available: number | null;
-  lead_time_days: number | null;
   /** What it costs today. Computed on the server, so the card and the piece
    *  page cannot disagree with each other about the number the buyer sees. */
   effective_price: number;
@@ -112,7 +111,6 @@ export interface ServiceSummary {
   name: string;
   summary: string;
   from_price: number | null;
-  lead_time_days: number | null;
   category_slug: string | null;
 }
 
@@ -139,7 +137,6 @@ export interface OrderView {
     title: string;
     variant_label: string;
     piece_label: string;
-    lead_time_days: number | null;
     unit_price: number;
     quantity: number;
     subtotal: number;
@@ -152,9 +149,6 @@ export interface OrderView {
   status: string;
   created_at: string;
   whatsapp_url: string;
-  /** The date the countdown counts to, set by the workshop and editable
-   *  after the fact if a promise has to move. */
-  promised_for: string | null;
 }
 
 export interface RequestView {
@@ -164,8 +158,6 @@ export interface RequestView {
   status: string;
   quote_price: number | null;
   quote_note: string;
-  lead_time_days: number | null;
-  promised_for: string | null;
   order_reference: string | null;
   events: { status: string; created_at: string }[];
   created_at: string;

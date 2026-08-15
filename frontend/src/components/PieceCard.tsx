@@ -52,13 +52,9 @@ export function PieceCard({
     return () => observer.disconnect();
   }, [piece.id]);
 
-  // The shop does not count units, so a card can no longer say "one left" or
-  // "all gone". The one line that stays is the workshop's promise about time —
-  // a made-to-order card that hid it would surprise the buyer at checkout.
-  const note =
-    piece.kind === "workshop" && piece.lead_time_days
-      ? t("readyInDays", { n: piece.lead_time_days })
-      : "";
+  // No note. The card used to carry "ready in N days" for made-to-order
+  // pieces; the shop states no time to anyone.
+  const note = "";
 
   // Discount badge and the struck-out original price when an offer is live.
   // `effective_price` and `discount_active` come from the server so the card

@@ -138,11 +138,11 @@ REQUEST_COPY: dict[RequestStatus, Copy] = {
         "Here is what it would cost",
         "هذا ما سيكلّفه",
         [
-            "For request {reference}: {price} MAD, ready in {days} days once you approve.",
+            "For request {reference}: {price} MAD once you approve.",
             "If that works, tell us and we'll start. If not, no hard feelings.",
         ],
         [
-            "بخصوص الطلب {reference}: {price} درهم، وجاهز خلال {days} يوماً بعد موافقتك.",
+            "بخصوص الطلب {reference}: {price} درهم بعد موافقتك.",
             "إن ناسبك، أخبرنا ونبدأ. وإن لم يناسبك، فلا بأس.",
         ],
     ),
@@ -283,7 +283,6 @@ async def notify_request_status(request: CustomRequest) -> None:
         fields={
             "reference": request.reference,
             "price": f"{request.quote_price:.0f}" if request.quote_price is not None else "—",
-            "days": str(request.lead_time_days or "—"),
         },
         email=request.customer_email,
         track_url=request_track_url(request),

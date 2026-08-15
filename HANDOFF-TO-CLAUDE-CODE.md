@@ -6,7 +6,7 @@ this file wins** — it carries the owner's answers from a live Q&A session that
 happened *after* the four sessions were written, and it reverses specific
 decisions the plan recorded as settled.
 
-**Authority:** the plan named `requirementMOdification.md` as source of truth.
+**Authority:** the plan named `requirementMOdification.md` as source of truth.(but it have also alot of problemes that owner didnt say and ai write or owner said and ai not write , or owner didnt notice and owner write)
 That spec was written before the owner had seen the built result. Several lines
 in it, and several `D`-decisions built on it, no longer match what the owner
 wants. Every reversal below is quoted from the owner directly. Do not re-derive

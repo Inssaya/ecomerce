@@ -387,18 +387,13 @@ async def update_product(
         # Nothing can prove a file is genuine, but nothing goes on sale
         # without one. This is the whole gate.
         #
-        # A `delivery_days` requirement briefly lived here too and was wrong
-        # twice over: the delivery estimate is admin-only and deliberately not
-        # shown to anyone yet, so blocking publication on a number no customer
-        # will read stops the shop for no one's benefit. It also silently
-        # broke publishing for every product that had not been given one.
+        # A delivery-time requirement briefly lived here too. There is no
+        # such column any more — the shop states no time to anyone.
         if not product.media:
             raise bad_request("Add at least one photo of the piece before publishing it")
 
     if "category_id" in changes and changes["category_id"]:
         await get_or_404(db, Category, changes["category_id"], detail="Category not found")
-    if product.kind is ProductKind.workshop and changes.get("lead_time_days") is None:
-        changes.pop("lead_time_days", None)
 
     # A reduction is three fields that can arrive in three separate requests,
     # so the combination worth checking is the one that ends up on the row.
