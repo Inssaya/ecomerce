@@ -51,34 +51,32 @@ async def test_the_customer_follows_it_with_the_token_alone(client: AsyncClient)
     assert (await client.get("/api/requests/track/nope")).status_code == 404
 
 
-async def test_a_quote_carries_a_price_and_a_real_date(
+async def test_a_quote_carries_a_price(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    """"Ready in six days", never "soon"."""
+    """A price and a note, and nothing about time.
+
+    This used to assert a `lead_time_days` of 6 and a computed `promised_for`
+    date. Both columns are gone — the shop states no time to anyone, and when
+    a piece will be ready is a phone call (see `Quote` in
+    `modules/requests/schemas.py`). A quote with no date is now the only
+    shape a quote has, which is why the test that demanded one was deleted
+    rather than adjusted.
+    """
     request = await ask(client)
     quoted = await client.post(
         f"/api/admin/requests/{request['reference']}/quote",
         headers=owner_headers,
-        json={"price": 260, "lead_time_days": 6, "note_en": "Printed then hand-finished."},
+        json={"price": 260, "note_en": "Printed then hand-finished."},
     )
     assert quoted.status_code == 200, quoted.text
     body = quoted.json()
     assert body["status"] == "quoted"
     assert body["quote_price"] == 260.0
-    assert body["lead_time_days"] == 6
-    assert body["promised_for"] is not None  # an actual date, computed
-
-
-async def test_a_quote_without_a_date_is_refused(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    request = await ask(client)
-    response = await client.post(
-        f"/api/admin/requests/{request['reference']}/quote",
-        headers=owner_headers,
-        json={"price": 260},
-    )
-    assert response.status_code == 422
+    assert body["quote_note"] == "Printed then hand-finished."
+    # Nothing in the response promises a date.
+    assert "lead_time_days" not in body
+    assert "promised_for" not in body
 
 
 async def test_nothing_is_owed_until_the_customer_approves(

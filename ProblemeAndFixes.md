@@ -296,6 +296,76 @@ tests whose entire point was the deleted concepts
   the dead routes) across both `backend/` and `frontend/` — zero hits outside
   accurate historical comments and my own intentionally-kept docstrings.
 
+## 2026-09-01 00:55 (local, system clock) — Opus 5
+
+**Owner handed over the decisions and said to act like I'm shipping today.
+So the first thing I did was not a feature — it was proving the thing runs.**
+I had made a large schema change across this session and never once executed
+the migration or the backend suite. Shipping that unrun would have been
+reckless, so that became the gate.
+
+Pushed all 8 commits to `Inssaya/ecomerce` first, as asked.
+
+**1. Ran the migrations against the real database.** Took a `pg_dump` first
+(2.2 MB, `backups/pre-schema-surgery-*.sql`) because the migration drops
+columns. Rebuilt the API image and let `entrypoint.sh` do it. **All four
+pending migrations applied cleanly** — the no-time one, shop settings,
+alert emails, and the big no-stock/no-kind/no-price-range one — and the API
+came up healthy. That is the single biggest validation of this session's
+work.
+
+**2. Ran the backend suite for the first time. It was already red before I
+started, and nobody knew.** Getting it running surfaced five real problems:
+
+- **`conftest.py` truncated a hand-written table list that still named
+  `piece_alerts`** — dropped by the migration. Every single test errored at
+  setup with `UndefinedTableError`. Replaced the hardcoded list with
+  `Base.metadata.sorted_tables`, so it can never drift again. That also
+  silently fixed a second bug I'd noted earlier and not chased: the old list
+  omitted `blocklist`, `security_events`, `product_attributes` and
+  `product_interactions`, so rows leaked between tests and the security
+  tests quietly depended on execution order.
+- **`shop_settings` needed seeding in tests.** It's a singleton created and
+  seeded by a migration, and `create_all()` doesn't run migrations — so the
+  `assert row is not None` I added earlier would fire in any test touching
+  settings. Seeded in the fixture, mirroring what the migration does.
+- **My own timezone fix was half-done, and only running it revealed that.**
+  I'd made "today" Casablanca-local but left the timestamps being compared
+  in UTC. The test failed at exactly the wrong moment to be a coincidence:
+  UTC was `2026-08-31 23:24` while Casablanca was `2026-09-01 00:24` —
+  different days. So an order placed *today in Morocco* fell outside
+  *today*, which is worse than the bug I set out to fix. Corrected properly:
+  the column is now converted to shop time in SQL (`_local()`), and the
+  daily-series `GROUP BY`s in both `metrics.py` and `analytics.py` were
+  converted too, since they bucket by day and must agree with the filter.
+- **First attempt at that broke 20+ tests** with `column must appear in the
+  GROUP BY clause`. Cause: `func.timezone("Africa/Casablanca", col)` binds
+  the zone name as a *parameter*, and each call binds a new one — so
+  `SELECT date(timezone($1, t))` and `GROUP BY date(timezone($2, t))` are
+  not the same expression to Postgres. Fixed with `literal_column` so every
+  occurrence renders identically.
+- **Two stale tests in `test_requests.py`** asserted `lead_time_days` and
+  `promised_for` on a quote — removed by an *earlier* session, not mine. The
+  `Quote` schema's own docstring already said "a price and nothing else".
+  Rewrote one, deleted the other (a quote without a date is now the only
+  shape a quote has). **One test in `test_security.py`** rate-limited
+  `/api/assistant`, the concierge I deleted; removed with a note explaining
+  the remaining AI route is owner-only so a stranger can't run up a bill.
+  **One in `test_feed.py`** asserted "no API key" behaviour while *assuming*
+  the ambient environment had none — it passed on a laptop and failed on the
+  shop's own stack, where a real key is set. Now forces the unconfigured
+  state with `monkeypatch`, so it tests the code rather than its
+  surroundings.
+
+**Result: 153 tests, all passing, against the real migrated Postgres.** Live
+API answering `{"status":"ok"}`.
+
+The lesson worth keeping: every one of those five was invisible to
+syntax checks, ruff, and typechecking. They only existed once the thing
+actually ran. I should have run it far earlier in the session.
+
+---
+
 ## 2026-08-31 23:45 (local, system clock) — Opus 5
 
 **Owner reported: "I can't purchase anything because of the delivery fee —

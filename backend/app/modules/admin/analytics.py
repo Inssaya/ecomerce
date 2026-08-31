@@ -24,7 +24,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Category, Product, Signal, SignalType
 from app.models.requests import CustomRequest
-from app.modules.admin.metrics import WHOLE_SHOP, Period, Scope, _scoped, _within
+from app.modules.admin.metrics import WHOLE_SHOP, Period, Scope, _local, _scoped, _within
 
 #: Below this, someone landed and left. Above it, they read something.
 #:
@@ -89,13 +89,15 @@ async def audience(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) 
         await db.execute(
             _scoped(
                 select(
-                    func.date(Signal.created_at).label("day"),
+                    # Local day, to match `_fill_days`, which walks the
+                    # period's Morocco dates. See `_local` in metrics.py.
+                    func.date(_local(Signal.created_at)).label("day"),
                     func.count(func.distinct(Signal.visitor_id)).label("visitors"),
                 ).where(_within(Signal.created_at, period)),
                 scope,
             )
-            .group_by(func.date(Signal.created_at))
-            .order_by(func.date(Signal.created_at))
+            .group_by(func.date(_local(Signal.created_at)))
+            .order_by(func.date(_local(Signal.created_at)))
         )
     ).all()
 
@@ -285,12 +287,12 @@ async def for_product(db: AsyncSession, product_id: str, period: Period) -> dict
     daily = (
         await db.execute(
             select(
-                func.date(Signal.created_at).label("day"),
+                func.date(_local(Signal.created_at)).label("day"),
                 func.count(func.distinct(Signal.visitor_id)).label("visitors"),
             )
             .where(_within(Signal.created_at, period), Signal.product_id == product_id)
-            .group_by(func.date(Signal.created_at))
-            .order_by(func.date(Signal.created_at))
+            .group_by(func.date(_local(Signal.created_at)))
+            .order_by(func.date(_local(Signal.created_at)))
         )
     ).all()
 

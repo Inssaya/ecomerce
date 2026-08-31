@@ -289,10 +289,19 @@ async def test_the_levers_are_the_owners_alone(client: AsyncClient) -> None:
 
 
 async def test_embedding_refresh_reports_itself_unavailable_without_a_key(
-    client: AsyncClient, owner_headers: dict[str, str]
+    client: AsyncClient, owner_headers: dict[str, str], monkeypatch
 ) -> None:
     """No API key means every AI feature says so, rather than degrading to a
-    guess."""
+    guess.
+
+    The absence of a key is forced rather than assumed. This test used to
+    depend on the ambient environment having none, so it passed on a laptop
+    and failed the moment it ran anywhere a real `LLM_API_KEY` was set —
+    including the shop's own dev stack, where it reported 0 and looked like a
+    regression in the embedding code rather than a test reading its own
+    surroundings.
+    """
+    monkeypatch.setattr("app.core.llm.is_configured", lambda: False)
     await publish(client, owner_headers, title="Something")
     response = await client.post("/api/admin/feed/embeddings", headers=owner_headers)
     assert response.status_code == 200

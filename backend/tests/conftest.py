@@ -55,6 +55,7 @@ from app.core import storage  # noqa: E402
 from app.core.cache import close_redis, get_redis  # noqa: E402
 from app.db import Base, SessionLocal, engine  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models import SETTINGS_ID  # noqa: E402
 from app.modules.notify import email as email_module  # noqa: E402
 
 
@@ -99,14 +100,31 @@ async def clean_db() -> AsyncGenerator[None, None]:
     """
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
+
+        # Every table the models declare, not a list typed out by hand.
+        #
+        # The hand-written list was the same fact written down twice, and it
+        # drifted both ways: it still named `piece_alerts` months after that
+        # table was dropped (which made *every* test error at setup on
+        # `UndefinedTableError`), and it had never been updated to include
+        # `blocklist`, `security_events`, `product_attributes` or
+        # `product_interactions` — so rows in those leaked from one test into
+        # the next and the security tests quietly depended on running order.
+        # `CASCADE` handles the foreign keys, so ordering does not matter.
+        tables = ", ".join(f'"{table.name}"' for table in Base.metadata.sorted_tables)
+        await connection.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+
+        # `shop_settings` holds exactly one row and the application asserts it
+        # exists — it is created and seeded by a migration, and `create_all`
+        # does not run migrations. Without this every test that reaches the
+        # settings (a `danger`-level security event emailing its recipients,
+        # the public contact endpoint) fails on a missing singleton that is
+        # never missing in a real deployment.
         await connection.execute(
             text(
-                "TRUNCATE request_events, custom_requests, order_events, order_items, orders, "
-                "piece_alerts, pieces, product_variants, "
-                "product_embeddings, product_media, products, signals, feed_weights, categories, "
-                "cities, services, contact_messages, "
-                "refresh_tokens, users RESTART IDENTITY CASCADE"
-            )
+                "INSERT INTO shop_settings (id, contact_email, contact_phone, alert_emails) "
+                "VALUES (:id, :email, :phone, '')"
+            ).bindparams(id=SETTINGS_ID, email="workshop@mostyle.ma", phone="0600000000")
         )
     # Counters are per-test: a limit tripped in one test must not spill into
     # the next, and a test that expects to be limited must start from zero.

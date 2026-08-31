@@ -121,21 +121,11 @@ async def test_a_correct_sign_in_forgives_the_earlier_mistakes(
     assert again.status_code == 401
 
 
-async def test_the_assistant_cannot_be_used_to_empty_the_ai_budget(
-    client: AsyncClient,
-) -> None:
-    """Unauthenticated, and every call spends money at a provider."""
-    codes = [
-        (
-            await client.post(
-                "/api/assistant",
-                headers=VISITOR,
-                json={"messages": [{"role": "user", "content": "hello"}]},
-            )
-        ).status_code
-        for _ in range(35)
-    ]
-    assert 429 in codes
+# The rate limit protecting `/api/assistant` from draining the AI budget was
+# tested here. That endpoint was the buyer-facing concierge, which is gone —
+# and with it the only unauthenticated route that spent money at a provider.
+# The owner's copilot is behind `require_owner`, so a stranger cannot reach
+# it to run up a bill in the first place.
 
 
 async def test_orders_cannot_be_flooded(

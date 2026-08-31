@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import String, cast, func, literal_column, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import (
@@ -43,11 +43,41 @@ PAID_STATUSES = (OrderStatus.delivered,)
 #: day. Morocco has not observed DST since 2018 except for a fixed reversion
 #: to UTC+0 during Ramadan, which is exactly the kind of rule `zoneinfo` gets
 #: right and a hardcoded `+1` gets wrong.
-SHOP_TZ = ZoneInfo("Africa/Casablanca")
+#:
+#: **Both halves have to agree.** Naming the day in Morocco time while still
+#: comparing UTC timestamps against it is worse than doing neither: between
+#: midnight and 01:00 local, "today" is already the new date while every
+#: freshly written `created_at` is still yesterday in UTC, so an order placed
+#: minutes ago vanishes from today's figures entirely. The column is
+#: therefore converted to shop time in SQL — see `_local()` — rather than the
+#: boundaries being converted to UTC, because the day is a *local* idea and
+#: the grouping in the daily series has to agree with it.
+SHOP_TZ_NAME = "Africa/Casablanca"
+SHOP_TZ = ZoneInfo(SHOP_TZ_NAME)
 
 
 def _shop_today() -> date:
     return datetime.now(SHOP_TZ).date()
+
+
+#: The zone name as SQL text rather than a bound parameter, deliberately.
+#: `func.timezone("Africa/Casablanca", col)` binds the name as a parameter,
+#: and every call binds a *new* one — so `SELECT date(timezone($1, t))` and
+#: `GROUP BY date(timezone($2, t))` are not the same expression to Postgres,
+#: which rejects the query with "column must appear in the GROUP BY clause".
+#: Inlining makes every occurrence render identically. Safe to inline because
+#: this is a module constant, never user input.
+_SHOP_TZ_SQL = literal_column(f"'{SHOP_TZ_NAME}'")
+
+
+def _local(column):
+    """A `timestamptz` column read as wall-clock time in the shop's own city.
+
+    Postgres `timezone('Africa/Casablanca', ts)` returns a naive timestamp in
+    that zone, which is what every date boundary and every `GROUP BY` day in
+    this file is expressed in.
+    """
+    return func.timezone(_SHOP_TZ_SQL, column)
 
 
 @dataclass(slots=True)
@@ -133,10 +163,17 @@ def _within(column, period: Period):
     00:00:00` matched this period *and* the next one — two adjacent periods
     that should partition time were instead overlapping by one instant, and a
     revenue figure summed over both double-counted whatever landed there.
+
+    The comparison is made in shop-local time (`_local`), because `period` is
+    a pair of Morocco dates. Comparing them against raw UTC timestamps meant
+    that for the hour after local midnight, an order placed moments ago was
+    excluded from "today" — the period had already rolled over while the
+    timestamp had not.
     """
     end_exclusive = datetime.combine(period.end + timedelta(days=1), datetime.min.time())
     start_inclusive = datetime.combine(period.start, datetime.min.time())
-    return (column >= start_inclusive) & (column < end_exclusive)
+    local = _local(column)
+    return (local >= start_inclusive) & (local < end_exclusive)
 
 
 def _scoped(query, scope: Scope, *, orders: bool = False):
@@ -221,12 +258,16 @@ async def revenue(db: AsyncSession, period: Period, scope: Scope = WHOLE_SHOP) -
         for row in await db.execute(
             _scoped(
                 select(
-                    func.date(Order.updated_at).label("day"),
+                    # Grouped by the local day, because the loop below walks
+                    # `period.start`..`period.end`, which are Morocco dates.
+                    # Grouping by the UTC day put an hour of each evening's
+                    # takings under a key no row of the chart ever looks up.
+                    func.date(_local(Order.updated_at)).label("day"),
                     func.coalesce(func.sum(Order.total), 0).label("total"),
                 ).where(Order.status.in_(PAID_STATUSES), _within(Order.updated_at, period)),
                 scope,
                 orders=True,
-            ).group_by(func.date(Order.updated_at))
+            ).group_by(func.date(_local(Order.updated_at)))
         )
     )
     daily = []
