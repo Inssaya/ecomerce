@@ -77,7 +77,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
   // actually made a promise about — everywhere else is told no date, because we
   // have not earned the right to name one.
   const place = terms ? matchCity(terms.cities, city) : null;
-  const fee = terms ? feeFor(total, terms, city) : null;
+  const fee = feeFor(total, terms, city);
 
   // The cart is read from storage on mount, so before that there is nothing to
   // total. Drawing an order summary with no lines in it and then filling it in
@@ -157,12 +157,12 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
       <div className="mt-1 flex justify-between text-[15px] text-ink-soft">
         <span>{t("delivery")}</span>
         <span className="stamp">
-          {fee === null ? "—" : fee === 0 ? t("freeDelivery") : money(fee, lang)}
+          {fee === 0 ? t("freeDelivery") : money(fee, lang)}
         </span>
       </div>
       <div className="mt-2 flex justify-between border-t border-sand pt-2 text-[17px] font-semibold">
         <span>{t("total")}</span>
-        <span className="stamp">{fee === null ? "—" : money(total + fee, lang)}</span>
+        <span className="stamp">{money(total + fee, lang)}</span>
       </div>
       <p className="mt-3 text-[14px] leading-relaxed text-ink-soft">{t("payAtDoor")}</p>
       {/* Where the doubt actually is. A buyer deciding whether to commit to cash
@@ -449,7 +449,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
           <div className="min-w-0">
             <p className="text-[12px] text-ink-soft">{t("total")}</p>
             <p className="stamp text-[16px] font-semibold leading-tight">
-              {fee === null ? "—" : money(total + fee, lang)}
+              {money(total + fee, lang)}
             </p>
           </div>
           <div className="ms-auto w-[58%] max-w-[240px]">{confirm}</div>

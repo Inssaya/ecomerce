@@ -84,8 +84,29 @@ export function matchCity(cities: Place[], typed: string | null | undefined): Pl
   );
 }
 
-/** What this order will actually be charged for delivery. */
-export function feeFor(subtotal: number, terms: Delivery, city?: string | null): number {
+/**
+ * What this order will actually be charged for delivery.
+ *
+ * **`terms` may be null, and null means free.** This used to take a
+ * non-null `Delivery`, so every caller wrote `terms ? feeFor(…) : null` and
+ * then rendered `—` for both the delivery line *and the Total* until the
+ * `/places` request came back — or forever, if it failed. That asked
+ * somebody to commit to paying cash at their door without telling them how
+ * much, which nobody does: it silently blocked checkout on a request that
+ * has nothing to do with whether the order can be placed.
+ *
+ * Free is the right fallback rather than a guess. The shop's standing
+ * policy is free delivery on everything (`FREE_DELIVERY_OVER=0`), the
+ * server returns 0 for every city, and `place_order` recomputes the fee
+ * server-side at checkout regardless — so the client cannot cause an
+ * undercharge, only a wrong *display*. Today the display would be right.
+ *
+ * If the shop ever reintroduces a fee, this is the line to revisit: a
+ * failed request would then briefly show free for something that costs
+ * money, and at that point it is worth retrying rather than defaulting.
+ */
+export function feeFor(subtotal: number, terms: Delivery | null, city?: string | null): number {
+  if (!terms) return 0;
   if (subtotal >= terms.freeOver) return 0;
   return matchCity(terms.cities, city)?.delivery_fee ?? terms.fee;
 }

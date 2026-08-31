@@ -73,6 +73,22 @@ describe("what delivery costs", () => {
     expect(alwaysFree(terms())).toBe(false);
   });
 
+  it("is free, not unknown, before the shop's terms have loaded", () => {
+    // The bug this pins: `feeFor` used to require a non-null `Delivery`, so
+    // the cart and the checkout both wrote `terms ? feeFor(…) : null` and
+    // rendered "—" for the **Total** until `/places` answered — or forever if
+    // it failed. That asks somebody to commit to paying cash at their door
+    // without telling them the amount, which blocks the sale outright, and it
+    // blocks it on a request that has nothing to do with placing the order.
+    //
+    // Free is the true answer today (FREE_DELIVERY_OVER=0 server-side) and the
+    // safe one in general: `place_order` recomputes the fee on the server, so
+    // a client that guesses low cannot undercharge the actual order.
+    expect(feeFor(0, null)).toBe(0);
+    expect(feeFor(240, null)).toBe(0);
+    expect(feeFor(240, null, "Dakhla")).toBe(0);
+  });
+
   it("matches a city however a person typed it", () => {
     const cities = terms().cities;
     for (const typed of ["Casablanca", "casablanca", "  CASABLANCA  "]) {

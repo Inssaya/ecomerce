@@ -44,7 +44,7 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
 
   // Null until the shop has said what it charges. A number invented locally
   // while waiting would be a number the customer might read and act on.
-  const fee = terms ? feeFor(total, terms) : null;
+  const fee = feeFor(total, terms);
 
   return (
     <div className="page-wide pt-6 pb-32 lg:max-w-[1020px] lg:pb-16">
@@ -109,9 +109,9 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
           <Row label={t("subtotal")} value={money(total, lang)} />
           <Row
             label={t("delivery")}
-            value={fee === null ? "—" : fee === 0 ? t("freeDelivery") : money(fee, lang)}
+            value={fee === 0 ? t("freeDelivery") : money(fee, lang)}
           />
-          <Row label={t("total")} value={fee === null ? "—" : money(total + fee, lang)} strong />
+          <Row label={t("total")} value={money(total + fee, lang)} strong />
         </dl>
 
         <p className="mt-4 text-[14px] text-ink-soft leading-relaxed">{t("payAtDoor")}</p>
@@ -142,7 +142,7 @@ export default function CartPage({ params }: { params: Promise<{ lang: string }>
           <div className="min-w-0">
             <p className="text-[12px] text-ink-soft">{t("total")}</p>
             <p className="stamp text-[16px] font-semibold leading-tight">
-              {fee === null ? "—" : money(total + fee, lang)}
+              {money(total + fee, lang)}
             </p>
           </div>
           <Link

@@ -296,6 +296,52 @@ tests whose entire point was the deleted concepts
   the dead routes) across both `backend/` and `frontend/` — zero hits outside
   accurate historical comments and my own intentionally-kept docstrings.
 
+## 2026-08-31 23:45 (local, system clock) — Opus 5
+
+**Owner reported: "I can't purchase anything because of the delivery fee —
+but there is no delivery fee, delivery is free on everything, always."**
+Found it. Real bug, and it was blocking checkout.
+
+**It was never a fee.** Verified the whole path first: `.env` has
+`DELIVERY_FEE=0` and `FREE_DELIVERY_OVER=0`; `Settings.delivery_is_free`
+returns true; `local.fee_for_name()` short-circuits to `0.0` before it even
+looks at the city; `orders/service.py`'s `delivery_fee_for()` returns
+`Decimal("0")` for every basket. The server charges nothing and always has.
+
+**The bug was the display refusing to commit to a number.** `feeFor()` in
+`lib/delivery.ts` required a non-null `Delivery`, so both the cart and the
+checkout wrote `terms ? feeFor(…) : null` — and until the separate
+`GET /places` request came back, `fee` was `null` and **six render sites**
+printed `—`. Two of those six are the **Total**. So the checkout page could
+sit there asking somebody to commit to paying cash at their door with the
+total shown as a dash. If that request failed outright — one bad moment on
+mobile data — it stayed a dash permanently. Nobody clicks that, and it had
+nothing to do with whether the order could actually be placed.
+
+Fixed at the source rather than at six call sites: `feeFor()` now takes
+`Delivery | null` and returns `0` when the terms are unknown, with the
+reasoning written down where the next person will find it. Free is the true
+answer today *and* the safe one in general — `place_order` recomputes the
+fee server-side, so a client guessing low cannot undercharge the real order;
+the worst case is a wrong display, and today it would be right. Flagged the
+one condition under which to revisit it (if the shop ever reintroduces a
+fee, a failed request should retry rather than default). All six sites now
+render a real total. Added a test pinning exactly this — `feeFor(240, null)`
+is `0`, not unknown — so it can't quietly come back. 17/17 passing.
+
+**Also, on the home-page hero I proposed last entry: the owner rejected it,
+and was right.** My reasoning was that the shop's pitch is invisible to
+customers. His counter: people arrive at a shop to buy, not to read; a
+headline/subheader/description stack is blog and landing-page psychology,
+not shop psychology, and it puts something in front of a customer whose mind
+is already on the product. That's correct for a photo-first commerce wall,
+and it's the second time this session that a "make the page explain itself"
+instinct was the wrong call for this particular shop. Not doing it. The
+tagline still reaches people through the footer added in the previous
+commit, which is where that kind of line belongs.
+
+---
+
 ## 2026-08-31 23:36 (local, system clock) — Opus 5
 
 **Ran a customer walkthrough of the whole storefront** (an agent reading
