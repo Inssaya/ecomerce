@@ -10,7 +10,7 @@ import { useCart } from "@/components/CartProvider";
 import { api, ApiError } from "@/lib/api";
 import { feeFor, matchCity, useDelivery } from "@/lib/delivery";
 import { saveProfile, useSession } from "@/lib/session";
-import { type Lang, isLang, money, translator } from "@/lib/i18n";
+import { type Lang, isLang, money, pieceCount, translator } from "@/lib/i18n";
 import { track } from "@/lib/signals";
 
 /**
@@ -40,7 +40,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
   const t = translator(lang);
   const ar = lang === "ar";
   const router = useRouter();
-  const { lines, total, count, clear, ready } = useCart();
+  const { lines, total, count, clear, idOf, ready } = useCart();
   const { session, ready: sessionReady } = useSession();
   const terms = useDelivery(lang);
 
@@ -189,7 +189,7 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
       className="page-wide pt-6 pb-32 lg:max-w-[1020px] lg:pb-16"
     >
       <h1 className="text-[21px] font-semibold tracking-[-0.01em]">{t("yourOrder")}</h1>
-      <p className="mt-1 text-[14px] text-ink-soft">{t("itemCount", { n: count })}</p>
+      <p className="mt-1 text-[14px] text-ink-soft">{pieceCount(count, lang)}</p>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start lg:gap-10">
         <div>
@@ -199,33 +199,52 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
               cart itself, if something needs fixing. */}
           <div className="card p-4 shadow-soft">
             <ul className="space-y-3">
-              {lines.map((line) => (
-                <li key={`${line.productId}:${line.variantId}`} className="flex items-center gap-3">
-                  <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-clay-soft">
-                    {line.image ? (
-                      <Image
-                        src={line.image}
-                        alt={line.title}
-                        fill
-                        sizes="56px"
-                        className="object-cover"
-                      />
-                    ) : null}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="line-clamp-1 text-[14.5px] font-medium leading-snug">
-                      {line.title}
+              {lines.map((line) => {
+                // The same picks the cart shows, in the same order. This
+                // summary used to print only `line.option`, so a buyer who
+                // paid extra to have their name engraved — or who chose a
+                // colour — saw none of it on the last screen before
+                // committing to cash at their door, and had to take on trust
+                // that it went through.
+                const picks = [
+                  line.option || null,
+                  ...(line.selection ?? []).map((pick) =>
+                    pick.name ? `${pick.name}: ${pick.value}` : pick.value,
+                  ),
+                  line.personalization ? `“${line.personalization}”` : null,
+                ].filter(Boolean) as string[];
+
+                return (
+                  // Keyed by the cart's own identity function. `productId:variantId`
+                  // was not unique: the same piece in two colours is two lines
+                  // with one key, and React renders them as one.
+                  <li key={idOf(line)} className="flex items-center gap-3">
+                    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl bg-clay-soft">
+                      {line.image ? (
+                        <Image
+                          src={line.image}
+                          alt={line.title}
+                          fill
+                          sizes="56px"
+                          className="object-cover"
+                        />
+                      ) : null}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-1 text-[14.5px] font-medium leading-snug">
+                        {line.title}
+                      </p>
+                      <p className="text-[13px] text-ink-soft">
+                        {picks.length > 0 ? `${picks.join(" · ")} · ` : ""}
+                        {t("qty", { n: line.quantity })}
+                      </p>
+                    </div>
+                    <p className="stamp shrink-0 text-[14.5px] font-semibold">
+                      {money(line.price * line.quantity, lang)}
                     </p>
-                    <p className="text-[13px] text-ink-soft">
-                      {line.option ? `${line.option} · ` : ""}
-                      {t("qty", { n: line.quantity })}
-                    </p>
-                  </div>
-                  <p className="stamp shrink-0 text-[14.5px] font-semibold">
-                    {money(line.price * line.quantity, lang)}
-                  </p>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
             <div className="mt-3 border-t border-sand pt-3 text-end">
               <Link

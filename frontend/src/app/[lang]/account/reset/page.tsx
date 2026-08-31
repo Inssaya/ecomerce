@@ -92,7 +92,7 @@ function AskForLink({ lang }: { lang: Lang }) {
       <p className="text-[15px] text-ink-soft leading-relaxed">{t("forgotPasswordLead")}</p>
       <div>
         <label className="label" htmlFor="email">
-          {t("yourEmail")}
+          {t("email")}
         </label>
         <input
           id="email"

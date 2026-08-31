@@ -8,7 +8,6 @@
  * that can move, and an invoice to print — enough that the record needed the
  * room a centred popup gives it, the same shape `ProductPopup` uses.
  */
-import { useState } from "react";
 import Image from "next/image";
 
 import { api, type AdminOrder } from "@/lib/console/api";

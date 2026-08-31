@@ -20,10 +20,28 @@ export function dir(lang: Lang): "ltr" | "rtl" {
 const copy = {
   // The position itself.
   tagline: ["Made, not resold.", "نصنع، لا نعيد البيع"],
+  //: No delivery claim in here. This string is the `<meta description>`, and
+  //: it used to end "Free delivery on everything" — a hardcoded promise that
+  //: goes stale the day a fee is set, while every screen that shows a fee
+  //: reads it from the server precisely so it cannot be wrong.
   taglineSupport: [
-    "Everything else online came from a container. Ours came from a workshop. Free delivery on everything.",
-    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة. التوصيل مجاني على كل شيء.",
+    "Everything else online came from a container. Ours came from a workshop.",
+    "كل شيء آخر جاء من حاوية. أما قطعتنا فجاءت من ورشة.",
   ],
+
+  // The footer. Until now the site had none at all — no way to reach the
+  // delivery terms, no way back to a lost order, and nothing at the bottom
+  // of the page saying a real workshop is behind it.
+  footerMade: [
+    "Printed, machined and hand-finished in one workshop in Morocco.",
+    "تُطبع وتُشكّل وتُصقل يدوياً في ورشة واحدة في المغرب.",
+  ],
+  footerShop: ["Shop", "المتجر"],
+  footerHelp: ["Help", "المساعدة"],
+  footerReach: ["Reach us", "تواصل معنا"],
+  footerDelivery: ["Delivery & returns", "التوصيل والإرجاع"],
+  footerFindOrder: ["Find your order", "ابحث عن طلبك"],
+  footerCod: ["Cash on delivery, anywhere in Morocco.", "الدفع عند الاستلام، في كل المغرب."],
 
   // Navigation and shell.
   theWorkshop: ["The Workshop", "الورشة"],
@@ -104,16 +122,20 @@ const copy = {
     "Nothing here matches that — but we can make it.",
     "لا شيء هنا يطابق ذلك — لكن يمكننا صنعه.",
   ],
-  searchFound: ["{n} pieces", "{n} قطعة"],
+  // `searchFound` and `itemCount` used to live here as "{n} pieces" /
+  // "{n} قطعة". Both are gone: Arabic changes the noun with the number, so
+  // no substitution into a fixed template can be right. See `pieceCount()`
+  // at the bottom of this file.
 
   // Cart and checkout.
   yourCart: ["Your cart", "سلتك"],
   cartEmpty: ["Nothing in here yet.", "لا شيء هنا بعد."],
   yourOrder: ["Your order", "طلبك"],
-  itemCount: ["{n} pieces", "{n} قطعة"],
   editCart: ["Edit", "عدّل"],
   qty: ["Qty {n}", "الكمية {n}"],
-  subtotal: ["Pieces", "القطع"],
+  //: The money panel's first row. "Pieces" read as a category next to a
+  //: price rather than as a sum of the lines above it.
+  subtotal: ["Items", "المجموع الفرعي"],
   delivery: ["Delivery", "التوصيل"],
   freeDelivery: ["Free", "مجاناً"],
   total: ["Total", "المجموع"],
@@ -125,7 +147,11 @@ const copy = {
   yourName: ["Your name", "اسمك"],
   yourPhone: ["Phone number", "رقم الهاتف"],
   phoneHint: ["We call this number before we deliver.", "نتصل بهذا الرقم قبل التوصيل."],
+  //: Checkout only, where an email genuinely is optional — the phone is what
+  //: the workshop actually calls. The reset and contact forms use `email`
+  //: below, where it is required and "if you want updates" made no sense.
   yourEmail: ["Email (if you want updates)", "البريد الإلكتروني (إن أردت المتابعة)"],
+  email: ["Email", "البريد الإلكتروني"],
   yourAddress: ["Address", "العنوان"],
   yourCity: ["City", "المدينة"],
   anythingElse: ["Anything we should know?", "هل من شيء ينبغي أن نعرفه؟"],
@@ -240,4 +266,24 @@ export function statusLabel(
 export function money(amount: number, lang: Lang): string {
   const rounded = Math.round(amount);
   return lang === "ar" ? `${rounded} درهم` : `${rounded} MAD`;
+}
+
+/**
+ * "3 pieces" / "٣ قطع" — counted correctly in both languages.
+ *
+ * A `{n} قطعة` template is wrong in Arabic and no substitution fixes it:
+ * the noun itself changes with the number. One is قطعة, two is the dual
+ * قطعتان, **three to ten take the plural قطع**, and eleven upwards returns
+ * to the singular. Rendering "5 قطعة" is the single clearest tell that a
+ * site was machine-translated — which is exactly the opposite of true here,
+ * where the Arabic was written by hand.
+ *
+ * English only needs the ordinary singular/plural pair.
+ */
+export function pieceCount(n: number, lang: Lang): string {
+  if (lang !== "ar") return `${n} ${n === 1 ? "piece" : "pieces"}`;
+  if (n === 1) return "قطعة واحدة";
+  if (n === 2) return "قطعتان";
+  if (n >= 3 && n <= 10) return `${n} قطع`;
+  return `${n} قطعة`;
 }

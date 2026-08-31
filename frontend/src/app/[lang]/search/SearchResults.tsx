@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 
 import { PieceCard } from "@/components/PieceCard";
 import { api, type Piece } from "@/lib/api";
-import { type Lang, translator } from "@/lib/i18n";
+import { type Lang, pieceCount, translator } from "@/lib/i18n";
 
 /** Matches the shelf's own page size, so a search page never feels slower. */
 const PAGE = 30;
@@ -56,7 +56,7 @@ export function SearchResults({
 
   return (
     <>
-      <p className="mt-2.5 text-[14px] text-ink-soft">{t("searchFound", { n: total })}</p>
+      <p className="mt-2.5 text-[14px] text-ink-soft">{pieceCount(total, lang)}</p>
       <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4 md:gap-5">
         {pieces.map((piece, index) => (
           <PieceCard key={piece.id} piece={piece} lang={lang} priority={index < 4} />

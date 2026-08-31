@@ -6,6 +6,7 @@ import { Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { BlockedScreen } from "./BlockedScreen";
 import { CategoryRail } from "./CategoryRail";
+import { Footer } from "./Footer";
 import { useCart } from "./CartProvider";
 import { Logo } from "./Logo";
 import { SearchBox } from "./SearchBox";
@@ -235,6 +236,11 @@ export function Chrome({
       <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>
         {blocked ? <BlockedScreen lang={lang} contact={contact} /> : children}
       </main>
+
+      {/* Not shown to a blocked visitor: that screen is deliberately the only
+          thing on the page, and a full footer under it would offer four more
+          doors to a shop they cannot use. */}
+      {blocked ? null : <Footer lang={lang} contact={contact} />}
     </div>
   );
 }

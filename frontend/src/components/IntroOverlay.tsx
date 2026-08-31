@@ -2,6 +2,39 @@
 
 import { useEffect, useRef, useState } from "react";
 
+/**
+ * Remembers that this visitor has already been introduced to.
+ *
+ * Without this the sheet replayed in full on every single visit — roughly
+ * thirteen seconds of typing, over the header, on a `z-50` layer you cannot
+ * navigate past without finding "skip". The docstring below always claimed
+ * it spoke "once"; nothing had ever made that true.
+ *
+ * `localStorage` rather than `sessionStorage`: an introduction is not
+ * something you need again in a new tab next week. Every read and write is
+ * guarded — Safari in private mode throws on access rather than returning
+ * null, and an entrance animation must never be the thing that breaks a page.
+ */
+const SEEN_KEY = "mostyle_intro_seen";
+
+function alreadySeen(): boolean {
+  try {
+    return localStorage.getItem(SEEN_KEY) === "1";
+  } catch {
+    // Storage unavailable. Show it — an unwanted replay is a far smaller
+    // failure than a page that will not render.
+    return false;
+  }
+}
+
+function rememberSeen(): void {
+  try {
+    localStorage.setItem(SEEN_KEY, "1");
+  } catch {
+    // Nothing to do. It plays again next time; the page still works.
+  }
+}
+
 /** Milliseconds between one word landing and the next. */
 const WORD_MS = 70;
 /** How long a finished line sits, fully revealed, before it steps aside. */
@@ -46,10 +79,19 @@ export function IntroOverlay({
 
   useEffect(() => {
     setMounted(true);
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // Both checks close it outright rather than playing to a visitor who has
+    // asked for less motion, or who has already sat through it once.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches || alreadySeen()) {
       setClosed(true);
     }
   }, []);
+
+  // One place, so every way out is recorded: playing to the end, pressing
+  // skip, or being closed on mount for reduced motion. Patching each exit
+  // separately is how one of them ends up forgotten.
+  useEffect(() => {
+    if (mounted && closed) rememberSeen();
+  }, [mounted, closed]);
 
   useEffect(() => {
     if (!mounted || closed) return undefined;

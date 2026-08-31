@@ -31,7 +31,6 @@ import {
   Pill,
   Skeleton,
   Stale,
-  Text,
   useConfirm,
   useDirtyGuard,
 } from "../../ui/primitives";

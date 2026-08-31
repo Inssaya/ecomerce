@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 
-import Link from "next/link";
-
 import { PieceCard } from "@/components/PieceCard";
 import type { Piece, PieceDetail } from "@/lib/api";
 import { type Lang, isLang, money, translator } from "@/lib/i18n";

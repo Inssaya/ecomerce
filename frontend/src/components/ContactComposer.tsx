@@ -99,7 +99,7 @@ export function ContactComposer({
         </div>
         <div>
           <label className="label" htmlFor="contact-email">
-            {t("yourEmail")}
+            {t("email")}
           </label>
           <input
             id="contact-email"

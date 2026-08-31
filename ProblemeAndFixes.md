@@ -296,6 +296,108 @@ tests whose entire point was the deleted concepts
   the dead routes) across both `backend/` and `frontend/` — zero hits outside
   accurate historical comments and my own intentionally-kept docstrings.
 
+## 2026-08-31 23:36 (local, system clock) — Opus 5
+
+**Ran a customer walkthrough of the whole storefront** (an agent reading
+every page as a shopper, not as an engineer — what's on screen, where they'd
+hesitate or leave). A second QA agent was started and stopped early to save
+tokens, so this pass acts on the customer report only.
+
+**Fixed, highest customer impact first:**
+
+1. **There was no footer on any page of the site.** That left four genuinely
+   good pages unreachable from anywhere: `/delivery` (whose returns answer —
+   "open it in front of the courier, hand it back, pay nothing, nobody will
+   call you to argue" — is the single best trust line on the site and was
+   reachable only from a 13px link inside the cart), the per-city pages,
+   `/make/*`, and `/orders`, the way back in for someone who lost their
+   tracking link. New `components/Footer.tsx`, wired into `Chrome.tsx`, with
+   the shop/help/reach columns, the tagline, and the phone and email written
+   out as readable text rather than hidden behind `mailto:`/`tel:` — a
+   customer who wants to paste the number into their own WhatsApp has to be
+   able to read it. Deliberately hidden from a blocked visitor.
+
+2. **Arabic plural bug on the checkout and search counts.** Both used a
+   `"{n} قطعة"` template, so a cart of five read **"5 قطعة"** — ungrammatical.
+   Arabic changes the noun with the number (قطعة / قطعتان / قطع for 3–10 /
+   قطعة again from 11), so no substitution into a fixed template can be
+   right. Added `pieceCount()` to `i18n.ts` and deleted both broken keys.
+   Worth fixing precisely because this is the classic tell of a
+   machine-translated site — and this site's Arabic is genuinely hand-written
+   (it even uses Moroccan Darija, `تخلّص`, which no translation engine
+   produces).
+
+3. **The intro overlay replayed in full on every single visit** — ~13 seconds
+   of word-by-word typing on a `z-50` layer covering the header, on every
+   page load, forever. Its own docstring claimed it "speaks the same handful
+   of lines once"; nothing had ever made that true. Now remembers in
+   `localStorage`, with every read/write guarded (Safari private mode throws
+   rather than returning null) and failing toward showing it, since an
+   unwanted replay beats a page that won't render. One effect records it, so
+   all three exits — played out, skipped, reduced-motion — are covered rather
+   than patching each and forgetting one.
+
+4. **The checkout summary dropped personalization and colour/size picks.**
+   The last screen before committing to cash at the door showed only
+   `line.option`, so someone who paid extra to have their name engraved had
+   to take on trust that it went through. Now renders the same picks the cart
+   does, reusing the cart's own formatting rather than inventing a second one.
+
+5. **React key collision on that same list.** Keyed by
+   `productId:variantId`, which is not unique — the same piece in two colours
+   is two lines with one key, and React renders them as one. Now uses the
+   cart context's own `idOf()`, the identity function the cart already uses.
+
+6. **One email label doing three different jobs.** `"Email (if you want
+   updates)"` was correct on checkout (optional there) and nonsense on the
+   password-reset and contact forms, where the field is required and there
+   are no "updates". Split into two keys.
+
+7. **A promise that could go stale.** `taglineSupport` — the site's
+   `<meta description>` — hardcoded "Free delivery on everything", while
+   every screen that shows a fee reads it from the server precisely so it
+   can't be wrong. Removed the delivery claim from the string.
+
+8. **`subtotal` rendered as "Pieces"**, which reads as a category next to a
+   price rather than as a sum of the lines above it. Now "Items".
+
+9. Cleared 3 of the 5 standing lint warnings (dead imports). Down to 2: one
+   is inside the protected shop wall, the other a real hook-dependency issue
+   I won't touch blind.
+
+**Deliberately NOT done, and why:** the customer's single biggest finding is
+that **the home page says nothing** — no headline, no sentence, and the
+shop's actual pitch ("Made, not resold." / "Everything else online came from
+a container. Ours came from a workshop.") exists in `i18n.ts` but is used
+**only** as `<title>` and `<meta description>`, so it's visible to Google and
+invisible to every customer. A stranger landing there sees an anonymous wall
+of product photos with prices — which is exactly what a dropshipper's site
+looks like. The fix is a few lines above the feed. **I did not make it**,
+because the owner explicitly locked that page ("the shop page: do not touch —
+the Pinterest wall stays exactly as it is"), and a later general "do whatever
+you want" doesn't override a specific standing instruction. Flagged for a
+decision instead.
+
+**Also found, not yet fixed** (from the same report): no order confirmation
+at all — the checkout page replaces itself with the tracking page, so a
+customer who just committed to paying cash gets no acknowledgement; the
+tracking page doesn't show the delivery address or break out the fee, and
+never says "save this link"; `/request/[token]` has no timeline while
+`/track/[token]` does, and shows two different codes under the identical
+label "Your reference"; ten pages are a 560px ribbon on a laptop
+(`/delivery` and `/delivery/[city]` worst); the contact page shows no
+contact details as text and mislabels the WhatsApp card as "Open WhatsApp →"
+when no number is configured, silently linking to `/ask` instead; the
+product page contradicts About's promise that "the price and the date are
+both on the page before you order" (there is no date); and Arabic register
+drifts between Darija and MSA on the pay-at-door line across pages a
+customer sees back to back.
+
+Verified: `tsc --noEmit` 0 errors, `eslint` 2 warnings (both pre-existing,
+down from 5), `vitest` 16/16 passing.
+
+---
+
 **R1/R4/R5/C4 are done.** Genuinely still open, not started: **R6** (the
 custom-request "Approve" step is still customer-facing;
 `docs/DECISIONS.md` §6 says it must become a phone call + admin-only state
