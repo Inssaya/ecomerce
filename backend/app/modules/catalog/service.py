@@ -1,28 +1,23 @@
 """Turning rows into what a page needs.
 
 Every catalog endpoint used to build its own dict out of a Product, so the
-"which language, which photo is primary, how many are left" logic was repeated
-and drifted between them. It lives here, once.
+"which language, which photo is primary" logic was repeated and drifted
+between them. It lives here, once.
 
-Availability is the thing worth reading closely: nothing in the system stores
-"stock". For a shelf piece it is counted from the pieces that physically exist,
-and for a made-to-order piece it is `None` — not zero, because zero would mean
-sold out and it means the opposite.
+Nothing in the system stores "stock" or counts units — see the module
+docstring in `models/catalog.py`.
 """
 from __future__ import annotations
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import (
     AttributeGroup,
     Category,
-    Piece,
-    PieceState,
     Product,
     ProductAttribute,
-    ProductKind,
     ProductMedia,
     ProductStatus,
 )
@@ -32,7 +27,6 @@ from app.modules.catalog.schemas import (
     CategoryNode,
     ColorSuggestion,
     MediaResponse,
-    PieceOut,
     ProductAdmin,
     ProductCard,
     ProductDetail,
@@ -61,9 +55,9 @@ def visible() -> Select:
 
 # `availability()` and `variant_availability()` used to live here, counting
 # `Piece` rows in state `available` for a page of cards. They are gone with the
-# shelf: the shop makes what is ordered, so there is no number of units to
-# count and nothing can be sold out. Every `available` field the API still
-# carries reports `None`, which has always meant "nothing to run out of".
+# shelf, and so is the `available` field they filled in: the shop makes what
+# is ordered, so there is no number of units to count and nothing can be sold
+# out — not even a permanent `None`.
 
 
 def primary_image(product: Product) -> str | None:
@@ -90,14 +84,11 @@ def to_card(product: Product, lang: str) -> ProductCard:
     return ProductCard(
         id=product.id,
         slug=product.slug,
-        kind=product.kind,
         title=product.title(lang),
         price=float(product.price),
-        price_max=float(product.price_max) if product.price_max is not None else None,
         image=primary_image(product),
         category_slug=product.category.slug if product.category else None,
         category_name=product.category.name(lang) if product.category else None,
-        available=None,
         effective_price=product.effective_price(),
         discount_active=product.discount_active,
     )
@@ -110,7 +101,6 @@ def variants_out(product: Product, lang: str) -> list[VariantOut]:
             sku=variant.sku,
             option=variant.option(lang),
             price=float(variant.price if variant.price is not None else product.price),
-            available=None,
         )
         for variant in product.variants
         if variant.is_active
@@ -124,11 +114,6 @@ def to_detail(product: Product, lang: str) -> ProductDetail:
         story=product.story(lang),
         images=[media_out(item, lang) for item in product.media],
         variants=variants_out(product, lang),
-        # Empty, always. The numbered tally said "we made twelve, four are
-        # left" — a sentence about stock, which is not something this shop has.
-        pieces=[],
-        show_piece_numbers=False,
-        batch_closed=product.batch_closed,
         made_on=product.made_on,
         created_at=product.created_at,
         attributes=[attribute_out(item) for item in product.attributes],
@@ -170,7 +155,6 @@ def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmi
     return ProductAdmin(
         id=product.id,
         slug=product.slug,
-        kind=product.kind,
         title_en=product.title_en,
         title_ar=product.title_ar,
         description_en=product.description_en,
@@ -178,7 +162,6 @@ def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmi
         story_en=product.story_en,
         story_ar=product.story_ar,
         price=float(product.price),
-        price_max=float(product.price_max) if product.price_max is not None else None,
         business_boost=float(product.business_boost),
         category_id=product.category_id,
         category_name=category_name,
@@ -187,7 +170,6 @@ def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmi
         images=[media_out(item, "en") for item in product.media],
         variants=variants_out(product, "en"),
         attributes=[attribute_out(item) for item in product.attributes],
-        available=None,
         personalizable=product.personalizable,
         personalization_markup_pct=float(product.personalization_markup_pct or 0),
         discount_kind=product.discount_kind,
@@ -199,8 +181,6 @@ def to_admin(product: Product, *, likes: int = 0, saves: int = 0) -> ProductAdmi
         total_likes=likes,
         total_saves=saves,
         made_on=product.made_on,
-        batch_closed=product.batch_closed,
-        show_piece_numbers=product.show_piece_numbers,
         created_at=product.created_at,
         updated_at=product.updated_at,
     )

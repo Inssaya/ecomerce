@@ -100,7 +100,7 @@ async def test_once_it_is_true_the_page_may_say_it(
     """Three deliveries to one city is a fact worth printing. Fewer is an
     anecdote, and printing it tells the reader how small the shop is."""
     await seed(db_session)
-    piece = await shelf_piece(client, owner_headers, made=6)
+    piece = await shelf_piece(client, owner_headers)
 
     for _ in range(3):
         placed = await client.post(

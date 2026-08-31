@@ -56,7 +56,7 @@ async def test_the_range_always_contains_the_number(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
     """A forecast shown without a range gets read as a promise."""
-    piece = await shelf_piece(client, owner_headers, made=6)
+    piece = await shelf_piece(client, owner_headers)
     await buy(client, piece)
 
     row = row_for(await forecast(client, owner_headers), piece["title_en"])
@@ -69,7 +69,7 @@ async def test_the_range_always_contains_the_number(
 async def test_every_row_says_why(client: AsyncClient, owner_headers: dict[str, str]) -> None:
     """A number the owner cannot interrogate is one they will either
     over-trust or ignore, and both are worse than no number."""
-    await shelf_piece(client, owner_headers, made=2)
+    await shelf_piece(client, owner_headers)
     for item in (await forecast(client, owner_headers))["items"]:
         assert item["because"]
         assert item["confidence"]
@@ -82,8 +82,8 @@ async def test_a_sale_this_week_counts_for_more_than_one_two_months_ago(
     client: AsyncClient, owner_headers: dict[str, str], db_session
 ) -> None:
     """Otherwise the forecast describes the spring rather than next week."""
-    recent = await shelf_piece(client, owner_headers, title="Recent hook", made=8)
-    old = await shelf_piece(client, owner_headers, title="Old hook", made=8)
+    recent = await shelf_piece(client, owner_headers, title="Recent hook")
+    old = await shelf_piece(client, owner_headers, title="Old hook")
 
     # The same three sales each — the only difference is when they happened.
     for _ in range(3):
@@ -101,8 +101,8 @@ async def test_a_refused_package_is_not_a_sale(
 ) -> None:
     """Counting one would have the workshop making pieces for people who send
     them back — the single most expensive mistake in a cash-on-delivery shop."""
-    kept = await shelf_piece(client, owner_headers, title="Kept hook", made=8)
-    sent_back = await shelf_piece(client, owner_headers, title="Refused hook", made=8)
+    kept = await shelf_piece(client, owner_headers, title="Kept hook")
+    sent_back = await shelf_piece(client, owner_headers, title="Refused hook")
 
     # Three each. One shop keeps them, the other gets all three back.
     for _ in range(3):
@@ -125,8 +125,8 @@ async def test_a_piece_nobody_has_bought_yet_is_not_forecast_at_zero(
     """A new piece with no sales but real attention would otherwise forecast
     zero forever, and never be made again — the failure mode that quietly kills
     every new thing the workshop tries."""
-    selling = await shelf_piece(client, owner_headers, title="Known hook", made=8)
-    fresh = await shelf_piece(client, owner_headers, title="New hook", made=1)
+    selling = await shelf_piece(client, owner_headers, title="Known hook")
+    fresh = await shelf_piece(client, owner_headers, title="New hook")
 
     # An established piece, so the shop has an open-to-order rate at all.
     await buy(client, selling)
@@ -153,21 +153,3 @@ async def test_a_piece_nobody_has_bought_yet_is_not_forecast_at_zero(
     assert row["expected"] > 0
     assert "opened" in row["because"]
     assert row["confidence"] != "high"
-
-
-# ── What to do about it ───────────────────────────────────────────────────────
-
-
-async def test_made_to_order_is_never_short(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """It cannot run out — there is nothing to run out of. The constraint is
-    bench time, and telling the owner to "make 3 more" of something made after
-    it is ordered is noise."""
-    from tests.test_shop_flow import workshop_piece
-
-    product = await workshop_piece(client, owner_headers)
-    row = row_for(await forecast(client, owner_headers), product["title_en"])
-    assert row["kind"] == "workshop"
-    assert row["make"] == 0
-    assert row["days_of_cover"] is None

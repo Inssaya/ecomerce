@@ -19,7 +19,7 @@ them back yet. Confirming is a phone call, and a phone call has no deadline.
 """
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -34,8 +34,6 @@ from app.models import (
     OrderEvent,
     OrderItem,
     OrderStatus,
-    Piece,
-    PieceState,
     Product,
     ProductStatus,
     ProductVariant,
@@ -45,13 +43,6 @@ from app.modules.catalog.service import primary_image
 from app.modules.local import service as local
 from app.modules.notify.service import notify_order_status
 from app.modules.orders.schemas import CheckoutRequest
-
-#: Pieces move with the order they belong to.
-PIECE_STATE_FOR_ORDER: dict[OrderStatus, PieceState] = {
-    OrderStatus.delivered: PieceState.sold,
-    OrderStatus.cancelled: PieceState.available,
-    OrderStatus.returned: PieceState.available,
-}
 
 
 async def delivery_fee_for(db: AsyncSession, subtotal: Decimal, city: str | None) -> Decimal:
@@ -209,18 +200,6 @@ async def change_status(
         return order
     if not order.can_move_to(target):
         raise conflict(f"An order that is '{order.status.value}' cannot become '{target.value}'")
-
-    piece_state = PIECE_STATE_FOR_ORDER.get(target)
-    if piece_state is not None:
-        # A cancelled or returned order puts its pieces back on the shelf; a
-        # delivered one marks them sold. Either way the count on the page
-        # follows the objects, not a number someone remembered to update.
-        piece_ids = [item.piece_id for item in order.items if item.piece_id]
-        if piece_ids:
-            for piece in await db.scalars(
-                select(Piece).where(Piece.id.in_(piece_ids)).with_for_update()
-            ):
-                piece.state = piece_state
 
     order.status = target
     db.add(OrderEvent(order_id=order.id, status=target, actor=actor, note=note))

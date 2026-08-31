@@ -31,7 +31,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,14 +40,12 @@ from app.models import (
     Order,
     OrderItem,
     OrderStatus,
-    Piece,
-    PieceState,
     Product,
-    ProductKind,
     ProductStatus,
     Signal,
     SignalType,
 )
+from app.modules.admin.metrics import SHOP_TZ
 
 #: How far back to look. Long enough for a rate to mean something, short
 #: enough that last spring is not evidence about this week.
@@ -197,16 +195,9 @@ async def next_seven_days(db: AsyncSession) -> dict:
                 Product.slug,
                 Product.title_en,
                 Product.title_ar,
-                Product.kind,
                 Product.category_id,
                 Product.price,
-                func.count(Piece.id)
-                .filter(Piece.state == PieceState.available)
-                .label("on_the_shelf"),
-            )
-            .join(Piece, Piece.product_id == Product.id, isouter=True)
-            .where(Product.status == ProductStatus.active)
-            .group_by(Product.id)
+            ).where(Product.status == ProductStatus.active)
         )
     ).all()
 
@@ -240,13 +231,6 @@ async def next_seven_days(db: AsyncSession) -> dict:
 
         expected = rate * HORIZON_DAYS
         low, high = _poisson_interval(expected)
-        on_the_shelf = int(row.on_the_shelf or 0)
-
-        # Made to order never runs out — the constraint is bench time, not
-        # stock — so a shortfall is only meaningful for the shelf.
-        made_to_order = row.kind is ProductKind.workshop
-        shortfall = 0 if made_to_order else max(math.ceil(high) - on_the_shelf, 0)
-        days_of_cover = (on_the_shelf / rate) if rate > 0 and not made_to_order else None
 
         items.append(
             {
@@ -254,7 +238,6 @@ async def next_seven_days(db: AsyncSession) -> dict:
                 "slug": row.slug,
                 "title": row.title_en,
                 "title_ar": row.title_ar,
-                "kind": row.kind.value,
                 # Two decimals, not one. At this volume a real expectation is
                 # often 0.4 of a unit a week, and rounding that to 0.0 would
                 # show the owner a table of zeroes for a shop that is selling.
@@ -262,12 +245,6 @@ async def next_seven_days(db: AsyncSession) -> dict:
                 # printing the decimal at them.
                 "expected": round(expected, 2),
                 "range": [math.floor(low), math.ceil(high)],
-                "on_the_shelf": on_the_shelf,
-                "days_of_cover": round(days_of_cover, 1) if days_of_cover is not None else None,
-                #: What to actually do. Covers the top of the range rather than
-                #: the middle, because running out costs a sale and a piece too
-                #: many costs a shelf.
-                "make": shortfall,
                 "revenue_if_met": round(float(row.price) * expected, 0),
                 "confidence": _confidence(sales, opens.get(product_id, 0)),
                 # Why it says what it says, in the order it was weighed.
@@ -285,12 +262,12 @@ async def next_seven_days(db: AsyncSession) -> dict:
     items.sort(key=lambda item: item["expected"], reverse=True)
     return {
         "horizon_days": HORIZON_DAYS,
-        "generated_on": date.today().isoformat(),
+        # Morocco's today, not the container's — see SHOP_TZ in metrics.py.
+        "generated_on": datetime.now(SHOP_TZ).date().isoformat(),
         "based_on_days": WINDOW_DAYS,
         "shop_open_to_order_pct": round(100 * open_to_order, 1),
         "expected_units": round(sum(item["expected"] for item in items), 1),
         "expected_revenue": round(sum(item["revenue_if_met"] for item in items), 0),
-        "make_now": [item for item in items if item["make"] > 0],
         "items": items,
     }
 

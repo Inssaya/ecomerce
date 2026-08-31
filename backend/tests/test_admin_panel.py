@@ -44,7 +44,7 @@ async def test_the_panel_is_the_owners_alone(client: AsyncClient) -> None:
 
 
 async def test_pulse_shows_today(client: AsyncClient, owner_headers: dict[str, str]) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     await buy(client, piece)
     await client.post(
         "/api/signals", headers=VISITOR, json={"signals": [{"type": "click", "product_id": piece["id"]}]}
@@ -62,7 +62,7 @@ async def test_money_collected_counts_only_what_was_delivered(
 ) -> None:
     """Cash on delivery: an order is not revenue until someone hands it over
     and takes the money."""
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     delivered = await buy(client, piece)
     await buy(client, piece)  # still in flight
 
@@ -79,7 +79,7 @@ async def test_money_collected_counts_only_what_was_delivered(
 async def test_the_refusal_rate_is_the_number_that_decides_the_business(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=8)
+    piece = await shelf_piece(client, owner_headers)
     kept = [await buy(client, piece) for _ in range(3)]
     refused = await buy(client, piece, city="Fès")
 
@@ -102,7 +102,7 @@ async def test_an_order_nobody_tried_to_deliver_is_not_a_refusal(
 ) -> None:
     """Cancelled before it left the workshop costs shipping nothing, so it must
     not pollute the rate the owner steers by."""
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     cancelled = await buy(client, piece)
     delivered = await buy(client, piece)
 
@@ -121,7 +121,7 @@ async def test_decide_answers_what_should_i_make_next(
 ) -> None:
     """The only question a workshop really has, answered from three sources in
     order of how direct they are."""
-    piece = await shelf_piece(client, owner_headers, made=1)
+    piece = await shelf_piece(client, owner_headers)
     await client.post(
         "/api/requests",
         json={
@@ -151,7 +151,7 @@ async def test_decide_answers_what_should_i_make_next(
 async def test_best_sellers_rank_by_money_actually_collected(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     reference = await buy(client, piece)
     await walk(client, owner_headers, reference, *TO_THE_DOOR, "delivered")
 
@@ -163,7 +163,7 @@ async def test_best_sellers_rank_by_money_actually_collected(
 async def test_conversion_counts_visitors_carts_and_orders(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     await client.post(
         "/api/signals",
         headers=VISITOR,
@@ -252,7 +252,7 @@ async def register_and_buy(client: AsyncClient, piece: dict, *, email: str) -> t
 async def test_customers_lists_guests_and_registered_accounts_separately(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     guest_reference = await buy(client, piece)
     await walk(client, owner_headers, guest_reference, *TO_THE_DOOR, "delivered")
 
@@ -280,7 +280,7 @@ async def test_customers_lists_guests_and_registered_accounts_separately(
 async def test_customers_split_bought_from_cancelled(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     delivered = await buy(client, piece)
     cancelled = await buy(client, piece)
     await walk(client, owner_headers, delivered, *TO_THE_DOOR, "delivered")
@@ -299,7 +299,7 @@ async def test_customers_split_bought_from_cancelled(
 async def test_customers_can_be_searched(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=4)
+    piece = await shelf_piece(client, owner_headers)
     await buy(client, piece)
 
     found = (
@@ -313,7 +313,7 @@ async def test_customers_can_be_searched(
 async def test_owner_can_deactivate_a_customer_account(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    piece = await shelf_piece(client, owner_headers, made=1)
+    piece = await shelf_piece(client, owner_headers)
     _, user_id = await register_and_buy(client, piece, email="ban-me@example.com")
 
     toggled = await client.patch(

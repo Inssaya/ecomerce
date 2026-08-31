@@ -3,7 +3,6 @@ import { call, callUpload } from "./auth";
 import type {
   AdminCategory,
   AdminOrder,
-  AdminPiece,
   AdminProduct,
   AdminRequest,
   Analytics,
@@ -25,7 +24,6 @@ import type {
   SecurityLevel,
   Today,
   Variant,
-  Waiting,
 } from "./types";
 
 /**
@@ -59,7 +57,6 @@ export const api = {
   today: (range: Range, scope: Scope = {}) => call<Today>(`/admin/today?${query(range, scope)}`),
   decide: (range: Range) => call<Decide>(`/admin/decide?${query(range)}`),
   forecast: () => call<Forecast>("/admin/forecast"),
-  waiting: () => call<Waiting[]>("/admin/waiting"),
   /** `limit` reaches the per-piece table and the unmet lists, which
       otherwise truncate at 60 and 20 with no sign a tail was dropped. */
   analytics: (range: Range, limit?: number) =>
@@ -218,12 +215,6 @@ export const api = {
   updateVariant: (variantId: string, body: Record<string, unknown>) =>
     call<Variant>(`/admin/variants/${variantId}`, { method: "PATCH", body: JSON.stringify(body) }),
   retireVariant: (variantId: string) => call<void>(`/admin/variants/${variantId}`, { method: "DELETE" }),
-
-  pieces: (productId: string) => call<AdminPiece[]>(`/admin/products/${productId}/pieces`),
-  addPieces: (productId: string, quantity: number) =>
-    call<AdminPiece[]>(`/admin/products/${productId}/pieces`, { method: "POST", body: JSON.stringify({ quantity }) }),
-  removePiece: (pieceId: string) => call<void>(`/admin/pieces/${pieceId}`, { method: "DELETE" }),
-  waitingOn: (productId: string) => call<{ waiting: number }>(`/admin/products/${productId}/waiting`),
 
   // ── Customers ──────────────────────────────────────────────────────────────
   customers: (q?: string) => call<Customer[]>(`/admin/customers${q ? `?q=${encodeURIComponent(q)}` : ""}`),

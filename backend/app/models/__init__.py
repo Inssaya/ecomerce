@@ -1,5 +1,4 @@
 """Every model in one package, so Alembic sees the whole schema at once."""
-from app.models.alerts import PieceAlert
 from app.models.base import BilingualMixin, TimestampMixin, new_id, uuid_fk, uuid_pk
 from app.models.catalog import (
     EMBEDDING_DIMENSIONS,
@@ -8,12 +7,10 @@ from app.models.catalog import (
     DiscountKind,
     InteractionKind,
     Piece,
-    PieceState,
     Product,
     ProductAttribute,
     ProductEmbedding,
     ProductInteraction,
-    ProductKind,
     ProductMedia,
     ProductStatus,
     ProductVariant,
@@ -53,7 +50,6 @@ __all__ = [
     "Service",
     "AFFINITY_HALF_LIFE_DAYS",
     "ContactMessage",
-    "PieceAlert",
     "REQUEST_TRANSITIONS",
     "CustomRequest",
     "RequestEvent",
@@ -77,12 +73,10 @@ __all__ = [
     "OrderItem",
     "OrderStatus",
     "Piece",
-    "PieceState",
     "Product",
     "ProductAttribute",
     "ProductEmbedding",
     "ProductInteraction",
-    "ProductKind",
     "ProductMedia",
     "ProductStatus",
     "ProductVariant",

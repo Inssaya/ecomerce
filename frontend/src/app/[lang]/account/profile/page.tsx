@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { use, useCallback, useEffect, useRef, useState } from "react";
 
 import { DeliveryDetails } from "@/components/DeliveryDetails";
+import { api, type MyOrder, type MyOrders } from "@/lib/api";
 import { patchSession, signOut, useSession } from "@/lib/session";
 import { type Lang, isLang, money, statusLabel, translator } from "@/lib/i18n";
 
@@ -22,25 +23,6 @@ import { type Lang, isLang, money, statusLabel, translator } from "@/lib/i18n";
  * delivered is the whole business: a profile that added up refused packages
  * would be quoting the customer a number nobody ever handed over.
  */
-interface OrderLine {
-  title: string;
-  quantity: number;
-  image_url: string | null;
-}
-interface MyOrder {
-  reference: string;
-  status: string;
-  total: number;
-  created_at: string;
-  tracking_token: string;
-  items: OrderLine[];
-}
-interface MyOrders {
-  orders: MyOrder[];
-  total_spent: number;
-  delivered: number;
-}
-
 const OPEN = new Set(["placed", "confirmed", "preparing", "ready", "out_for_delivery"]);
 
 export default function ProfilePage({ params }: { params: Promise<{ lang: string }> }) {
@@ -67,14 +49,11 @@ export default function ProfilePage({ params }: { params: Promise<{ lang: string
   const load = useCallback(async () => {
     if (!session) return;
     try {
-      const response = await fetch("/api/orders/mine", {
-        headers: { Authorization: `Bearer ${session.token}` },
-      });
-      if (response.ok) setData((await response.json()) as MyOrders);
+      setData(await api.myOrders(lang));
     } catch {
       /* A profile that fails to list orders is still a profile. */
     }
-  }, [session]);
+  }, [session, lang]);
 
   useEffect(() => {
     void load();
@@ -85,18 +64,11 @@ export default function ProfilePage({ params }: { params: Promise<{ lang: string
     if (!chosen || !session) return;
     setBusy(true);
     try {
-      const body = new FormData();
-      body.append("file", chosen);
-      const response = await fetch("/api/auth/me/avatar", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${session.token}` },
-        body,
-      });
-      if (response.ok) {
-        const user = (await response.json()) as { avatar_url: string | null };
-        setAvatar(user.avatar_url);
-        patchSession({ avatar: user.avatar_url });
-      }
+      const user = await api.uploadAvatar(lang, chosen);
+      setAvatar(user.avatar_url);
+      patchSession({ avatar: user.avatar_url });
+    } catch {
+      /* A photo that fails to upload leaves the old one — not worth a toast. */
     } finally {
       setBusy(false);
     }

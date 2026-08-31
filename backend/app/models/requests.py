@@ -11,10 +11,10 @@ punishes.
 """
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -87,12 +87,10 @@ class CustomRequest(Base, TimestampMixin):
     category_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False), ForeignKey("categories.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    #: Where it came from: the assistant, the form, a product page.
+    #: Where it came from: the form, a product page. ("The assistant" used to
+    #: be a third value here, from the buyer-facing AI concierge that raised a
+    #: request directly; that feature is gone.)
     source: Mapped[str] = mapped_column(String(40), default="form", nullable=False)
-    #: Set when the assistant raised it, so a conversation can be found again.
-    product_id: Mapped[str | None] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
-    )
 
     status: Mapped[RequestStatus] = mapped_column(
         Enum(RequestStatus, name="request_status"),

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef } from "react";
 
 import type { Piece } from "@/lib/api";
-import { type Lang, money, translator } from "@/lib/i18n";
+import { type Lang, money } from "@/lib/i18n";
 import { track } from "@/lib/signals";
 
 /**
@@ -31,7 +31,6 @@ export function PieceCard({
   lang: Lang;
   priority?: boolean;
 }) {
-  const t = translator(lang);
   const ref = useRef<HTMLAnchorElement>(null);
 
   useEffect(() => {
@@ -90,10 +89,7 @@ export function PieceCard({
 
       <div className="mt-3 flex items-start justify-between gap-3.5">
         <div className="min-w-0">
-          <p className="text-[12px] font-medium uppercase tracking-[0.12em] text-ink-mute">
-            {piece.kind === "workshop" ? t("madeToOrder") : t("theShelf")}
-          </p>
-          <h3 className="mt-1 text-[15.5px] font-semibold tracking-[-0.01em] truncate">
+          <h3 className="text-[15.5px] font-semibold tracking-[-0.01em] truncate">
             {piece.title}
           </h3>
           {note ? <p className="mt-0.5 text-[13.5px] text-ink-mute truncate">{note}</p> : null}
@@ -107,10 +103,7 @@ export function PieceCard({
               {money(shown, lang)}
             </>
           ) : (
-            <>
-              {money(piece.price, lang)}
-              {piece.price_max ? ` – ${money(piece.price_max, lang)}` : ""}
-            </>
+            money(piece.price, lang)
           )}
         </p>
       </div>

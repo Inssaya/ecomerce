@@ -13,14 +13,11 @@ import { sessionToken } from "./session-store";
 export interface Piece {
   id: string;
   slug: string;
-  kind: "shelf" | "workshop";
   title: string;
   price: number;
-  price_max: number | null;
   image: string | null;
   category_slug: string | null;
   category_name: string | null;
-  available: number | null;
   /** What it costs today. Computed on the server, so the card and the piece
    *  page cannot disagree with each other about the number the buyer sees. */
   effective_price: number;
@@ -45,17 +42,7 @@ export interface PieceDetail extends Piece {
   description: string;
   story: string;
   images: { id: string; url: string; alt: string; is_primary: boolean }[];
-  variants: { id: string; sku: string; option: string; price: number; available: number | null }[];
-  pieces: {
-    id: string;
-    number: number;
-    batch_size: number;
-    label: string;
-    state: "available" | "reserved" | "sold" | "kept";
-    note: string;
-  }[];
-  show_piece_numbers: boolean;
-  batch_closed: boolean;
+  variants: { id: string; sku: string; option: string; price: number }[];
   made_on: string | null;
   created_at: string;
   /** The three groups the piece is described by. Any of them can be empty. */
@@ -155,19 +142,38 @@ export interface RequestView {
   whatsapp_url: string;
 }
 
-/** Something the assistant asked the browser to do. The server has already
- *  validated it; the client only carries it out. */
-export interface AssistantAction {
-  type:
-    | "add_to_cart"
-    | "open_product"
-    | "open_category"
-    | "go_to_checkout"
-    | "open_whatsapp";
-  slug?: string;
-  product_id?: string;
-  variant_id?: string | null;
-  quantity?: number;
+/** The server's view of a customer account — what `/auth/login`,
+ *  `/auth/register` and `/auth/me` all return about the user, in the shape
+ *  `lib/session.ts` turns into a stored session. */
+export interface AuthProfile {
+  full_name?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  address_line1?: string | null;
+  city?: string | null;
+  avatar_url?: string | null;
+}
+
+export interface AuthReply {
+  access_token: string;
+  user?: AuthProfile;
+}
+
+/** One row of `GET /orders/mine` — enough to list an order on the profile
+ *  page, not the full detail `OrderView` carries for tracking one. */
+export interface MyOrder {
+  reference: string;
+  status: string;
+  total: number;
+  created_at: string;
+  tracking_token: string;
+  items: { title: string; quantity: number; image_url: string | null }[];
+}
+
+export interface MyOrders {
+  orders: MyOrder[];
+  total_spent: number;
+  delivered: number;
 }
 
 export class ApiError extends Error {
@@ -368,16 +374,6 @@ export const api = {
       body: JSON.stringify({ token, new_password: newPassword }),
     }),
 
-  assistantStatus: (lang: Lang) =>
-    request<{ available: boolean; whatsapp: boolean }>("/assistant/status", { lang }),
-
-  assistant: (lang: Lang, messages: readonly { role: string; content: string }[]) =>
-    request<{ reply: string; actions: AssistantAction[] }>("/assistant", {
-      lang,
-      method: "POST",
-      body: JSON.stringify({ messages }),
-    }),
-
   signals: (lang: Lang, signals: readonly object[]) =>
     request<{ recorded: number }>("/signals", {
       lang,
@@ -385,4 +381,48 @@ export const api = {
       body: JSON.stringify({ signals }),
       keepalive: true,
     }),
+
+  /** Create the session. No token exists yet to send — this is the one call
+   *  in this object that is unauthenticated by construction, not by accident. */
+  login: (lang: Lang, email: string, password: string) =>
+    request<AuthReply>("/auth/login", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  /** Registration alone — `lib/session.ts` signs in right after, so the new
+   *  account never sits half-authenticated. */
+  register: (
+    lang: Lang,
+    body: {
+      full_name: string;
+      email: string;
+      password: string;
+      phone: string | null;
+      address_line1: string | null;
+      city: string | null;
+    },
+  ) => request<void>("/auth/register", { lang, method: "POST", body: JSON.stringify(body) }),
+
+  /** A correction made on the profile, or filled in at checkout. Authenticated
+   *  the same way every other call here is — `request()` attaches the bearer
+   *  token by itself, from the very session this writes back into. */
+  updateMe: (lang: Lang, changes: { phone?: string; address_line1?: string; city?: string }) =>
+    request<AuthProfile>("/auth/me", { lang, method: "PATCH", body: JSON.stringify(changes) }),
+
+  /** A new profile photograph. Same FormData exception as `uploadReference`:
+   *  no JSON content type, so the browser can set its own multipart boundary. */
+  uploadAvatar: (lang: Lang, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<{ avatar_url: string | null }>("/auth/me/avatar", {
+      lang,
+      method: "POST",
+      body,
+    });
+  },
+
+  /** The signed-in customer's own order history — what `/account/profile` lists. */
+  myOrders: (lang: Lang) => request<MyOrders>("/orders/mine", { lang }),
 };

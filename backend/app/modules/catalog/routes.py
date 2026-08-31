@@ -10,7 +10,7 @@ from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
-from app.core.limits import RequestLimit, SignalLimit
+from app.core.limits import SignalLimit
 from app.core.slug import unique_slug
 from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
@@ -18,18 +18,14 @@ from app.models import (
     AttributeGroup,
     Category,
     InteractionKind,
-    Piece,
-    PieceState,
     Product,
     ProductAttribute,
-    ProductKind,
     ProductMedia,
     ProductStatus,
     ProductVariant,
 )
-from app.modules.catalog import alerts, interactions, service
+from app.modules.catalog import interactions, service
 from app.modules.catalog.schemas import (
-    AlertRequest,
     AttributeOut,
     AttributePatch,
     AttributeSuggestions,
@@ -39,8 +35,6 @@ from app.modules.catalog.schemas import (
     CategoryWrite,
     MediaPatch,
     MediaResponse,
-    PieceAdmin,
-    PieceBatchWrite,
     ProductAdmin,
     ProductDetail,
     ProductPage,
@@ -67,30 +61,6 @@ async def category_tree(db: DbSession, lang: Lang) -> list[CategoryNode]:
         select(Category).where(Category.is_active.is_(True)).order_by(Category.display_order)
     )
     return service.build_tree(list(rows), lang)
-
-
-@router.get("/categories/{slug}", response_model=CategoryNode)
-async def get_category(slug: str, db: DbSession, lang: Lang) -> CategoryNode:
-    """One category, so its own page can 404 honestly and print its own name.
-
-    A slug that does not exist is a real 404, not a category page listing
-    nothing — the storefront's `resource()` helper depends on this exact
-    distinction to keep dead URLs out of the index.
-    """
-    category = await db.scalar(
-        select(Category).where(Category.slug == slug, Category.is_active.is_(True))
-    )
-    if category is None:
-        raise HTTPException(status_code=404, detail="Category not found")
-    # A leaf node is fine — the page is going to list its own products, not its
-    # children, so the children field is unused here.
-    return CategoryNode(
-        id=category.id,
-        slug=category.slug,
-        name=category.name(lang),
-        icon_url=category.icon_url,
-        display_order=category.display_order,
-    )
 
 
 @router.get("/admin/categories", response_model=list[CategoryAdmin])
@@ -192,7 +162,6 @@ async def list_products(
     lang: Lang,
     paging: Paging,
     category: str | None = Query(default=None, description="Category slug"),
-    kind: ProductKind | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=120),
     seed: int | None = Query(
         default=None,
@@ -207,8 +176,6 @@ async def list_products(
         if node is None:
             raise HTTPException(status_code=404, detail="Category not found")
         query = query.where(Product.category_id.in_(await service.descendant_ids(db, node.id)))
-    if kind is not None:
-        query = query.where(Product.kind == kind)
     if q:
         query = query.where(service.text_match(q))
 
@@ -311,7 +278,6 @@ async def list_products_admin(
     owner: Owner,
     paging: Paging,
     status_filter: ProductStatus | None = Query(default=None, alias="status"),
-    kind: ProductKind | None = Query(default=None),
     q: str | None = Query(default=None, min_length=1, max_length=120),
     category_id: str | None = Query(default=None),
     date_from: date | None = Query(default=None),
@@ -326,8 +292,6 @@ async def list_products_admin(
     query = service.with_relations(select(Product))
     if status_filter is not None:
         query = query.where(Product.status == status_filter)
-    if kind is not None:
-        query = query.where(Product.kind == kind)
     if q:
         query = query.where(service.text_match(q))
     if category_id:
@@ -595,144 +559,15 @@ async def retire_variant(variant_id: str, db: DbSession, owner: Owner) -> None:
     await db.commit()
 
 
-# ── Pieces ────────────────────────────────────────────────────────────────────
-
-
-@router.get("/admin/products/{product_id}/pieces", response_model=list[PieceAdmin])
-async def list_pieces(product_id: str, db: DbSession, owner: Owner) -> list[PieceAdmin]:
-    rows = await db.scalars(
-        select(Piece).where(Piece.product_id == product_id).order_by(Piece.number)
-    )
-    return [
-        PieceAdmin(
-            id=piece.id,
-            number=piece.number,
-            batch_size=piece.batch_size,
-            label=piece.label,
-            state=piece.state.value,
-            variant_id=piece.variant_id,
-            made_on=piece.made_on,
-            photo_url=piece.photo_url,
-            note_en=piece.note_en,
-            note_ar=piece.note_ar,
-        )
-        for piece in rows
-    ]
-
-
-@router.post(
-    "/admin/products/{product_id}/pieces",
-    response_model=list[PieceAdmin],
-    status_code=status.HTTP_201_CREATED,
-)
-async def add_pieces(
-    product_id: str, body: PieceBatchWrite, db: DbSession, owner: Owner
-) -> list[PieceAdmin]:
-    """You made twelve; twelve rows appear, numbered.
-
-    One action, and afterwards the number on the page is a count of real
-    objects rather than something typed into a stock field.
-    """
-    product = await get_or_404(db, Product, product_id, detail="Product not found")
-    if product.kind is not ProductKind.shelf:
-        raise bad_request("Made-to-order pieces have no shelf — they are made per order")
-    if product.batch_closed:
-        raise conflict("This batch is closed. Reopen it before adding more.")
-    if body.variant_id:
-        variant = await get_or_404(
-            db, ProductVariant, body.variant_id, detail="Variant not found"
-        )
-        if variant.product_id != product_id:
-            raise bad_request("That variant belongs to another piece")
-
-    highest = await db.scalar(
-        select(func.coalesce(func.max(Piece.number), 0)).where(Piece.product_id == product_id)
-    )
-    batch_size = highest + body.quantity
-
-    # The batch grows, so the pieces already numbered are part of a larger run
-    # than they were: 04/08 becomes 04/12. Saying "04 of 8" when twelve exist
-    # would be the invented scarcity BRAND.md §10 rules out.
-    await db.execute(
-        Piece.__table__.update()
-        .where(Piece.product_id == product_id)
-        .values(batch_size=batch_size)
-    )
-
-    created = [
-        Piece(
-            product_id=product_id,
-            variant_id=body.variant_id,
-            number=highest + offset,
-            batch_size=batch_size,
-            made_on=body.made_on or product.made_on,
-            note_en=body.note_en,
-            note_ar=body.note_ar,
-        )
-        for offset in range(1, body.quantity + 1)
-    ]
-    db.add_all(created)
-    await db.commit()
-
-    # Everyone who asked to be told is told, without anyone having to remember.
-    await alerts.announce(db, product)
-
-    return [
-        PieceAdmin(
-            id=piece.id,
-            number=piece.number,
-            batch_size=piece.batch_size,
-            label=piece.label,
-            state=piece.state.value,
-            variant_id=piece.variant_id,
-            made_on=piece.made_on,
-            photo_url=piece.photo_url,
-            note_en=piece.note_en,
-            note_ar=piece.note_ar,
-        )
-        for piece in created
-    ]
-
-
-@router.delete("/admin/pieces/{piece_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def remove_piece(piece_id: str, db: DbSession, owner: Owner) -> None:
-    """Only a piece nobody has bought. A sold piece is part of an order."""
-    piece = await get_or_404(db, Piece, piece_id, detail="Piece not found")
-    if piece.state is not PieceState.available:
-        raise conflict(f"That piece is {piece.state.value} — it cannot be removed")
-
-    product_id = piece.product_id
-    await db.delete(piece)
-    await db.flush()
-
-    # The run got smaller, so say so. Adding pieces already rewrites every
-    # sibling's `batch_size` for exactly this reason — 04/08 becomes 04/12 when
-    # the batch grows — and taking one away has to do the same in reverse.
-    # Without this the shop keeps announcing "01 of 4" over three objects,
-    # which is the invented scarcity BRAND.md §10 rules out, pointing the other
-    # way. The highest surviving number is the size of the run: correcting a
-    # miscount at the end heals the labels, and removing from the middle leaves
-    # the numbers people were already shown alone.
-    remaining = await db.scalar(
-        select(func.coalesce(func.max(Piece.number), 0)).where(Piece.product_id == product_id)
-    )
-    await db.execute(
-        Piece.__table__.update()
-        .where(Piece.product_id == product_id)
-        .values(batch_size=remaining)
-    )
-    await db.commit()
-
-
 # ── Hearts and saves ──────────────────────────────────────────────────────────
 #
 # Pinterest-shaped. A **like** is the same button on every social app; a
 # **save** is buy-later. The two are stored the same way but the feed reads
 # them differently — a save is a much stronger buying signal than a like.
 #
-# Kept on the storefront's own limiter (`SignalLimit`, 120 per minute) rather
-# than on `RequestLimit`: this is the same tempo as an impression signal, and
-# a customer scrolling a feed of thirty cards must not run out of taps.
+# Kept on its own limiter (`SignalLimit`, 120 per minute): this is the same
+# tempo as an impression signal, and a customer scrolling a feed of thirty
+# cards must not run out of taps.
 
 
 class InteractionState(BaseModel):
@@ -808,38 +643,6 @@ async def read_interactions(
     )
     state = await interactions.state_for(db, product_id=product.id, visitor_id=visitor)
     return InteractionState(**state)
-
-
-# ── Waiting on a piece ────────────────────────────────────────────────────────
-
-
-@router.post("/products/{slug}/alert", status_code=status.HTTP_202_ACCEPTED)
-async def wait_for_more(
-    slug: str, body: AlertRequest, db: DbSession, lang: Lang, _: RequestLimit
-) -> dict:
-    """"Tell me when you make another."
-
-    A sold-out page is otherwise a dead end, and a dead end is a visitor we
-    paid to attract and then sent away. No account, one field.
-    """
-    product = await get_or_404(db, Product, slug, field="slug", detail="Product not found")
-    if product.status is not ProductStatus.active:
-        raise HTTPException(status_code=404, detail="Product not found")
-    if product.kind is not ProductKind.shelf:
-        raise bad_request("This one is made to order — you can ask for it any time")
-
-    await alerts.add(db, product=product, phone=body.phone, email=body.email, lang=lang)
-    return {"waiting": True}
-
-
-@router.get("/admin/products/{product_id}/waiting")
-async def who_is_waiting(product_id: str, db: DbSession, owner: Owner) -> dict:
-    """How many people want this one back.
-
-    The sharpest answer to "what should I make next" the workshop gets: unlike
-    a search, it is attached to a real piece at a price they already saw.
-    """
-    return {"waiting": await alerts.waiting_for(db, product_id)}
 
 
 # ── Photography ───────────────────────────────────────────────────────────────
@@ -948,37 +751,3 @@ async def delete_photo(media_id: str, db: DbSession, owner: Owner) -> None:
             remaining.is_primary = True
     await db.commit()
     await delete_object(url)
-
-
-@router.get("/workshop")
-async def workshop_numbers(db: DbSession) -> dict:
-    """What the workshop has actually made.
-
-    Real counts, straight from the pieces table. This is the most
-    characteristic thing we can say and the one thing a reseller cannot say at
-    all: they do not know how many of anything exists, because they did not
-    make it.
-    """
-    made = await db.scalar(select(func.count()).select_from(Piece)) or 0
-    here = (
-        await db.scalar(
-            select(func.count()).select_from(Piece).where(Piece.state == PieceState.available)
-        )
-        or 0
-    )
-    kinds = (
-        await db.execute(
-            select(Product.kind, func.count())
-            .where(Product.status == ProductStatus.active)
-            .group_by(Product.kind)
-        )
-    ).all()
-    latest = await db.scalar(select(func.max(Piece.made_on)))
-    counts = {kind.value if hasattr(kind, "value") else str(kind): n for kind, n in kinds}
-    return {
-        "pieces_made": made,
-        "pieces_here": here,
-        "on_the_shelf": counts.get("shelf", 0),
-        "made_to_order": counts.get("workshop", 0),
-        "last_made_on": latest.isoformat() if latest else None,
-    }

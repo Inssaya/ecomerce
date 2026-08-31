@@ -136,18 +136,6 @@ async def today(
     }
 
 
-@router.get("/waiting")
-async def waiting(db: DbSession, owner: Owner, limit: int = Query(default=50, ge=1, le=200)) -> list[dict]:
-    """Who is waiting on which piece, across the whole shelf.
-
-    Only a per-product count existed, which meant the sharpest demand signal
-    the shop has — somebody who would have paid, for a real piece, at a price
-    they already saw — could not be read anywhere. A search tells you what
-    someone typed; this tells you what they would have bought.
-    """
-    return await metrics.waiting_list(db, limit)
-
-
 @router.get("/decide")
 async def decide(
     db: DbSession,

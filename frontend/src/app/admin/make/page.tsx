@@ -22,9 +22,8 @@ import { api } from "@/lib/console/api";
 import { useConsoleQuery } from "@/lib/console/query";
 
 import { BoardStrip, useBoardQuery } from "../BoardControls";
-import { Confidence, RangedDots, RankedBars, Runway, rangesAreDegenerate } from "../ui/charts";
+import { Confidence, RangedDots, RankedBars, rangesAreDegenerate } from "../ui/charts";
 import {
-  Age,
   Card,
   CardHead,
   Clamp,
@@ -34,7 +33,6 @@ import {
   MicroBar,
   Money,
   Num,
-  Pill,
   Skeleton,
   Stale,
   Stat,
@@ -67,7 +65,6 @@ export default function WhatToMake() {
 
   const decide = useConsoleQuery(`decide:${query.key}`, useCallback(() => api.decide(query.range), [query.range]));
   const forecast = useConsoleQuery("forecast", useCallback(() => api.forecast(), []));
-  const waiting = useConsoleQuery("waiting", useCallback(() => api.waiting(), []));
   // 200 rather than the default: the per-piece table below is the whole
   // catalogue, and a silent truncation at 60 would hide the tail that this
   // screen exists to find.
@@ -104,34 +101,6 @@ export default function WhatToMake() {
                   {asked.slice(0, 8).map((description, index) => (
                     <li key={index} style={{ fontSize: "var(--t-md)", lineHeight: 1.6 }}>
                       <Clamp>{description}</Clamp>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </Card>
-
-            <Card>
-              <CardHead title="Waiting on a piece" sub="Would have paid, for a real piece, at a price they had already seen." />
-              {(waiting.data ?? []).length === 0 ? (
-                <p className="console-muted">Nobody is waiting on a sold-out piece.</p>
-              ) : (
-                <ul className="console-stack-sm">
-                  {(waiting.data ?? []).map((row) => (
-                    <li key={row.product_id} className="console-row-between" style={{ fontSize: "var(--t-md)" }}>
-                      <PieceLink productId={row.product_id} title={row.title} />
-                      <span className="console-row" style={{ gap: 10 }}>
-                        {/* How long they have waited is the difference between
-                            "make it soon" and "you are losing this sale". The
-                            server has always computed it; nothing showed it. */}
-                        {row.since ? (
-                          <span className="console-muted">
-                            oldest <Age iso={row.since} />
-                          </span>
-                        ) : null}
-                        <Pill tone={row.waiting > 2 ? "warning" : "neutral"}>
-                          {row.waiting} {row.waiting === 1 ? "person" : "people"}
-                        </Pill>
-                      </span>
                     </li>
                   ))}
                 </ul>
@@ -180,7 +149,6 @@ export default function WhatToMake() {
                 <div className="console-stat-grid cols-3">
                   <Stat label="Pieces expected" value={<Num value={Math.round(forecast.data.expected_units)} />} caption={`over ${horizon} days`} />
                   <Stat label="If it lands" value={<Money value={forecast.data.expected_revenue} />} />
-                  <Stat label="Need making" value={<Num value={forecast.data.make_now.length} />} caption="won't cover the week" />
                 </div>
 
                 {allLowConfidence ? (
@@ -188,25 +156,6 @@ export default function WhatToMake() {
                     Nothing has sold yet, so these come from attention rather than sales. Treat them as a direction, not a number.
                   </p>
                 ) : null}
-
-                {forecast.data.make_now.length > 0 ? (
-                  <>
-                    <p className="console-caps">Make these now</p>
-                    <RankedBars
-                      tone="status"
-                      rows={forecast.data.make_now.map((row) => ({
-                        label: row.title,
-                        value: row.make,
-                        href: inspect(row.product_id),
-                        tone: "warn" as const,
-                      }))}
-                      formatValue={(value) => <span>+{value}</span>}
-                    />
-                  </>
-                ) : null}
-
-                <p className="console-caps">How long the shelf lasts</p>
-                <Runway rows={rows.map((row) => ({ label: row.title, days: row.days_of_cover, href: inspect(row.product_id) }))} />
 
                 <p className="console-caps">Expected, with its range</p>
                 {rows.length === 0 ? (
@@ -250,10 +199,7 @@ export default function WhatToMake() {
                             </span>
                             <Confidence level={row.confidence} />
                           </div>
-                          <p className="console-muted" style={{ lineHeight: 1.6 }}>
-                            {row.because}
-                            {row.days_of_cover !== null ? ` · runs out in about ${Math.round(row.days_of_cover)} days` : ""}
-                          </p>
+                          <p className="console-muted" style={{ lineHeight: 1.6 }}>{row.because}</p>
                         </li>
                       ))}
                     </ul>

@@ -26,7 +26,6 @@ const copy = {
   ],
 
   // Navigation and shell.
-  theShelf: ["The Shelf", "الرف"],
   theWorkshop: ["The Workshop", "الورشة"],
   // The five destinations in the bar, in the order a shopper needs them.
   navShop: ["Shop", "المتجر"],
@@ -64,16 +63,9 @@ const copy = {
     "أضف عنوانك ليملأ نفسه في المرة القادمة.",
   ],
 
-  // The assistant lives on one page, behind a sign-in.
-  chatGateTitle: ["Talk to the workshop", "تحدّث مع الورشة"],
-  chatGateBody: [
-    "The assistant answers about pieces, sizes, delivery and custom work. Sign in first — it keeps the queue for people who are actually buying.",
-    "يجيب المساعد عن القطع والمقاسات والتوصيل والطلبات الخاصة. سجّل الدخول أولاً — لنُبقي الدور لمن يريد الشراء فعلاً.",
-  ],
-  chatEmpty: ["Ask anything about what we make.", "اسأل عن أي شيء نصنعه."],
   contactIntro: [
-    "Message the workshop directly, or ask the assistant. We read every one ourselves.",
-    "راسل الورشة مباشرة، أو اسأل المساعد. نقرأ كل رسالة بأنفسنا.",
+    "Message the workshop directly, by WhatsApp or email. We read every one ourselves.",
+    "راسل الورشة مباشرة، عبر واتساب أو البريد الإلكتروني. نقرأ كل رسالة بأنفسنا.",
   ],
 
   profile: ["Profile", "الملف"],
@@ -100,7 +92,6 @@ const copy = {
   // "one left" copy.
   madeIn: ["Made in", "صُنعت في"],
   howItWasMade: ["How it was made", "كيف صُنعت"],
-  madeToOrder: ["Made after you order it.", "تُصنع بعد أن تطلبها."],
   piece: ["Piece", "قطعة"],
   choose: ["Choose", "اختر"],
   addToCart: ["Add to cart", "أضف إلى السلة"],
@@ -183,9 +174,6 @@ const copy = {
   approveQuote: ["Yes, make it", "نعم، اصنعها"],
   declineQuote: ["Not this time", "ليس هذه المرة"],
 
-  // The assistant.
-  assistant: ["Ask us", "اسألنا"],
-  assistantPlaceholder: ["Type your question", "اكتب سؤالك"],
   talkToAPerson: ["Talk to a person", "تحدّث إلى شخص"],
 
   // Getting back into the workshop.

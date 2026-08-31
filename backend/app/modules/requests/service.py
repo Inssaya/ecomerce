@@ -7,7 +7,7 @@ exist to be collected at the door.
 """
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import select
@@ -48,7 +48,6 @@ async def raise_request(
         category_id=category_id,
         budget=body.budget,
         references=body.references,
-        product_id=body.product_id,
         source=body.source,
         events=[RequestEvent(status=RequestStatus.requested, actor="customer")],
     )

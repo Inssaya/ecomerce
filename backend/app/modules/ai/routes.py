@@ -1,19 +1,17 @@
-"""The two assistants.
+"""The owner's copilot.
 
-One endpoint each, one loop behind both. They are stateless: the client sends
-the conversation back each turn, which keeps the server from holding chat
-history it has no reason to hold.
+One endpoint, backed by the agentic loop in `app.core.agent`. It is
+stateless: the client sends the conversation back each turn, which keeps the
+server from holding chat history it has no reason to hold.
 """
 from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
-from app.config import settings
 from app.core import agent, llm
-from app.core.limits import AssistantLimit
-from app.deps import DbSession, Lang, Owner, Visitor
-from app.modules.ai import copilot, shopper
+from app.deps import DbSession, Lang, Owner
+from app.modules.ai import copilot
 
 router = APIRouter(tags=["assistant"])
 
@@ -32,8 +30,9 @@ class Ask(BaseModel):
 
 class Answer(BaseModel):
     reply: str
-    #: What the browser should do: open a piece, fill the cart, open WhatsApp.
-    #: The cart lives on the visitor's phone, not on our server.
+    #: Actions for the client to carry out, if the toolbox in use produces
+    #: any. Part of the generic agent-loop contract; the copilot's toolbox
+    #: does not currently use it.
     actions: list[dict] = []
     #: Which tools ran, so an answer can always be audited.
     trace: list[dict] = []
@@ -64,21 +63,6 @@ async def _run(toolbox, body: Ask, lang: str) -> Answer:
     except llm.LlmError as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
     return _answer(reply)
-
-
-@router.get("/assistant/status")
-async def assistant_status() -> dict:
-    """So the storefront can hide the assistant rather than offering something
-    that will fail when someone taps it."""
-    return {"available": llm.is_configured(), "whatsapp": bool(settings.whatsapp_number)}
-
-
-@router.post("/assistant", response_model=Answer)
-async def ask_assistant(
-    body: Ask, db: DbSession, lang: Lang, visitor: Visitor, _: AssistantLimit
-) -> Answer:
-    """The shopping concierge. No account needed — it is the storefront."""
-    return await _run(shopper.build(db, lang=lang, visitor_id=visitor), body, lang)
 
 
 @router.post("/admin/copilot", response_model=Answer)

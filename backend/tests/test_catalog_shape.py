@@ -88,7 +88,7 @@ async def test_variants_carry_their_own_price(
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
-        json={"kind": "shelf", "title_en": "Oversize tee", "title_ar": "تي شيرت واسع", "price": 200},
+        json={"title_en": "Oversize tee", "title_ar": "تي شيرت واسع", "price": 200},
     )
     product = created.json()
     await photograph(client, owner_headers, product["id"])
@@ -129,7 +129,7 @@ async def test_buying_a_variant_records_which_one_was_bought(
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
-        json={"kind": "shelf", "title_en": "Oversize tee", "price": 200},
+        json={"title_en": "Oversize tee", "price": 200},
     )
     product = created.json()
     await photograph(client, owner_headers, product["id"])
@@ -140,19 +140,11 @@ async def test_buying_a_variant_records_which_one_was_bought(
             json={"sku": "TEE-M", "option_en": "M"},
         )
     ).json()
-    large = (
-        await client.post(
-            f"/api/admin/products/{product['id']}/variants",
-            headers=owner_headers,
-            json={"sku": "TEE-L", "option_en": "L"},
-        )
-    ).json()
-    for variant in (medium["id"], large["id"]):
-        await client.post(
-            f"/api/admin/products/{product['id']}/pieces",
-            headers=owner_headers,
-            json={"quantity": 1, "variant_id": variant},
-        )
+    await client.post(
+        f"/api/admin/products/{product['id']}/variants",
+        headers=owner_headers,
+        json={"sku": "TEE-L", "option_en": "L"},
+    )
     await client.patch(
         f"/api/admin/products/{product['id']}", headers=owner_headers, json={"status": "active"}
     )
@@ -184,23 +176,6 @@ async def test_a_duplicate_sku_is_refused(
         f"/api/admin/products/{piece['id']}/variants", headers=owner_headers, json=body
     )
     assert clash.status_code == 409
-
-
-async def test_made_to_order_pieces_have_no_shelf(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    created = await client.post(
-        "/api/admin/products",
-        headers=owner_headers,
-        json={"kind": "workshop", "title_en": "To your drawing", "price": 240, "lead_time_days": 6},
-    )
-    refused = await client.post(
-        f"/api/admin/products/{created.json()['id']}/pieces",
-        headers=owner_headers,
-        json={"quantity": 3},
-    )
-    assert refused.status_code == 400
-    assert "made per order" in refused.json()["detail"]
 
 
 async def test_search_reaches_both_languages(

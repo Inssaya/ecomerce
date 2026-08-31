@@ -445,15 +445,11 @@ export function PieceView({
             </div>
           ) : null}
 
-          <dl className="mt-7 border-t border-sand">
-            <Spec
-              k={ar ? "النوع" : "Kind"}
-              v={piece.kind === "workshop" ? t("madeToOrder") : t("theShelf")}
-            />
-            {piece.made_on ? (
+          {piece.made_on ? (
+            <dl className="mt-7 border-t border-sand">
               <Spec k={t("madeIn")} v={new Date(piece.made_on).toLocaleDateString(lang)} />
-            ) : null}
-          </dl>
+            </dl>
+          ) : null}
         </div>
       </div>
     </div>

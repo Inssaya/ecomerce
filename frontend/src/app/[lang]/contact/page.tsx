@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { ContactComposer } from "@/components/ContactComposer";
-import { ChatPanel } from "@/components/ChatPanel";
 import { FALLBACK_CONTACT } from "@/lib/contact";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 import { alternates, contact, siteUrl, workshopPhone } from "@/lib/server";
@@ -10,9 +9,9 @@ import { alternates, contact, siteUrl, workshopPhone } from "@/lib/server";
 /**
  * Where the workshop can be reached.
  *
- * The concierge lives here and nowhere else. It was a floating button on every
- * page, which put an AI bill on every idle visitor; on this page the people who
- * open it are the people who came looking for an answer.
+ * Three ways in: the form, WhatsApp, email. The buyer-facing AI concierge
+ * that used to sit in a card on this page has been removed — it was a
+ * customer-facing chat feature the shop no longer offers.
  */
 export const revalidate = 3600;
 
@@ -78,17 +77,6 @@ export default async function ContactPage({
             action={ar ? "أرسل بريدًا" : "Send email"}
             href={emailHref}
           />
-          <div className="rounded-2xl border border-sand bg-surface p-5">
-            <p className="text-[16px] font-semibold">{ar ? "المساعد" : "Assistant"}</p>
-            <p className="mt-1.5 text-[14px] leading-relaxed text-ink-soft">
-              {ar
-                ? "هنا فقط للمساعدة في الصياغة أو الإجابة السريعة. إذا أردت طلبًا فعليًا، استخدم النموذج أعلاه أو WhatsApp / email."
-                : "Only for help with wording or a quick answer. If you want to place a real request, use the form above or WhatsApp / email."}
-            </p>
-            <div className="mt-4 rounded-[18px] border border-sand bg-cream p-3">
-              <ChatPanel lang={lang} />
-            </div>
-          </div>
         </aside>
       </div>
     </div>

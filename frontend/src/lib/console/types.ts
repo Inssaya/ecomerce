@@ -145,26 +145,13 @@ export interface Decide {
   };
 }
 
-/** Somebody who would have paid, for a real piece, at a price they saw. */
-export interface Waiting {
-  product_id: string;
-  title: string;
-  slug: string;
-  waiting: number;
-  since: string | null;
-}
-
 export interface ForecastRow {
   product_id: string;
   slug: string;
   title: string;
   title_ar: string;
-  kind: "shelf" | "workshop";
   expected: number;
   range: [number, number];
-  on_the_shelf: number;
-  days_of_cover: number | null;
-  make: number;
   revenue_if_met: number;
   confidence: "low" | "medium" | "high";
   because: string;
@@ -177,7 +164,6 @@ export interface Forecast {
   shop_open_to_order_pct: number;
   expected_units: number;
   expected_revenue: number;
-  make_now: ForecastRow[];
   items: ForecastRow[];
 }
 
@@ -314,7 +300,6 @@ export interface Variant {
   sku: string;
   option: string;
   price: number;
-  available: number | null;
 }
 
 export interface ProductMedia {
@@ -368,7 +353,6 @@ export interface ProductAnalytics {
 export interface AdminProduct {
   id: string;
   slug: string;
-  kind: "shelf" | "workshop";
   title_en: string;
   title_ar: string;
   description_en: string;
@@ -376,7 +360,6 @@ export interface AdminProduct {
   story_en: string;
   story_ar: string;
   price: number;
-  price_max: number | null;
   business_boost: number;
   category_id: string | null;
   /** Resolved from the tree. A piece filed under a subcategory reports both;
@@ -385,8 +368,7 @@ export interface AdminProduct {
   subcategory_name: string | null;
   /** The backend enum includes `paused`; the old client's union omitted it. */
   status: "draft" | "active" | "paused" | "archived";
-  available: number | null;
-  /** Days until it is in their hands — set on any piece, shelf or workshop. */
+  /** Whether the buyer can put their name on it. */
   personalizable: boolean;
   /** How much the price goes up when their name goes on it. */
   personalization_markup_pct: number;
@@ -398,8 +380,6 @@ export interface AdminProduct {
   total_likes: number;
   total_saves: number;
   made_on: string | null;
-  batch_closed: boolean;
-  show_piece_numbers: boolean;
   images: ProductMedia[];
   variants: Variant[];
   attributes: ProductAttribute[];
@@ -416,17 +396,6 @@ export interface AdminCategory {
   parent_id: string | null;
   display_order: number;
   is_active: boolean;
-}
-
-export interface AdminPiece {
-  id: string;
-  number: number;
-  batch_size: number;
-  label: string;
-  state: "available" | "reserved" | "sold" | "kept";
-  variant_id: string | null;
-  made_on: string | null;
-  photo_url: string | null;
 }
 
 export interface Customer {

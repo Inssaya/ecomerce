@@ -1,10 +1,14 @@
 """What the workshop makes.
 
-Two offers, one table. `kind` says which:
+One kind of product. There used to be a `kind` column distinguishing "shelf"
+pieces from "made to order" ones — deleted, because the two things it
+governed (stock counting, a manufacturing-time promise) are both gone, and
+once neither exists there is nothing left for the distinction to mean.
 
-* **shelf** — a piece the shop sells like any store sells anything: a name, a
-  price, a photo.
-* **workshop** — made to order.
+**No stock, anywhere — visible or internal, ever.** Not "how many left," not
+"reserved," not "sold out." An order is never refused for availability. If a
+piece is physically impossible to make right now, that is a phone call, not a
+schema state.
 
 **The shop states no time, to anyone.** Not a lead time, not a delivery
 estimate, not a countdown — the columns for all three are gone, not merely
@@ -12,17 +16,19 @@ hidden. When a buyer needs to know when their thing arrives, the workshop
 tells them on the phone. Nothing in the schema can promise a date, so nothing
 on any screen can accidentally print one.
 
-Nothing here counts units either. If a piece is physically gone, that is the
-same phone call.
+**One price.** No range, no "from X" — `price_max` is gone. A product costs
+what `effective_price()` says and nothing else.
 
-The `Piece` and `ProductVariant` tables are still here because live order
-lines point at them and history has to keep reading correctly. **They are no
-longer read for availability** — no screen counts units, no endpoint returns a
-"how many left" figure, and checkout does not reserve rows. Stock is a whole
-world of complexity (backorders, reservations, restock windows, waitlists)
-this shop does not want; if a shelf piece is physically gone, the workshop
-handles that person on the phone. Retiring those tables entirely is its own
-migration, once no open order references one — see `todo.md`.
+The `Piece` table is still here, stripped of everything that made it a stock
+system. Live order lines placed before this migration point at specific rows
+(`OrderItem.piece_id`, `ondelete=RESTRICT`) and history has to keep reading
+correctly, so the table is not dropped. What is gone is `state` — there is no
+more "available/reserved/sold/kept," because nothing anywhere counts or
+reserves a piece any more, and no code path creates a new `Piece` row after
+this migration: adding pieces, removing them, and the "tell me when you make
+another" waitlist were all part of the same stock-management workflow this
+shop no longer has. Old rows stay exactly as they are, read-only, for orders
+that already reference them.
 
 There is no facet/filter system here either, and that is deliberate. Filters
 exist to help someone narrow ten thousand items. This catalogue is short on
@@ -38,7 +44,6 @@ from enum import Enum as PyEnum
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
-    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -62,25 +67,11 @@ from app.models.base import BilingualMixin, TimestampMixin, uuid_fk, uuid_pk
 EMBEDDING_DIMENSIONS = 1536
 
 
-class ProductKind(str, PyEnum):
-    shelf = "shelf"
-    workshop = "workshop"
-
-
 class ProductStatus(str, PyEnum):
     draft = "draft"
     active = "active"
     paused = "paused"
     archived = "archived"
-
-
-class PieceState(str, PyEnum):
-    """Where one physical object is."""
-
-    available = "available"
-    reserved = "reserved"  # in someone's open order
-    sold = "sold"
-    kept = "kept"  # not for sale: a sample, a second, a gift
 
 
 class DiscountKind(str, PyEnum):
@@ -159,19 +150,17 @@ class Product(Base, TimestampMixin, BilingualMixin):
     """One thing the shop sells.
 
     There is deliberately no quantity column and no availability. See the
-    module docstring: this catalogue does not track stock. A shelf piece is a
-    normal product; a workshop piece is one that carries a promise about time.
+    module docstring: this catalogue does not track stock, does not
+    distinguish products by how they are made, and states one price.
     """
 
     __tablename__ = "products"
     # `ck_workshop_has_lead_time` used to live here, tying made-to-order
     # pieces to a lead time. The shop does not state a time to anyone, so
-    # there is no column left for it to constrain.
+    # there is no column left for it to constrain. `kind` used to live here
+    # too — deleted with the stock/time distinction it existed to serve.
 
     id: Mapped[str] = uuid_pk()
-    kind: Mapped[ProductKind] = mapped_column(
-        Enum(ProductKind, name="product_kind"), nullable=False, index=True
-    )
     slug: Mapped[str] = mapped_column(String(320), unique=True, nullable=False, index=True)
     category_id: Mapped[str | None] = mapped_column(
         UUID(as_uuid=False),
@@ -214,18 +203,10 @@ class Product(Base, TimestampMixin, BilingualMixin):
         Numeric(5, 2), default=0, nullable=False
     )
 
-    # ── shelf only ──
+    # When this was made — provenance, not stock (BRAND.md §7: how it was
+    # made, not what it weighs). Feeds the "Made in ⟨date⟩" line on the page;
+    # unrelated to how many exist, which this shop no longer counts.
     made_on: Mapped[date | None] = mapped_column(Date, nullable=True)
-    # Closed means we do not intend to make more. What is left is all there
-    # will ever be — and that is the only kind of scarcity we state.
-    batch_closed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    # Whether to show piece numbers on the page. A hand-finished object earns
-    # "Piece 04 of 12"; a batch of fifty brackets does not. Pieces are still
-    # rows either way — this only decides whether we say so.
-    show_piece_numbers: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
-    # An upper bound when the work varies with what is asked for: "from 180 MAD".
-    price_max: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     # The owner's thumb on the scale, read by the feed (REBUILD-PLAN §3.3):
     # push a piece worth making more of, bury one that is not. 1.0 is neutral.
@@ -253,10 +234,6 @@ class Product(Base, TimestampMixin, BilingualMixin):
     embedding: Mapped[ProductEmbedding | None] = relationship(
         back_populates="product", cascade="all, delete-orphan", uselist=False
     )
-
-    @property
-    def is_shelf(self) -> bool:
-        return self.kind is ProductKind.shelf
 
     def description(self, lang: str) -> str:
         return (self.description_ar or self.description_en) if lang == "ar" else self.description_en
@@ -305,8 +282,8 @@ class ProductVariant(Base):
     taxonomy. A t-shirt genuinely needs a size, so variants are real; a
     normalised attribute system to filter thirty items is not.
 
-    Stock is not a column. For a shelf piece it is a count of the pieces that
-    exist; a made-to-order piece has none.
+    Stock is not a column, and never was one to begin with — this table has
+    never counted how many of a variant exist.
     """
 
     __tablename__ = "product_variants"
@@ -350,7 +327,7 @@ class ProductAttribute(Base):
     decision to revisit.
 
     It carries no price and no stock, and that is a rule, not an omission:
-    the owner sets the price, and availability is a count of `Piece` rows.
+    the owner sets the price, and there is no availability to track.
     """
 
     __tablename__ = "product_attributes"
@@ -416,20 +393,19 @@ class ProductInteraction(Base):
 
 
 class Piece(Base):
-    """One physical object that exists.
+    """One physical object a past order refers to. Read-only history.
 
-    This is the row behind "Piece 04 of 12" (BRAND.md §8). It makes honest
-    scarcity structural: what the page says is left is a count of rows, so
-    there is no field anywhere in which to invent a shortage.
-
-    Entering them costs one action — you say you made twelve and twelve rows
-    are created and numbered.
+    No code creates a new row here any more — adding pieces, removing them,
+    and the "tell me when you make another" waitlist were all part of the
+    stock-management workflow this shop no longer has (see the module
+    docstring). What is left are the rows old order lines still point at
+    (`OrderItem.piece_id`, `ondelete=RESTRICT`); the table exists so that
+    history keeps reading correctly, nothing more.
     """
 
     __tablename__ = "pieces"
     __table_args__ = (
         UniqueConstraint("product_id", "number", name="uq_piece_number"),
-        Index("ix_pieces_product_state", "product_id", "state"),
     )
 
     id: Mapped[str] = uuid_pk()
@@ -442,9 +418,6 @@ class Piece(Base):
     )
     number: Mapped[int] = mapped_column(Integer, nullable=False)
     batch_size: Mapped[int] = mapped_column(Integer, nullable=False)
-    state: Mapped[PieceState] = mapped_column(
-        Enum(PieceState, name="piece_state"), default=PieceState.available, nullable=False
-    )
     made_on: Mapped[date | None] = mapped_column(Date, nullable=True)
     # The photograph of *this* object, when it differs visibly from its
     # siblings — a grain, a hand-finished edge. Falls back to the product's.

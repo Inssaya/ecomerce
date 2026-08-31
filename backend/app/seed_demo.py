@@ -1,9 +1,9 @@
 """Development-only sample history.
 
 The console's whole first face is about what happened — orders, refusals,
-people waiting, where visitors stop. With an empty database every one of
-those screens is an empty state, which makes the design impossible to judge
-and, worse, makes a working console look broken.
+where visitors stop. With an empty database every one of those screens is an
+empty state, which makes the design impossible to judge and, worse, makes a
+working console look broken.
 
 This writes a plausible few weeks of shop history so the screens have
 something true-shaped to draw.
@@ -33,12 +33,9 @@ from app.db import SessionLocal
 from app.models import (
     ContactMessage,
     Order,
-    PieceAlert,
     OrderEvent,
     OrderItem,
     OrderStatus,
-    Piece,
-    PieceState,
     Product,
     Signal,
     SignalType,
@@ -47,8 +44,6 @@ from app.models.requests import CustomRequest, RequestEvent, RequestStatus
 
 DEMO_PREFIX = "DEMO-"
 DEMO_MARKER = "[sample]"
-#: Piece alerts have no free-text field to mark, so the address carries it.
-DEMO_EMAIL_DOMAIN = "@sample.invalid"
 
 CITIES = ["Casablanca", "Rabat", "Fès", "Marrakech", "Tanger", "Agadir", "Oujda", "Meknès"]
 NAMES = [
@@ -93,11 +88,6 @@ async def clear() -> None:
 
         await db.execute(delete(ContactMessage).where(ContactMessage.message.contains(DEMO_MARKER)))
         await db.execute(delete(Signal).where(Signal.visitor_id.startswith("demo-")))
-        await db.execute(delete(PieceAlert).where(PieceAlert.email.endswith(DEMO_EMAIL_DOMAIN)))
-
-        # Put any piece this script sold back on the shelf.
-        for piece in await db.scalars(select(Piece).where(Piece.state == PieceState.sold)):
-            piece.state = PieceState.available
 
         await db.commit()
         print(f"Removed {len(orders)} orders, {len(requests)} requests and their signals.")
@@ -288,39 +278,6 @@ async def seed() -> None:
                 request.quote_price = random.choice([350, 600, 900])
             request.events = [RequestEvent(status=RequestStatus.requested, actor="customer", created_at=asked)]
             db.add(request)
-
-        # ── People waiting on a sold-out piece ────────────────────────────
-        # The sharpest demand signal in the building — somebody who would have
-        # paid, for a specific piece, at a price they had already seen — and
-        # the seed created none of it, so "Waiting on a piece" was a permanent
-        # empty state and its age could never be read on screen.
-        # Nothing in the seed ever sold out, so nobody could be waiting and the
-        # shelf never reached zero. Clear a few runs first — the waiting list
-        # is then a consequence of the shelf, which is what it is in real life.
-        # `--clear` already returns every sold piece to the shelf.
-        shelf = [product for product in products if product.kind == "shelf"]
-        sold_out = random.sample(shelf, k=min(6, len(shelf)))
-        for product in sold_out:
-            for piece in await db.scalars(
-                select(Piece).where(Piece.product_id == product.id, Piece.state == PieceState.available)
-            ):
-                piece.state = PieceState.sold
-
-        for product in sold_out:
-            # Spread over weeks, because how long someone has waited is the
-            # difference between "make it soon" and "you have lost this sale".
-            for index in range(random.randint(1, 7)):
-                db.add(
-                    PieceAlert(
-                        product_id=product.id,
-                        phone=f"06{random.randint(10000000, 99999999)}",
-                        # Carries the marker so `--clear` can find these again;
-                        # everything this script writes has to be removable.
-                        email=f"waiting{index}{DEMO_EMAIL_DOMAIN}",
-                        lang="en",
-                        created_at=now - timedelta(days=random.randint(0, 40), hours=index),
-                    )
-                )
 
         # ── Messages ──────────────────────────────────────────────────────
         for index, text in enumerate(MESSAGES):

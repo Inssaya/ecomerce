@@ -23,18 +23,14 @@ async def publish(
     *,
     title: str,
     category_id: str | None = None,
-    made: int = 5,
 ) -> dict:
     created = await client.post(
         "/api/admin/products",
         headers=headers,
-        json={"kind": "shelf", "title_en": title, "price": 150, "category_id": category_id},
+        json={"title_en": title, "price": 150, "category_id": category_id},
     )
     product = created.json()
     await photograph(client, headers, product["id"])
-    await client.post(
-        f"/api/admin/products/{product['id']}/pieces", headers=headers, json={"quantity": made}
-    )
     published = await client.patch(
         f"/api/admin/products/{product['id']}", headers=headers, json={"status": "active"}
     )
@@ -329,7 +325,7 @@ async def test_publishing_a_piece_puts_it_into_meaning_space(
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
-        json={"kind": "shelf", "title_en": "A new hook", "title_ar": "خطاف", "price": 90},
+        json={"title_en": "A new hook", "title_ar": "خطاف", "price": 90},
     )
     assert created.status_code == 201
     assert called, "creating a piece must schedule an embedding"

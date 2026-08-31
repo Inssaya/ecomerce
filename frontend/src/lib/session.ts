@@ -15,39 +15,26 @@
  */
 import { useCallback, useEffect, useState } from "react";
 
-import { ApiError } from "./api";
-import { problemFrom } from "./detail";
+import { api, ApiError, type AuthProfile } from "./api";
+import { isLang, type Lang } from "./i18n";
 import { readSession, writeSession, type Session } from "./session-store";
 
 export type { Session };
 export { ApiError };
+export type Profile = AuthProfile;
 
-async function post<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`/api${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  // The server already says exactly what went wrong — wrong password, an email
-  // already registered, a password too short — and swallowing that into a bare
-  // status code is what forced every failure on the sign-in form to look the
-  // same.
-  if (!response.ok) throw new ApiError(response.status, await problemFrom(response));
-  return (await response.json()) as T;
-}
-
-export interface Profile {
-  full_name?: string | null;
-  email?: string | null;
-  phone?: string | null;
-  address_line1?: string | null;
-  city?: string | null;
-  avatar_url?: string | null;
-}
-
-interface AuthReply {
-  access_token: string;
-  user?: Profile;
+/**
+ * The page's own language, for the one call site that has no `lang` of its
+ * own to send — `saveProfile` runs from checkout too, which asks for no
+ * language back. `lib/[lang]/layout.tsx` stamps `<html lang>` from the route
+ * on every page under it, server-rendered before any client code runs, so
+ * this is never a guess at what the browser prefers, only a read of what the
+ * page it's called from already is.
+ */
+function currentLang(): Lang {
+  if (typeof document === "undefined") return "en";
+  const value = document.documentElement.lang;
+  return isLang(value) ? value : "en";
 }
 
 /** The server's own view of the account, in the shape this app stores. */
@@ -64,7 +51,7 @@ function sessionFrom(token: string, user: Profile | undefined, email: string): S
 }
 
 export async function signIn(email: string, password: string): Promise<Session> {
-  const reply = await post<AuthReply>("/auth/login", { email, password });
+  const reply = await api.login(currentLang(), email, password);
   const session = sessionFrom(reply.access_token, reply.user, email);
   writeSession(session);
   return session;
@@ -84,7 +71,7 @@ export async function signUp(
   // that the very first checkout after making an account is already filled in.
   // Sending it on the follow-up sign-in instead would leave a window where the
   // account exists and knows nothing about the person who just typed it all.
-  await post<unknown>("/auth/register", {
+  await api.register(currentLang(), {
     full_name: details.fullName,
     email: details.email,
     password: details.password,
@@ -111,23 +98,17 @@ export async function saveProfile(changes: {
   const current = readSession();
   if (!current) return;
   try {
-    const response = await fetch("/api/auth/me", {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${current.token}`,
-      },
-      body: JSON.stringify(changes),
-    });
-    if (!response.ok) return;
-    const user = (await response.json()) as Profile;
+    // No explicit token to attach: `request()` reads the same stored session
+    // this function does and sends it as the bearer, the same way it would for
+    // any other authenticated call.
+    const user = await api.updateMe(currentLang(), changes);
     patchSession({
       phone: user.phone ?? null,
       address: user.address_line1 ?? null,
       city: user.city ?? null,
     });
   } catch {
-    /* offline, or the token expired — the order is placed regardless */
+    /* offline, blocked, or the token expired — the order is placed regardless */
   }
 }
 

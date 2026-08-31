@@ -70,7 +70,7 @@ async def test_a_script_dressed_as_a_photo_is_refused(
     created = await client.post(
         "/api/admin/products",
         headers=owner_headers,
-        json={"kind": "shelf", "title_en": "Anything", "price": 100},
+        json={"title_en": "Anything", "price": 100},
     )
     refused = await client.post(
         f"/api/admin/products/{created.json()['id']}/media",
@@ -141,9 +141,9 @@ async def test_the_assistant_cannot_be_used_to_empty_the_ai_budget(
 async def test_orders_cannot_be_flooded(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
-    """Each fake order reserves real pieces, so a flood would show the shop as
-    sold out while nothing had been sold."""
-    piece = await shelf_piece(client, owner_headers, made=1)
+    """There is no stock to run out of, but each fake order is still a write
+    the shop pays for — the flood must be capped regardless."""
+    piece = await shelf_piece(client, owner_headers)
     body = {
         "full_name": "Flood",
         "phone": "0611111111",

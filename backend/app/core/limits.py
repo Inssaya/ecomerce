@@ -5,8 +5,6 @@ ones that have to stay open to strangers:
 
 * **`/auth/login`** — the owner's password is the whole shop. Unlimited guesses
   against an 8-character minimum is not a password policy, it is a delay.
-* **`/assistant`** — unauthenticated, and every call spends money at an AI
-  provider. Someone who found it could empty the API budget in an afternoon.
 * **`/orders`** and **`/requests`** — a script could fill the workshop's day
   with fake orders, and each fake order *reserves real pieces*, so the shop
   would show as sold out while nothing had been sold.
@@ -156,7 +154,6 @@ RequestLimit = Annotated[None, Depends(RateLimit(6, 600, name="custom-request"))
 #: one endpoint a stranger can write bytes to, so it is the one that must not
 #: be a free file host.
 ReferenceUploadLimit = Annotated[None, Depends(RateLimit(20, 900, name="reference-upload"))]
-AssistantLimit = Annotated[None, Depends(RateLimit(30, 600, name="assistant"))]
 SignalLimit = Annotated[None, Depends(RateLimit(120, 60, name="signals"))]
 LookupLimit = Annotated[None, Depends(RateLimit(15, 600, name="lookup"))]
 ContactLimit = Annotated[None, Depends(RateLimit(6, 600, name="contact"))]

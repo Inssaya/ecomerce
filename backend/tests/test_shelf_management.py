@@ -15,13 +15,12 @@ from __future__ import annotations
 from httpx import AsyncClient
 from sqlalchemy import select
 
-from app.models import Piece, PieceState, Product
-from tests.test_shop_flow import CASABLANCA, PHOTO, photograph, shelf_piece
+from app.models import Product
+from tests.test_shop_flow import PHOTO, photograph, shelf_piece
 
 
 async def create_draft(client: AsyncClient, headers: dict[str, str], **overrides) -> dict:
     body = {
-        "kind": "shelf",
         "title_en": "Oak shelf",
         "title_ar": "رف بلوط",
         "price": 300,
@@ -96,52 +95,6 @@ async def test_a_file_that_is_not_an_image_is_refused_whatever_it_claims(
         files={"file": ("piece.png", b"<svg onload=alert(1)></svg>", "image/png")},
     )
     assert response.status_code == 415
-
-
-# ── The batch ─────────────────────────────────────────────────────────────────
-
-
-async def test_pieces_are_numbered_within_the_batch_they_belong_to(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """01/04 is a claim about a specific object. Adding more later must not
-    silently renumber the ones already sold to somebody."""
-    piece = await shelf_piece(client, owner_headers, made=4)
-    first = (await client.get(f"/api/admin/products/{piece['id']}/pieces", headers=owner_headers)).json()
-    assert [row["label"] for row in first] == ["01/04", "02/04", "03/04", "04/04"]
-
-    added = await client.post(
-        f"/api/admin/products/{piece['id']}/pieces", headers=owner_headers, json={"quantity": 2}
-    )
-    assert added.status_code == 201
-    assert [row["number"] for row in added.json()] == [5, 6]
-
-
-async def test_removing_a_piece_shrinks_the_run_it_was_part_of(
-    client: AsyncClient, owner_headers: dict[str, str], db_session
-) -> None:
-    """Counted six, made five.
-
-    Adding pieces already rewrites every sibling's batch size — 04/08 becomes
-    04/12 when the run grows — and taking one away has to do the same in
-    reverse. Left alone, the shop keeps saying "01 of 4" over three objects,
-    which is a claim about a specific physical thing that is simply not true.
-    """
-    product = await shelf_piece(client, owner_headers, made=4)
-    last = await db_session.scalar(
-        select(Piece)
-        .where(Piece.product_id == product["id"], Piece.state == PieceState.available)
-        .order_by(Piece.number.desc())
-    )
-
-    assert (
-        await client.delete(f"/api/admin/pieces/{last.id}", headers=owner_headers)
-    ).status_code == 204
-
-    rows = (
-        await client.get(f"/api/admin/products/{product['id']}/pieces", headers=owner_headers)
-    ).json()
-    assert [row["label"] for row in rows] == ["01/03", "02/03", "03/03"]
 
 
 # ── Taking things down ────────────────────────────────────────────────────────
@@ -294,7 +247,6 @@ async def test_a_category_with_products_cannot_be_deleted(
         "/api/admin/products",
         headers=owner_headers,
         json={
-            "kind": "shelf",
             "title_en": "A hook",
             "price": 100,
             "category_id": category["id"],
@@ -359,30 +311,6 @@ async def test_category_deletion_and_icons_are_the_owners_alone(client: AsyncCli
     ]:
         response = await client.request(method, path)
         assert response.status_code == 401
-
-
-async def test_one_category_can_be_asked_for_by_its_slug(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """The category page needs a real 404 signal for a slug that does not
-    exist, which is the difference between a page that keeps a dead URL out of
-    the index and one that renders "not found" under 200."""
-    created = (
-        await client.post(
-            "/api/admin/categories",
-            headers=owner_headers,
-            json={"name_en": "Hooks", "name_ar": "خطّافات"},
-        )
-    ).json()
-
-    english = await client.get(f"/api/categories/{created['slug']}")
-    assert english.status_code == 200
-    assert english.json()["name"] == "Hooks"
-
-    arabic = await client.get(f"/api/categories/{created['slug']}?lang=ar")
-    assert arabic.json()["name"] == "خطّافات"
-
-    assert (await client.get("/api/categories/no-such-line")).status_code == 404
 
 
 # ── Only the owner ────────────────────────────────────────────────────────────

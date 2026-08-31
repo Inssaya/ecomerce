@@ -25,11 +25,7 @@ from app.models import (
     Order,
     OrderItem,
     OrderStatus,
-    Piece,
-    PieceAlert,
-    PieceState,
     Product,
-    ProductStatus,
     Signal,
     SignalType,
 )
@@ -470,40 +466,6 @@ async def unread_messages(db: AsyncSession) -> int:
         .where(ContactMessage.read_at.is_(None), ContactMessage.archived_at.is_(None))
     )
     return total or 0
-
-
-async def waiting_list(db: AsyncSession, limit: int = 50) -> list[dict]:
-    """Who is waiting on which piece, newest demand first.
-
-    `piece_alerts` is the most direct signal in the building: a search says
-    somebody typed a word, this says somebody would have paid, for a specific
-    piece, at a price they had already seen. Until now the only way to read it
-    was one product at a time, as a bare count.
-    """
-    rows = await db.execute(
-        select(
-            PieceAlert.product_id,
-            Product.title_en,
-            Product.slug,
-            func.count().label("waiting"),
-            func.min(PieceAlert.created_at).label("since"),
-        )
-        .join(Product, Product.id == PieceAlert.product_id)
-        .where(PieceAlert.notified_at.is_(None))
-        .group_by(PieceAlert.product_id, Product.title_en, Product.slug)
-        .order_by(func.count().desc())
-        .limit(limit)
-    )
-    return [
-        {
-            "product_id": row.product_id,
-            "title": row.title_en,
-            "slug": row.slug,
-            "waiting": row.waiting,
-            "since": row.since.isoformat() if row.since else None,
-        }
-        for row in rows
-    ]
 
 
 #: Plain-language explanations, so the panel makes the owner better at running

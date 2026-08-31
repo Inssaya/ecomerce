@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -27,8 +27,6 @@ class RequestCreate(BaseModel):
     budget: float | None = Field(default=None, gt=0)
     references: list[str] = Field(default_factory=list, max_length=6)
     lang: str = "en"
-    #: Set when the request came out of a conversation about a specific piece.
-    product_id: str | None = None
     source: str = Field(default="form", max_length=40)
 
     _phone = field_validator("phone")(normalise_moroccan_phone)

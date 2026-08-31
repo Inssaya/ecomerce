@@ -432,34 +432,6 @@ export function rangesAreDegenerate(rows: { low: number; high: number }[]): bool
   return spans.size === 1 && Math.max(...rows.map((row) => row.high)) <= 1;
 }
 
-// ── Runway — days of cover against a threshold ───────────────────────────────
-
-/**
- * "You run out in four days" is the most actionable sentence the forecast
- * can produce, and it was being dropped entirely.
- */
-export function Runway({ rows, threshold = 7 }: { rows: { label: string; days: number | null; href?: string }[]; threshold?: number }) {
-  const withCover = rows.filter((row) => row.days !== null) as { label: string; days: number; href?: string }[];
-  if (withCover.length === 0) return null;
-  const max = Math.max(...withCover.map((row) => row.days), threshold * 2);
-
-  return (
-    <RankedBars
-      tone="status"
-      max={max}
-      rows={[...withCover]
-        .sort((a, b) => a.days - b.days)
-        .map((row) => ({
-          label: row.label,
-          value: row.days,
-          href: row.href,
-          tone: row.days <= 3 ? ("danger" as const) : row.days <= threshold ? ("warn" as const) : ("ok" as const),
-        }))}
-      formatValue={(value) => <span>{value < 1 ? "<1d" : `${Math.round(value)}d`}</span>}
-    />
-  );
-}
-
 // ── Confidence — ordered, so a shape not a hue ───────────────────────────────
 
 export function Confidence({ level }: { level: string }) {

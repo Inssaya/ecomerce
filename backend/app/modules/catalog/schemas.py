@@ -2,10 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, model_validator
 
-from app.models import AttributeGroup, DiscountKind, ProductKind, ProductStatus
-from app.modules.orders.schemas import normalise_moroccan_phone
+from app.models import AttributeGroup, DiscountKind, ProductStatus
 
 
 class MediaResponse(BaseModel):
@@ -28,32 +27,11 @@ class CategoryNode(BaseModel):
     children: list[CategoryNode] = []
 
 
-class PieceOut(BaseModel):
-    """One physical object, offered by name.
-
-    The whole batch is returned, sold ones included, so the page can show what
-    was made rather than only what is left. Seeing three of four struck through
-    is honest scarcity; a bare "1 left" is a claim you have to take on trust.
-    """
-
-    id: str
-    number: int
-    batch_size: int
-    label: str
-    #: available | reserved | sold | kept
-    state: str
-    made_on: date | None = None
-    photo: str | None = None
-    note: str = ""
-
-
 class VariantOut(BaseModel):
     id: str
     sku: str
     option: str
     price: float
-    #: Shelf: how many of this configuration exist. Null for made-to-order.
-    available: int | None = None
 
 
 class AttributeOut(BaseModel):
@@ -79,17 +57,11 @@ class ProductCard(BaseModel):
 
     id: str
     slug: str
-    kind: ProductKind
     title: str
     price: float
-    price_max: float | None = None
     image: str | None = None
     category_slug: str | None = None
     category_name: str | None = None
-    #: Historically the piece count on the shelf. Every response returns null
-    #: now — the shop does not track units. Kept in the shape so an old cart
-    #: written by a previous tab still loads without a shrug.
-    available: int | None = None
     #: What it costs today. Computed on the server, once, so the card and the
     #: cart cannot disagree with the piece page about the number the buyer sees.
     effective_price: float
@@ -101,10 +73,6 @@ class ProductDetail(ProductCard):
     story: str
     images: list[MediaResponse]
     variants: list[VariantOut]
-    #: Empty, always — used to be shelf-only "we made twelve, four gone".
-    pieces: list[PieceOut] = []
-    show_piece_numbers: bool = False
-    batch_closed: bool = False
     made_on: date | None = None
     created_at: datetime
     #: The three groups of specification. Any can be empty.
@@ -112,19 +80,6 @@ class ProductDetail(ProductCard):
     #: Whether the buyer can put their name on it, and how much that costs.
     personalizable: bool = False
     personalization_markup_pct: float = 0
-
-
-class AlertRequest(BaseModel):
-    """Waiting on a piece. One field that matters, and an optional second.
-
-    The phone goes through the same normaliser as checkout — this is the same
-    person, reached the same way.
-    """
-
-    phone: str = Field(min_length=8, max_length=30)
-    email: EmailStr | None = None
-
-    _phone = field_validator("phone")(normalise_moroccan_phone)
 
 
 class ProductPage(BaseModel):
@@ -182,14 +137,9 @@ class CategoryAdmin(BaseModel):
 
 
 class ProductWrite(BaseModel):
-    """Creating a piece.
+    """Creating a piece. One price, one kind of thing — no shelf/workshop
+    distinction, no upper price bound."""
 
-    `kind` decides what is required, because the two offers genuinely need
-    different things: a made-to-order piece without a lead time has nothing
-    honest to put on the page (BRAND.md §8).
-    """
-
-    kind: ProductKind
     title_en: str = Field(min_length=1, max_length=300)
     title_ar: str = Field(default="", max_length=300)
     description_en: str = ""
@@ -201,10 +151,6 @@ class ProductWrite(BaseModel):
     status: ProductStatus = ProductStatus.draft
 
     made_on: date | None = None
-    batch_closed: bool = False
-    show_piece_numbers: bool = False
-
-    price_max: float | None = Field(default=None, gt=0)
 
     personalizable: bool = False
     personalization_markup_pct: float = Field(default=0, ge=0, le=500)
@@ -216,15 +162,6 @@ class ProductWrite(BaseModel):
     @model_validator(mode="after")
     def coherent_discount(self) -> ProductWrite:
         check_discount(self.discount_kind, self.discount_value, self.price)
-        return self
-
-    @model_validator(mode="after")
-    def coherent_for_its_kind(self) -> ProductWrite:
-        # Was also where a workshop piece was forced to declare a lead time.
-        # The shop states no time to anyone now, so the only rule left is that
-        # a price range reads the right way round.
-        if self.price_max is not None and self.price_max < self.price:
-            raise ValueError("The upper price cannot be below the starting price")
         return self
 
 
@@ -240,9 +177,6 @@ class ProductPatch(BaseModel):
     status: ProductStatus | None = None
     business_boost: float | None = Field(default=None, ge=0, le=5)
     made_on: date | None = None
-    batch_closed: bool | None = None
-    show_piece_numbers: bool | None = None
-    price_max: float | None = Field(default=None, gt=0)
 
     personalizable: bool | None = None
     personalization_markup_pct: float | None = Field(default=None, ge=0, le=500)
@@ -352,37 +286,9 @@ class MediaPatch(BaseModel):
     is_active: bool = True
 
 
-class PieceBatchWrite(BaseModel):
-    """Adding pieces to the shelf.
-
-    You say how many you made; the rows are created and numbered. There is no
-    field for "stock" anywhere in this API — that is the point.
-    """
-
-    quantity: int = Field(ge=1, le=200)
-    variant_id: str | None = None
-    made_on: date | None = None
-    note_en: str = ""
-    note_ar: str = ""
-
-
-class PieceAdmin(BaseModel):
-    id: str
-    number: int
-    batch_size: int
-    label: str
-    state: str
-    variant_id: str | None
-    made_on: date | None
-    photo_url: str | None
-    note_en: str
-    note_ar: str
-
-
 class ProductAdmin(BaseModel):
     id: str
     slug: str
-    kind: ProductKind
     title_en: str
     title_ar: str
     description_en: str
@@ -390,7 +296,6 @@ class ProductAdmin(BaseModel):
     story_en: str
     story_ar: str
     price: float
-    price_max: float | None = None
     business_boost: float
     category_id: str | None
     #: Resolved from the tree, so the table has real columns rather than ids.
@@ -402,7 +307,6 @@ class ProductAdmin(BaseModel):
     images: list[MediaResponse]
     variants: list[VariantOut]
     attributes: list[AttributeOut] = []
-    available: int | None = None
     personalizable: bool = False
     personalization_markup_pct: float = 0
     discount_kind: DiscountKind | None = None
@@ -417,8 +321,6 @@ class ProductAdmin(BaseModel):
     total_likes: int = 0
     total_saves: int = 0
     made_on: date | None = None
-    batch_closed: bool = False
-    show_piece_numbers: bool = False
     created_at: datetime
     #: Drives the small green "modified" line under the creation date.
     updated_at: datetime
