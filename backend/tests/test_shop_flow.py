@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from tests.conftest import upload_photo
+
 PHOTO = (
     b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01\x08\x06"
     b"\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\nIDATx\x9cc\x00\x01\x00\x00\x05\x00"
@@ -18,10 +20,11 @@ CASABLANCA = {"line1": "12 Rue des Oliviers", "city": "Casablanca"}
 
 
 async def photograph(client: AsyncClient, headers: dict[str, str], product_id: str) -> None:
+    key = await upload_photo(client, PHOTO, purpose="product", headers=headers)
     response = await client.post(
         f"/api/admin/products/{product_id}/media",
         headers=headers,
-        files={"file": ("piece.png", PHOTO, "image/png")},
+        json={"key": key},
     )
     assert response.status_code == 201, response.text
 

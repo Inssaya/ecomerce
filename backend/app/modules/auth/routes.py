@@ -19,10 +19,12 @@ dashboard can grant themselves the console.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException
+
+from pydantic import BaseModel, Field
 
 from app.core.errors import bad_request
-from app.core.storage import sniff_image, upload_image
+from app.core.storage import UploadRejected, delete_object, public_url, verify_uploaded
 from app.deps import CurrentUser, DbSession
 from app.models import User
 from app.modules.auth.schemas import UserResponse, UserUpdate
@@ -54,26 +56,34 @@ async def update_me(body: UserUpdate, user: CurrentUser, db: DbSession) -> User:
     return user
 
 
+class AvatarClaim(BaseModel):
+    """A face the browser has already written to storage."""
+
+    key: str = Field(min_length=1, max_length=300)
+
+
 @router.post("/me/avatar", response_model=UserResponse)
-async def upload_avatar(file: UploadFile, user: CurrentUser, db: DbSession) -> User:
+async def claim_avatar(body: AvatarClaim, user: CurrentUser, db: DbSession) -> User:
     """The customer's own photograph.
 
     Same rules as product photography, for the same reason: the declared
     content type is whatever the client typed, so the format is decided from
-    the file's own first bytes. A profile picture is the one upload on the site
-    a stranger can make, which is exactly why it is sniffed rather than trusted.
+    the file's own first bytes — read back out of storage now that the bytes
+    go there directly. A profile picture is the one upload a stranger can
+    make, which is exactly why it is sniffed rather than trusted.
     """
-    data = await file.read()
-    if not data:
-        raise bad_request("That file is empty")
-    if len(data) > MAX_AVATAR_BYTES:
-        raise HTTPException(status_code=413, detail="That photo is larger than 4 MB")
+    if not body.key.startswith("avatars/"):
+        raise bad_request("That upload is not an avatar")
+    try:
+        await verify_uploaded(body.key, max_bytes=MAX_AVATAR_BYTES)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
 
-    content_type = sniff_image(data)
-    if content_type is None:
-        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
-
-    user.avatar_url = await upload_image(data, content_type, prefix=f"avatars/{user.id}")
+    old_avatar = user.avatar_url
+    user.avatar_url = public_url(body.key)
     await db.commit()
     await db.refresh(user)
+    # A face is replaced, not accumulated — the old one is nobody's record.
+    if old_avatar:
+        await delete_object(old_avatar)
     return user

@@ -9,6 +9,8 @@ from __future__ import annotations
 import pytest
 from httpx import AsyncClient
 
+from tests.conftest import upload_photo
+
 from app.config import Settings
 from app.core.storage import sniff_image
 from tests.test_shop_flow import CASABLANCA, shelf_piece
@@ -77,11 +79,16 @@ async def test_a_script_dressed_as_a_photo_is_refused(
         headers=owner_headers,
         json={"title_en": "Anything", "price": 100},
     )
+    # Declared a JPEG, actually an SVG with script in it. The bytes go to
+    # storage before the API sees them now, so this is exactly the case that
+    # matters: the shop has to read them back and refuse.
+    key = await upload_photo(
+        client, b'<svg onload="alert(1)"/>', purpose="product", headers=owner_headers
+    )
     refused = await client.post(
         f"/api/admin/products/{created.json()['id']}/media",
         headers=owner_headers,
-        # Declared a JPEG, actually an SVG with script in it.
-        files={"file": ("piece.jpg", b'<svg onload="alert(1)"/>', "image/jpeg")},
+        json={"key": key},
     )
     assert refused.status_code == 415
 

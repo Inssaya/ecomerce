@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 
 from app.core.errors import bad_request, get_or_404
 from app.core.limits import ReferenceUploadLimit, RequestLimit
-from app.core.storage import sniff_image, upload_image
+from app.core.storage import UploadRejected, public_url, verify_uploaded
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging
 from app.models import Category, Order
 from app.models.requests import CustomRequest, RequestStatus
@@ -91,9 +91,15 @@ async def create_request(
     return await _out(db, request, lang)
 
 
+class ReferenceClaim(BaseModel):
+    """The name of something already written to storage by the browser."""
+
+    key: str = Field(min_length=1, max_length=300)
+
+
 @router.post("/requests/references", status_code=status.HTTP_201_CREATED)
-async def upload_reference(file: UploadFile, _: ReferenceUploadLimit) -> dict[str, str]:
-    """A photo of the thing they want, uploaded before the request is sent.
+async def claim_reference(body: ReferenceClaim, _: ReferenceUploadLimit) -> dict[str, str]:
+    """Accept a photo of the thing they want, after the browser has uploaded it.
 
     `CustomRequest.references` has always existed and the form has always shown
     an "attach a sketch" box, but there was no endpoint behind it: the files
@@ -102,24 +108,24 @@ async def upload_reference(file: UploadFile, _: ReferenceUploadLimit) -> dict[st
     the customer believed they had sent one — which is the worst version of
     this, because a picture is usually the whole brief.
 
-    Unauthenticated, because asking for a price must not require an account.
-    That makes it the only endpoint on the shop a stranger can write bytes to,
-    so it is rate limited, size capped, and the format is decided from the
-    file's own first bytes rather than from the content type the client typed —
-    otherwise anything at all can be labelled `image/jpeg` and served back from
-    our own domain.
+    The bytes now go straight to storage from the browser, so this takes a name
+    rather than a file. That does not weaken the check that mattered: the
+    declared content type was always a string the client chose, and what
+    decides whether this is really an image is still this application reading
+    the first bytes — now out of the bucket, and deleting whatever is not.
+
+    Unauthenticated, because asking for a price must not require an account,
+    which makes it the one place a stranger can cause a write. Hence the rate
+    limit, and hence the size ceiling being enforced here rather than trusted
+    from the browser: a signature carries no size of its own.
     """
-    data = await file.read()
-    if not data:
-        raise bad_request("That file is empty")
-    if len(data) > MAX_REFERENCE_BYTES:
-        raise HTTPException(status_code=413, detail="That photo is larger than 8 MB")
-
-    content_type = sniff_image(data)
-    if content_type is None:
-        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
-
-    return {"url": await upload_image(data, content_type, prefix="requests")}
+    if not body.key.startswith("requests/"):
+        raise bad_request("That upload is not a reference photo")
+    try:
+        await verify_uploaded(body.key, max_bytes=MAX_REFERENCE_BYTES)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
+    return {"url": public_url(body.key)}
 
 
 @router.get("/requests/track/{tracking_token}", response_model=RequestOut)

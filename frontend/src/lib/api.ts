@@ -9,6 +9,7 @@ import { problemFrom } from "./detail";
 import { visitorId } from "./fingerprint";
 import type { Lang } from "./i18n";
 import { sessionToken } from "./session-store";
+import { uploadToStorage } from "./upload";
 
 export interface Piece {
   id: string;
@@ -336,11 +337,20 @@ export const api = {
    * enough that a customer who pressed send and saw nothing happen presses it
    * again, and the second press is the one that fails.
    */
+  /** Straight to storage, then hand the shop the name — see `lib/upload.ts`. */
   uploadReference: async (lang: Lang, file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    // No JSON content type: the browser must set its own multipart boundary.
-    return request<{ url: string }>("/requests/references", { lang, method: "POST", body });
+    const key = await uploadToStorage(file, "reference", (body) =>
+      request<{ put_url: string; key: string; max_bytes: number }>("/uploads/sign/reference", {
+        lang,
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    );
+    return request<{ url: string }>("/requests/references", {
+      lang,
+      method: "POST",
+      body: JSON.stringify({ key }),
+    });
   },
 
   /** A personal message, so it always lands somewhere the workshop will see
@@ -384,15 +394,19 @@ export const api = {
   updateMe: (lang: Lang, changes: { phone?: string; address_line1?: string; city?: string }) =>
     request<AuthProfile>("/auth/me", { lang, method: "PATCH", body: JSON.stringify(changes) }),
 
-  /** A new profile photograph. Same FormData exception as `uploadReference`:
-   *  no JSON content type, so the browser can set its own multipart boundary. */
-  uploadAvatar: (lang: Lang, file: File) => {
-    const body = new FormData();
-    body.append("file", file);
+  /** A new profile photograph. Same three steps as `uploadReference`. */
+  uploadAvatar: async (lang: Lang, file: File) => {
+    const key = await uploadToStorage(file, "avatar", (body) =>
+      request<{ put_url: string; key: string; max_bytes: number }>("/uploads/sign/avatar", {
+        lang,
+        method: "POST",
+        body: JSON.stringify(body),
+      }),
+    );
     return request<{ avatar_url: string | null }>("/auth/me/avatar", {
       lang,
       method: "POST",
-      body,
+      body: JSON.stringify({ key }),
     });
   },
 

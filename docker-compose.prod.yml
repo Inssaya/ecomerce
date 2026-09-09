@@ -65,6 +65,9 @@ services:
         MEDIA_HOSTNAMES: ${MEDIA_HOSTNAMES}
         NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
         NEXT_PUBLIC_WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+        # Where `/media/*` is proxied to. Baked in by `rewrites()` during the
+        # build, so setting it only as runtime environment does nothing.
+        MEDIA_ORIGIN: ${MEDIA_ORIGIN:-http://minio:9000/media}
         # Inlined at build time — a production image built without these has a
         # sign-in page that cannot reach Supabase at all.
         NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}

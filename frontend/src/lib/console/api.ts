@@ -1,5 +1,7 @@
 /** One function per owner-only endpoint the console calls. */
-import { call, callUpload } from "./auth";
+import { uploadToStorage } from "@/lib/upload";
+
+import { call } from "./auth";
 import type {
   AdminCategory,
   AdminOrder,
@@ -48,6 +50,14 @@ function query(range: Range, scope: Scope = {}): string {
   if (scope.categoryId) parts.push(`category_id=${scope.categoryId}`);
   if (scope.productId) parts.push(`product_id=${scope.productId}`);
   return parts.join("&");
+}
+
+/** The owner's side of the signature request. */
+function signUpload(body: { purpose: string; content_type: string }) {
+  return call<{ put_url: string; key: string; max_bytes: number }>("/uploads/sign", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
 export const api = {
@@ -185,22 +195,25 @@ export const api = {
   /** No control in the category edit popup sets `icon_url` yet — the
    *  storefront's category rail reads it, but nothing in the console writes
    *  it. Ready for a file input on AddPopup's edit form. */
-  uploadCategoryIcon: (categoryId: string, file: File) => {
-    const body = new FormData();
-    body.append("file", file);
-    return callUpload<AdminCategory>(`/admin/categories/${categoryId}/icon`, body);
+  uploadCategoryIcon: async (categoryId: string, file: File) => {
+    const key = await uploadToStorage(file, "category", signUpload);
+    return call<AdminCategory>(`/admin/categories/${categoryId}/icon`, {
+      method: "POST",
+      body: JSON.stringify({ key }),
+    });
   },
   removeCategoryIcon: (categoryId: string) =>
     call<AdminCategory>(`/admin/categories/${categoryId}/icon`, { method: "DELETE" }),
 
-  addPhoto: (productId: string, file: File, alt?: { alt_en?: string; alt_ar?: string }) => {
-    const body = new FormData();
-    body.append("file", file);
-    const query = new URLSearchParams();
-    if (alt?.alt_en) query.set("alt_en", alt.alt_en);
-    if (alt?.alt_ar) query.set("alt_ar", alt.alt_ar);
-    const suffix = query.toString();
-    return callUpload<ProductMedia>(`/admin/products/${productId}/media${suffix ? `?${suffix}` : ""}`, body);
+  /** The photograph goes to storage; only its name comes through the shop.
+   *  Alt text rides along, because asking for a second request to set it is
+   *  how every photograph in the catalogue ended up without any. */
+  addPhoto: async (productId: string, file: File, alt?: { alt_en?: string; alt_ar?: string }) => {
+    const key = await uploadToStorage(file, "product", signUpload);
+    return call<ProductMedia>(`/admin/products/${productId}/media`, {
+      method: "POST",
+      body: JSON.stringify({ key, alt_en: alt?.alt_en ?? "", alt_ar: alt?.alt_ar ?? "" }),
+    });
   },
   updatePhoto: (mediaId: string, body: { alt_en?: string; alt_ar?: string; is_process_footage?: boolean }) =>
     call<ProductMedia>(`/admin/media/${mediaId}`, { method: "PATCH", body: JSON.stringify(body) }),

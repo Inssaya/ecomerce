@@ -10,6 +10,7 @@ import io
 import json
 import logging
 import uuid
+from datetime import timedelta
 
 from minio import Minio
 from minio.error import S3Error
@@ -202,3 +203,111 @@ async def delete_object(url: str) -> None:
         await asyncio.to_thread(_remove)
     except S3Error as exc:
         logger.warning("Could not remove %s from storage: %s", object_name, exc)
+
+# ── Uploading straight to storage ────────────────────────────────────────────
+#
+# The shop used to take every photograph through the API: the browser posted
+# the file, the process held all twelve megabytes of it in memory, sniffed the
+# first bytes, and wrote it on to storage. That works on a server we run and
+# is impossible on a serverless host, where the request body is capped well
+# below what a product photograph weighs.
+#
+# So the bytes go straight from the browser to the bucket, and the API only
+# ever handles a name. What must not be lost in the move is the *reason* the
+# API held the bytes at all — it was the thing deciding whether an upload was
+# really an image, rather than an SVG carrying script or an HTML page with an
+# image's extension, which the bucket would then serve from our own domain.
+#
+# `verify_uploaded` keeps exactly that guarantee, for the cost of reading the
+# first sixteen bytes back. A ranged GET does not download the file.
+
+
+def _extension_for(content_type: str) -> str:
+    return {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[content_type]
+
+
+def new_object_key(prefix: str, content_type: str) -> str:
+    """The name a file will have. The client never chooses it.
+
+    A client-supplied name is a path traversal and an overwrite of somebody
+    else's photograph waiting to happen; a uuid is neither.
+    """
+    return f"{prefix}/{uuid.uuid4()}.{_extension_for(content_type)}"
+
+
+async def presigned_put(key: str, *, expires_seconds: int = 600) -> str:
+    """A URL that may be used once, briefly, to write exactly this one object.
+
+    Ten minutes is long enough for a slow phone on Moroccan mobile data and
+    short enough that a leaked link is not a standing write permission. It
+    grants writing that key and nothing else — not reading, not listing, not
+    any other name.
+    """
+
+    def _sign() -> str:
+        return _get_client().presigned_put_object(
+            settings.media_bucket, key, expires=timedelta(seconds=expires_seconds)
+        )
+
+    return await asyncio.to_thread(_sign)
+
+
+class UploadRejected(Exception):
+    """The file that arrived is not one we will serve."""
+
+
+async def verify_uploaded(key: str, *, max_bytes: int) -> str:
+    """Check what actually landed, and remove it if it is wrong.
+
+    Returns the real content type. Raises `UploadRejected` — having deleted
+    the object — when the upload is missing, too big, or not an image.
+
+    The size is checked here rather than trusted from the browser because the
+    presigned URL does not enforce one: whoever holds it can write a gigabyte
+    if we do not look afterwards.
+    """
+
+    def _check() -> str:
+        client = _get_client()
+        try:
+            info = client.stat_object(settings.media_bucket, key)
+        except S3Error as exc:
+            raise UploadRejected("That upload did not arrive") from exc
+
+        if (info.size or 0) == 0:
+            _remove_quietly(key)
+            raise UploadRejected("That file is empty")
+        if (info.size or 0) > max_bytes:
+            _remove_quietly(key)
+            raise UploadRejected(f"That file is larger than {max_bytes // (1024 * 1024)} MB")
+
+        response = None
+        try:
+            response = client.get_object(settings.media_bucket, key, offset=0, length=16)
+            head = response.read()
+        except S3Error as exc:
+            raise UploadRejected("That upload could not be read back") from exc
+        finally:
+            if response is not None:
+                response.close()
+                response.release_conn()
+
+        content_type = sniff_image(head)
+        if content_type is None:
+            _remove_quietly(key)
+            raise UploadRejected("Photos must be JPEG, PNG or WebP")
+        return content_type
+
+    return await asyncio.to_thread(_check)
+
+
+def _remove_quietly(key: str) -> None:
+    try:
+        _get_client().remove_object(settings.media_bucket, key)
+    except S3Error as exc:
+        logger.warning("Could not remove rejected upload %s: %s", key, exc)
+
+
+def public_url(key: str) -> str:
+    """The path the browser loads this object from — see `upload_image`."""
+    return f"/{MEDIA_URL_PREFIX}/{key}"

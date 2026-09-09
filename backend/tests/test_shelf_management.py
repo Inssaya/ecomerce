@@ -13,6 +13,8 @@ is most of what keeps the storefront honest.
 from __future__ import annotations
 
 from httpx import AsyncClient
+
+from tests.conftest import upload_photo
 from sqlalchemy import select
 
 from app.models import Product
@@ -89,10 +91,13 @@ async def test_a_file_that_is_not_an_image_is_refused_whatever_it_claims(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
     draft = await create_draft(client, owner_headers)
+    key = await upload_photo(
+        client, b"<svg onload=alert(1)></svg>", purpose="product", headers=owner_headers
+    )
     response = await client.post(
         f"/api/admin/products/{draft['id']}/media",
         headers=owner_headers,
-        files={"file": ("piece.png", b"<svg onload=alert(1)></svg>", "image/png")},
+        json={"key": key},
     )
     assert response.status_code == 415
 
@@ -288,10 +293,11 @@ async def test_a_categorys_icon_can_be_uploaded_and_removed(
         "89504e470d0a1a0a0000000d4948445200000001000000010802000000907753"
         "de0000000c4944415478da6360000002000155037e02000000004945" "4e44ae426082"
     )
+    key = await upload_photo(client, png, purpose="category", headers=owner_headers)
     uploaded = await client.post(
         f"/api/admin/categories/{category['id']}/icon",
         headers=owner_headers,
-        files={"file": ("icon.png", png, "image/png")},
+        json={"key": key},
     )
     assert uploaded.status_code == 200, uploaded.text
     assert uploaded.json()["icon_url"]
@@ -325,5 +331,11 @@ async def test_none_of_this_is_reachable_without_the_owner(client: AsyncClient) 
     assert (await client.delete("/api/admin/products/x")).status_code == 401
     assert (await client.post("/api/admin/categories", json={})).status_code == 401
     assert (
-        await client.post("/api/admin/products/x/media", files={"file": ("a.png", PHOTO, "image/png")})
+        await client.post("/api/admin/products/x/media", json={"key": "products/a.png"})
+    ).status_code == 401
+    # Signing is owner-only too, which is the door in front of that one.
+    assert (
+        await client.post(
+            "/api/uploads/sign", json={"purpose": "product", "content_type": "image/png"}
+        )
     ).status_code == 401

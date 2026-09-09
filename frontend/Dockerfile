@@ -34,6 +34,11 @@ ARG NEXT_PUBLIC_WHATSAPP_NUMBER
 # runtime environment does nothing — Next substitutes them into the bundle
 # during `next build`, and without the ARG the client falls back to a
 # placeholder URL and every sign-in fails with a refused connection.
+# `rewrites()` runs during `next build` and its result is written into the
+# route manifest, so this is a build input, not a runtime one. Set only as
+# runtime environment it is silently ignored and every photograph 404s
+# against whatever the default was.
+ARG MEDIA_ORIGIN
 ARG NEXT_PUBLIC_SUPABASE_URL
 ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -42,6 +47,7 @@ ENV INTERNAL_API_URL=$INTERNAL_API_URL \
     MEDIA_HOSTNAMES=$MEDIA_HOSTNAMES \
     NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \
     NEXT_PUBLIC_WHATSAPP_NUMBER=$NEXT_PUBLIC_WHATSAPP_NUMBER \
+    MEDIA_ORIGIN=$MEDIA_ORIGIN \
     NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
     NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_TELEMETRY_DISABLED=1 \

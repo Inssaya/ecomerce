@@ -78,13 +78,21 @@ services:
       REDIS_URL: redis://redis:6379/0
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
-      MINIO_ENDPOINT: minio:9000
-      # Photographs are addressed on the storefront's own origin and proxied to
-      # MinIO from there — a bare localhost:9000 is reachable from a browser but
-      # not from the server rendering the page, which broke every image.
-      MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:-localhost:3000}
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
+      # Storage. Defaults to the MinIO container beside it, but every value is
+      # overridable so a developer can point at the real bucket instead — and
+      # for uploads that is no longer optional.
+      #
+      # The browser now writes photographs straight to storage using a
+      # presigned URL, and that URL contains whatever endpoint signed it.
+      # `minio:9000` is a name that only resolves inside this compose network,
+      # so a signature made against it is unusable by the one party that has to
+      # use it. Set `MINIO_ENDPOINT` to the R2 host to develop against the same
+      # storage production uses; leave it for a stack with no uploads.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER}}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD}}
+      MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      MEDIA_BUCKET: ${MEDIA_BUCKET:-media}
       SMTP_HOST: ${SMTP_HOST:-mailpit}
       SMTP_PORT: ${SMTP_PORT:-1025}
       SMTP_FROM: ${SMTP_FROM:-workshop@mostyle.ma}
@@ -129,6 +137,7 @@ services:
         # The browser talks to Supabase directly for sign-in, so these are
         # baked in like every other NEXT_PUBLIC_*. The anon key is meant to be
         # public — it identifies the project and grants nothing on its own.
+        MEDIA_ORIGIN: ${MEDIA_ORIGIN:-http://minio:9000/media}
         NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
         NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     restart: unless-stopped
@@ -139,6 +148,9 @@ services:
       NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
       NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      # Where `/media/*` is proxied to. Defaults to the MinIO container; set it
+      # to the bucket's public URL when developing against real storage.
+      MEDIA_ORIGIN: ${MEDIA_ORIGIN:-http://minio:9000/media}
       NODE_ENV: production
     depends_on:
       - api

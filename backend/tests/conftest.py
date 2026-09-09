@@ -71,22 +71,100 @@ def mailbox(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, str]]:
     """
     sent: list[dict[str, str]] = []
 
-    async def fake_upload(data: bytes, content_type: str, *, prefix: str) -> str:
-        return f"http://storage.test/{prefix}/photo.jpg"
-
-    async def fake_delete(url: str) -> None:
-        return None
-
     async def fake_send(to: str, subject: str, html: str) -> bool:
         sent.append({"to": to, "subject": subject, "html": html})
         return True
 
-    monkeypatch.setattr(storage, "upload_image", fake_upload)
-    monkeypatch.setattr(storage, "delete_object", fake_delete)
-    monkeypatch.setattr("app.modules.catalog.routes.upload_image", fake_upload)
-    monkeypatch.setattr("app.modules.catalog.routes.delete_object", fake_delete)
     monkeypatch.setattr(email_module, "send_email", fake_send)
     return sent
+
+
+#: Storage, as a dictionary.
+#:
+#: Photographs no longer travel through the API — the browser writes them
+#: straight to the bucket and hands back a name — so a test that wants to
+#: upload has to stand in for the bucket as well as for the browser. This is
+#: that bucket, cleared between tests.
+FAKE_OBJECTS: dict[str, bytes] = {}
+
+
+@pytest.fixture(autouse=True)
+def fake_storage(monkeypatch: pytest.MonkeyPatch) -> dict[str, bytes]:
+    """A stand-in bucket that still checks what it was handed.
+
+    Deliberately not a stub that says yes. The reason the API reads an
+    upload's first bytes is that the declared content type is a string the
+    client chose — an SVG carrying script can call itself `image/jpeg`, and
+    serving it back from our own domain is the attack. `verify_uploaded` is
+    what enforces that, and there are tests that exist purely to prove it
+    does, so the fake sniffs the real bytes with the real sniffer and applies
+    the real ceiling. Only the network is fake.
+    """
+    FAKE_OBJECTS.clear()
+
+    async def fake_presigned_put(key: str, *, expires_seconds: int = 600) -> str:
+        return f"https://storage.test/{key}"
+
+    async def fake_verify(key: str, *, max_bytes: int) -> str:
+        data = FAKE_OBJECTS.get(key)
+        if data is None:
+            raise storage.UploadRejected("That upload did not arrive")
+        if not data:
+            raise storage.UploadRejected("That file is empty")
+        if len(data) > max_bytes:
+            FAKE_OBJECTS.pop(key, None)
+            raise storage.UploadRejected(f"That file is larger than {max_bytes // (1024 * 1024)} MB")
+        content_type = storage.sniff_image(data)
+        if content_type is None:
+            FAKE_OBJECTS.pop(key, None)
+            raise storage.UploadRejected("Photos must be JPEG, PNG or WebP")
+        return content_type
+
+    async def fake_delete(url: str) -> None:
+        FAKE_OBJECTS.pop(url.removeprefix("/media/"), None)
+
+    monkeypatch.setattr(storage, "presigned_put", fake_presigned_put)
+    monkeypatch.setattr(storage, "verify_uploaded", fake_verify)
+    monkeypatch.setattr(storage, "delete_object", fake_delete)
+    # These modules imported the names directly, so patching the module they
+    # came from would leave the already-bound references pointing at the real
+    # ones — the same trap the Supabase stub above documents.
+    for target in (
+        "app.modules.catalog.routes",
+        "app.modules.requests.routes",
+        "app.modules.auth.routes",
+    ):
+        monkeypatch.setattr(f"{target}.verify_uploaded", fake_verify, raising=False)
+        monkeypatch.setattr(f"{target}.delete_object", fake_delete, raising=False)
+    return FAKE_OBJECTS
+
+
+async def upload_photo(
+    client: AsyncClient,
+    data: bytes,
+    *,
+    purpose: str,
+    headers: dict[str, str] | None = None,
+) -> str:
+    """Do what the browser does: ask for a URL, write the bytes, keep the name.
+
+    Returns the storage key, which is what the claim endpoints take.
+    """
+    path = {
+        "product": "/api/uploads/sign",
+        "category": "/api/uploads/sign",
+        "avatar": "/api/uploads/sign/avatar",
+        "reference": "/api/uploads/sign/reference",
+    }[purpose]
+    signed = await client.post(
+        path,
+        headers=headers or {},
+        json={"purpose": purpose, "content_type": "image/png"},
+    )
+    assert signed.status_code == 200, signed.text
+    key = signed.json()["key"]
+    FAKE_OBJECTS[key] = data  # the PUT the browser would have made
+    return key
 
 
 @pytest.fixture

@@ -113,21 +113,6 @@ export async function call<T>(path: string, init: RequestInit = {}, mayRenew = t
 
 /** For endpoints that take a multipart body (photo/icon uploads) — `call()`
  *  assumes JSON, so uploads bypass it but share its token/error handling. */
-export async function callUpload<T>(path: string, body: FormData): Promise<T> {
-  const token = ownerToken();
-  if (!token) throw new NotSignedIn();
-  const response = await fetch(`/api${path}${path.includes("?") ? "&" : "?"}lang=en`, {
-    method: "POST",
-    headers: { authorization: `Bearer ${token}` },
-    body,
-  });
-  if (response.status === 401 || response.status === 403) {
-    forgetSession();
-    throw new NotSignedIn();
-  }
-  if (!response.ok) throw new Error(await problemFrom(response));
-  return response.json() as Promise<T>;
-}
 
 /** The local clear happens first and unconditionally, so this browser is
  *  signed out even with no network; Supabase then revokes the session on its

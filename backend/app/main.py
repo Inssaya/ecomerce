@@ -31,6 +31,7 @@ from app.modules.local.routes import router as local_router
 from app.modules.local.seed import seed as seed_local
 from app.modules.orders.routes import router as orders_router
 from app.modules.requests.routes import router as requests_router
+from app.modules.uploads.routes import router as uploads_router
 from app.modules.security import service as security_service
 from app.modules.security.routes import router as security_router
 from app.modules.settings.routes import router as settings_router
@@ -160,6 +161,7 @@ api.include_router(catalog_router)
 api.include_router(contact_router)
 api.include_router(orders_router)
 api.include_router(requests_router)
+api.include_router(uploads_router)
 api.include_router(feed_router)
 api.include_router(local_router)
 api.include_router(admin_router)

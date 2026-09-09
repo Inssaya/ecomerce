@@ -4,15 +4,21 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, UploadFile, status
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
 from app.core.limits import SignalLimit
 from app.core.slug import unique_slug
-from app.core.storage import MAX_IMAGE_BYTES, delete_object, sniff_image, upload_image
+from app.core.storage import (
+    MAX_IMAGE_BYTES,
+    UploadRejected,
+    delete_object,
+    public_url,
+    verify_uploaded,
+)
 from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import (
     AttributeGroup,
@@ -47,6 +53,27 @@ from app.modules.catalog.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+#: A category mark is drawn at 24px on the rail. The 12 MB ceiling a product
+#: photograph gets would be a licence to store a print master to draw a
+#: thumbnail from.
+MAX_ICON_BYTES = 4 * 1024 * 1024
+
+
+class MediaClaim(BaseModel):
+    """A photograph the browser has already written to storage.
+
+    The bytes never come through here — see `modules/uploads` — so what
+    arrives is a name. The alt text rides along because it is written at the
+    same moment, and asking for a second request to set it is how every
+    photograph in the shop ended up with none.
+    """
+
+    key: str = Field(min_length=1, max_length=300)
+    alt_en: str = ""
+    alt_ar: str = ""
+    is_process_footage: bool = False
+
 
 router = APIRouter(tags=["catalog"])
 
@@ -116,23 +143,21 @@ async def delete_category(category_id: str, db: DbSession, owner: Owner) -> None
 
 
 @router.post("/admin/categories/{category_id}/icon", response_model=CategoryAdmin)
-async def upload_category_icon(
-    category_id: str, file: UploadFile, db: DbSession, owner: Owner
+async def claim_category_icon(
+    category_id: str, body: MediaClaim, db: DbSession, owner: Owner
 ) -> Category:
     """The mark shown on the desktop rail. Same storage pipeline as a product
     photo — an admin never has to pick from a bundled icon set."""
     category = await get_or_404(db, Category, category_id, detail="Category not found")
-    data = await file.read()
-    if not data:
-        raise bad_request("That file is empty")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="That icon is larger than 12 MB")
-    content_type = sniff_image(data)
-    if content_type is None:
-        raise HTTPException(status_code=415, detail="Icons must be JPEG, PNG or WebP")
+    if not body.key.startswith("categories/"):
+        raise bad_request("That upload is not a category icon")
+    try:
+        await verify_uploaded(body.key, max_bytes=MAX_ICON_BYTES)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
 
     old_icon = category.icon_url
-    category.icon_url = await upload_image(data, content_type, prefix=f"categories/{category_id}")
+    category.icon_url = public_url(body.key)
     await db.commit()
     await db.refresh(category)
     if old_icon:
@@ -623,35 +648,31 @@ async def read_interactions(
 )
 async def upload_product_photo(
     product_id: str,
-    file: UploadFile,
+    body: MediaClaim,
     db: DbSession,
     owner: Owner,
-    alt_en: str = "",
-    alt_ar: str = "",
-    is_process_footage: bool = False,
 ) -> MediaResponse:
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=(selectinload(Product.media),)
     )
-    # Read first, then decide what it is from its own bytes. The declared
-    # Content-Type is whatever the client typed and is never used.
-    data = await file.read()
-    if not data:
-        raise bad_request("That file is empty")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=413, detail="That photo is larger than 12 MB")
+    if not body.key.startswith("products/"):
+        raise bad_request("That upload is not a product photograph")
+    # The browser wrote the bytes; this is where the shop decides whether it
+    # will serve them. The declared content type was always the client's own
+    # word for it and is still never trusted — what counts is the first bytes,
+    # read back out of storage.
+    try:
+        await verify_uploaded(body.key, max_bytes=MAX_IMAGE_BYTES)
+    except UploadRejected as exc:
+        raise HTTPException(status_code=415, detail=str(exc)) from exc
 
-    content_type = sniff_image(data)
-    if content_type is None:
-        raise HTTPException(status_code=415, detail="Photos must be JPEG, PNG or WebP")
-
-    url = await upload_image(data, content_type, prefix=f"products/{product_id}")
+    url = public_url(body.key)
     media = ProductMedia(
         product_id=product_id,
         url=url,
-        alt_en=alt_en,
-        alt_ar=alt_ar,
-        is_process_footage=is_process_footage,
+        alt_en=body.alt_en,
+        alt_ar=body.alt_ar,
+        is_process_footage=body.is_process_footage,
         is_primary=not product.media,
         sort_order=len(product.media),
     )
