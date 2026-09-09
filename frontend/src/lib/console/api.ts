@@ -113,6 +113,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ price, note_en: note, note_ar: note }),
     }),
+  /** Record that the customer said yes on the phone. This is what creates the
+   *  order — `moveRequest` only moves the status, so approving through it
+   *  would leave a request agreed with no order behind it. */
+  approveRequest: (reference: string, address: { line1: string; city: string }) =>
+    call<AdminRequest>(`/admin/requests/${reference}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ address }),
+    }),
   moveRequest: (reference: string, status: string, note?: string) =>
     call<AdminRequest>(`/admin/requests/${reference}/status`, {
       method: "POST",

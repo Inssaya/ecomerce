@@ -8,9 +8,13 @@
  * reference photos, then the quote form. Pricing a bespoke job blind — which
  * is what happened before the photos were actually wired up — is guessing.
  *
- * Note what is *not* here: an Approve button. Approval is the customer
- * accepting the quote — the server records it with `actor="customer"` — so
- * offering it to the owner would be inventing a move that is not theirs.
+ * Approving a quote lives here, and deliberately nowhere else. It used to be
+ * a button on the customer's tracking page, reachable unauthenticated by
+ * anyone holding the link, which turned a quote into committed work without
+ * the phone call that confirms what is actually being made. It is recorded
+ * here instead, by the person who made that call — and it has to be this
+ * endpoint rather than the generic status move, because approval is what
+ * writes the `Order`.
  */
 import { useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -24,6 +28,7 @@ import {
   Age,
   Button,
   Card,
+  CardHead,
   ConsoleHeader,
   DataTable,
   DateRangeFilter,
@@ -304,6 +309,54 @@ function CommissionPopup({
       }
     >
       {problem ? <p className="console-error">{problem}</p> : null}
+
+      {/* Agreeing a quote happens on the phone, so it is recorded here rather
+          than by the customer from a link. The address is asked for at this
+          point because it is what the call just established, and because the
+          order cannot be created without one. */}
+      {request.status === "quoted" ? (
+        <Card>
+          <CardHead
+            title="They said yes"
+            sub="Call them, agree the price, then take the address down here. This is what creates the order."
+          />
+          <form
+            className="console-stack-sm"
+            onSubmit={(event) => {
+              event.preventDefault();
+              const form = new FormData(event.currentTarget);
+              const line1 = String(form.get("line1") ?? "").trim();
+              const city = String(form.get("city") ?? "").trim();
+              if (!line1 || !city) return;
+              confirm({
+                title: `Agree ${request.reference}?`,
+                body: (
+                  <>
+                    This creates the order for {request.customer_name} and tells them it is agreed.
+                    Confirm the price with them on the phone first.
+                  </>
+                ),
+                confirmLabel: "They agreed",
+                onConfirm: () =>
+                  mutate(() => api.approveRequest(request.reference, { line1, city }), {
+                    invalidates: ["commissionMoved"],
+                    onDone: onChanged,
+                  }),
+              });
+            }}
+          >
+            <Field label="City">
+              <input name="city" required defaultValue={request.city ?? ""} />
+            </Field>
+            <Field label="Address">
+              <input name="line1" required />
+            </Field>
+            <Button type="submit" variant="primary" disabled={busy}>
+              They agreed
+            </Button>
+          </form>
+        </Card>
+      ) : null}
 
       {/* Contact channels, as the key/value list. */}
       <section className="console-detail-list">

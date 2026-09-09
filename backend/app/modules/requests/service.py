@@ -91,7 +91,12 @@ async def quote(db: AsyncSession, request: CustomRequest, body: Quote) -> Custom
 async def approve(
     db: AsyncSession, request: CustomRequest, *, address: dict, city: str
 ) -> CustomRequest:
-    """The customer says yes. Only now does an order exist.
+    """The owner records that the customer said yes. Only now does an order exist.
+
+    The agreement itself happens on the phone; this is the workshop writing it
+    down, which is why both events are recorded with `actor="workshop"` — the
+    column exists to say who actually performed the move, and the customer did
+    not touch the system to make it happen.
 
     The order is a made-to-order line with no product behind it — there is no
     catalogue entry for a thing that was described in a sentence — so it
@@ -133,7 +138,7 @@ async def approve(
                 subtotal=price,
             )
         ],
-        events=[OrderEvent(status=OrderStatus.placed, actor="customer")],
+        events=[OrderEvent(status=OrderStatus.placed, actor="workshop")],
     )
     db.add(order)
     await db.flush()
@@ -141,7 +146,7 @@ async def approve(
     request.order_id = order.id
     request.status = RequestStatus.approved
     db.add(
-        RequestEvent(request_id=request.id, status=RequestStatus.approved, actor="customer")
+        RequestEvent(request_id=request.id, status=RequestStatus.approved, actor="workshop")
     )
     await db.commit()
     await db.refresh(request)

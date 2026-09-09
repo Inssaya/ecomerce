@@ -2,14 +2,22 @@
 
 import { use, useEffect, useState } from "react";
 
-import { api, ApiError, type RequestView } from "@/lib/api";
+import { api, type RequestView } from "@/lib/api";
 import { type Lang, isLang, money, statusLabel, translator } from "@/lib/i18n";
 
 /**
- * Following a custom request, and saying yes to a quote.
+ * Following a custom request.
  *
- * The address is asked for here rather than when the request was made: nobody
- * should have to type their address to find out a price.
+ * There is deliberately no Approve button. A custom piece is agreed on the
+ * phone — the details confirmed, the price confirmed — and the owner records
+ * the agreement from the console, which is what creates the order. A button
+ * that turned a quote into committed work from a link alone would skip the
+ * one conversation that stops a misunderstanding becoming a made object
+ * nobody wants, and it was reachable by anyone holding the URL.
+ *
+ * Declining stays, because saying no needs no phone call and waiting on one
+ * to refuse a price is the kind of friction that turns a polite no into an
+ * ignored message.
  */
 export default function RequestPage({
   params,
@@ -31,24 +39,6 @@ export default function RequestPage({
 
   if (missing) return <p className="page pt-20 text-center text-ink-soft">{t("notFound")}</p>;
   if (!request) return <div className="page pt-10" aria-hidden />;
-
-  async function approve(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setDeciding(true);
-    setProblem(null);
-    const form = new FormData(event.currentTarget);
-    try {
-      setRequest(
-        await api.approveQuote(lang, token, {
-          address: { line1: form.get("line1"), city: form.get("city") },
-        }),
-      );
-    } catch (error) {
-      setProblem(error instanceof ApiError ? error.message : t("somethingWentWrong"));
-    } finally {
-      setDeciding(false);
-    }
-  }
 
   async function decline() {
     setDeciding(true);
@@ -87,24 +77,9 @@ export default function RequestPage({
       ) : null}
 
       {request.status === "quoted" ? (
-        <form onSubmit={approve} className="mt-5 space-y-4">
-          <div>
-            <label className="label" htmlFor="city">
-              {t("yourCity")}
-            </label>
-            <input id="city" name="city" required autoComplete="address-level2" className="field" />
-          </div>
-          <div>
-            <label className="label" htmlFor="line1">
-              {t("yourAddress")}
-            </label>
-            <input
-              id="line1"
-              name="line1"
-              required
-              autoComplete="street-address"
-              className="field"
-            />
+        <div className="mt-5 space-y-4">
+          <div className="card p-5 shadow-soft">
+            <p className="text-[15px] leading-relaxed">{t("weWillCallYou")}</p>
           </div>
 
           {problem ? (
@@ -113,9 +88,6 @@ export default function RequestPage({
             </p>
           ) : null}
 
-          <button type="submit" disabled={deciding} className="btn-primary w-full">
-            {t("approveQuote")}
-          </button>
           <button
             type="button"
             onClick={decline}
@@ -125,7 +97,7 @@ export default function RequestPage({
             {t("declineQuote")}
           </button>
           <p className="text-center text-[13px] text-ink-soft">{t("payAtDoor")}</p>
-        </form>
+        </div>
       ) : null}
 
       {request.order_reference ? (

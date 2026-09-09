@@ -215,6 +215,13 @@ const copy = {
   nothingOwed: ["Nothing is owed until you agree a price.", "لا شيء عليك حتى تتّفق على الثمن."],
   theQuote: ["The price", "الثمن"],
   approveQuote: ["Yes, make it", "نعم، اصنعها"],
+  // No Approve button: a custom piece is agreed on the phone, and the owner
+  // records that agreement from the console. This says so, so that a quote
+  // with no button does not read as a page that is broken or still loading.
+  weWillCallYou: [
+    "We call you to go through the details and agree the price. Nothing is made, and nothing is owed, until we have spoken.",
+    "سنتصل بك لمراجعة التفاصيل والاتفاق على السعر. لا يُصنع شيء ولا تدفع شيئاً قبل أن نتحدّث.",
+  ],
   declineQuote: ["Not this time", "ليس هذه المرة"],
 
   talkToAPerson: ["Talk to a person", "تحدّث إلى شخص"],

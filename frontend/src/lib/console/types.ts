@@ -242,9 +242,10 @@ export const NEXT_ORDER_STATUSES: Record<string, string[]> = {
 /**
  * Mirrors `REQUEST_TRANSITIONS`, minus the one move that is not the owner's.
  *
- * `approved` is set by the **customer** accepting the quote, so it is never a
- * button here. And `declined` is only reachable from `requested` — once a
- * price has been sent the way out is `withdrawn`, not decline.
+ * `approved` is missing on purpose: it is not a plain status move. Approving
+ * writes the order too, so it goes through `api.approveRequest` and its own
+ * form, not this map. And `declined` is only reachable from `requested` —
+ * once a price has been sent the way out is `withdrawn`, not decline.
  */
 export const NEXT_REQUEST_STATUSES: Record<string, string[]> = {
   requested: ["quoted", "declined", "withdrawn"],

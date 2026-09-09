@@ -308,7 +308,6 @@ function FilterChip({
 }
 
 function Tile({ piece, lang, index }: { piece: Piece; lang: Lang; index: number }) {
-  const t = translator(lang);
   const ref = useRef<HTMLAnchorElement>(null);
   const [shown, setShown] = useState(false);
 

@@ -79,7 +79,7 @@ async def test_a_quote_carries_a_price(
     assert "promised_for" not in body
 
 
-async def test_nothing_is_owed_until_the_customer_approves(
+async def test_nothing_is_owed_until_the_quote_is_agreed(
     client: AsyncClient, owner_headers: dict[str, str], db_session
 ) -> None:
     """A quote is not an order. This is the whole rule."""
@@ -96,7 +96,8 @@ async def test_nothing_is_owed_until_the_customer_approves(
     assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
 
     approved = await client.post(
-        f"/api/requests/track/{request['tracking_token']}/approve",
+        f"/api/admin/requests/{request['reference']}/approve",
+        headers=owner_headers,
         json={"address": ADDRESS},
     )
     assert approved.status_code == 200, approved.text
@@ -126,7 +127,9 @@ async def test_the_order_raised_on_approval_charges_the_quoted_price(
         json={"price": 260, "lead_time_days": 6},
     )
     await client.post(
-        f"/api/requests/track/{request['tracking_token']}/approve", json={"address": ADDRESS}
+        f"/api/admin/requests/{request['reference']}/approve",
+        headers=owner_headers,
+        json={"address": ADDRESS},
     )
 
     order = await client.get(
@@ -149,10 +152,14 @@ async def test_the_order_raised_on_approval_charges_the_quoted_price(
     assert line["title"].startswith("A bracket to hold a shelf")
 
 
-async def test_approving_something_never_quoted_is_refused(client: AsyncClient) -> None:
+async def test_approving_something_never_quoted_is_refused(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
     request = await ask(client)
     response = await client.post(
-        f"/api/requests/track/{request['tracking_token']}/approve", json={"address": ADDRESS}
+        f"/api/admin/requests/{request['reference']}/approve",
+        headers=owner_headers,
+        json={"address": ADDRESS},
     )
     assert response.status_code == 409
 
@@ -173,7 +180,9 @@ async def test_the_price_cannot_move_after_the_handshake(
     ).status_code == 200
 
     await client.post(
-        f"/api/requests/track/{request['tracking_token']}/approve", json={"address": ADDRESS}
+        f"/api/admin/requests/{request['reference']}/approve",
+        headers=owner_headers,
+        json={"address": ADDRESS},
     )
     after = await client.post(
         quote_url, headers=owner_headers, json={"price": 900, "lead_time_days": 2}
@@ -199,7 +208,9 @@ async def test_the_full_lifecycle_and_its_illegal_shortcuts(
         json={"price": 260, "lead_time_days": 6},
     )
     await client.post(
-        f"/api/requests/track/{request['tracking_token']}/approve", json={"address": ADDRESS}
+        f"/api/admin/requests/{request['reference']}/approve",
+        headers=owner_headers,
+        json={"address": ADDRESS},
     )
     for step in ("in_production", "ready", "delivered"):
         moved = await client.post(status_url, headers=owner_headers, json={"status": step})
@@ -280,3 +291,50 @@ async def test_arabic_requests_get_arabic_quote_notes(
     assert arabic.json()["quote_note"] == "مطبوع ثم مصقول يدوياً."
     english = await client.get(f"/api/requests/track/{request['tracking_token']}?lang=en")
     assert english.json()["quote_note"] == "Printed then hand-finished."
+
+
+async def test_a_quote_cannot_be_approved_from_the_tracking_link(
+    client: AsyncClient, owner_headers: dict[str, str], db_session
+) -> None:
+    """Approval is a phone call, so the public route must not exist.
+
+    It used to: `POST /requests/track/{token}/approve` took no credential, so
+    anyone holding a tracking link could turn a quote into committed work
+    without the call that confirms what is actually being made. Deleting a
+    route is the kind of change that quietly comes back, so this asserts the
+    door is shut and that nothing was written behind it.
+    """
+    from sqlalchemy import func, select
+
+    from app.models import Order
+
+    request = await ask(client)
+    await client.post(
+        f"/api/admin/requests/{request['reference']}/quote",
+        headers=owner_headers,
+        json={"price": 260, "lead_time_days": 6},
+    )
+
+    refused = await client.post(
+        f"/api/requests/track/{request['tracking_token']}/approve",
+        json={"address": ADDRESS},
+    )
+    assert refused.status_code == 404, refused.text
+    assert await db_session.scalar(select(func.count()).select_from(Order)) == 0
+
+
+async def test_approving_a_quote_requires_being_the_owner(
+    client: AsyncClient, owner_headers: dict[str, str]
+) -> None:
+    """The new door is not simply an unlocked one at a different address."""
+    request = await ask(client)
+    await client.post(
+        f"/api/admin/requests/{request['reference']}/quote",
+        headers=owner_headers,
+        json={"price": 260, "lead_time_days": 6},
+    )
+
+    refused = await client.post(
+        f"/api/admin/requests/{request['reference']}/approve", json={"address": ADDRESS}
+    )
+    assert refused.status_code in (401, 403), refused.text

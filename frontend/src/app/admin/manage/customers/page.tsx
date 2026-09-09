@@ -63,7 +63,9 @@ export default function Customers() {
     useCallback(() => api.customers(settled || undefined), [settled]),
   );
 
-  const rows = data ?? [];
+  // `data ?? []` inline would be a new array on every render, which defeats
+  // the memo below it.
+  const rows = useMemo(() => data ?? [], [data]);
 
   // One phone, more than one person — say it rather than silently merging.
   const sharedPhones = useMemo(() => {

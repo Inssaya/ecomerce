@@ -134,24 +134,6 @@ async def track_request(tracking_token: str, db: DbSession, lang: Lang) -> Reque
     return await _out(db, request, lang)
 
 
-@router.post("/requests/track/{tracking_token}/approve", response_model=RequestOut)
-async def approve_quote(
-    tracking_token: str, body: Approval, db: DbSession, lang: Lang
-) -> RequestOut:
-    """The customer says yes to the price. Only now is anything owed."""
-    request = await get_or_404(
-        db,
-        CustomRequest,
-        tracking_token,
-        field="tracking_token",
-        detail="We can't find that request",
-    )
-    request = await service.approve(
-        db, request, address=body.address.model_dump(), city=body.address.city
-    )
-    return await _out(db, request, lang)
-
-
 @router.post("/requests/track/{tracking_token}/withdraw", response_model=RequestOut)
 async def withdraw(tracking_token: str, db: DbSession, lang: Lang) -> RequestOut:
     """Changed their mind, or the price does not work. Closed cleanly, with
@@ -213,6 +195,34 @@ async def send_quote(
         db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
     )
     request = await service.quote(db, request, body)
+    return await _out(db, request, lang)
+
+
+@router.post("/admin/requests/{reference}/approve", response_model=RequestOut)
+async def approve_quote(
+    reference: str, body: Approval, db: DbSession, owner: Owner, lang: Lang
+) -> RequestOut:
+    """The owner records that the customer said yes, and the order exists.
+
+    This used to be `POST /requests/track/{token}/approve` — unauthenticated,
+    reachable by anyone holding the tracking link. A custom piece is agreed on
+    the phone: the details get confirmed, the price gets confirmed, and only
+    then is anything owed. A button that turns a quote into a committed order
+    without that call skips the one step that stops a misunderstanding
+    becoming a made object nobody wants.
+
+    So the address is taken here, from the person who just had the call, and
+    approval moved to where the decision actually happens. It cannot live in
+    the generic status endpoint below: `change_status` only moves the enum,
+    and an approval that moved the state without writing the `Order` would
+    lose the order silently.
+    """
+    request = await get_or_404(
+        db, CustomRequest, reference.upper(), field="reference", detail="Request not found"
+    )
+    request = await service.approve(
+        db, request, address=body.address.model_dump(), city=body.address.city
+    )
     return await _out(db, request, lang)
 
 

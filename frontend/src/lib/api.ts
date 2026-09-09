@@ -353,12 +353,6 @@ export const api = {
   customRequest: (lang: Lang, token: string) =>
     request<RequestView>(`/requests/track/${token}`, { lang }),
 
-  approveQuote: (lang: Lang, token: string, body: unknown) =>
-    request<RequestView>(`/requests/track/${token}/approve`, {
-      lang,
-      method: "POST",
-      body: JSON.stringify(body),
-    }),
 
   withdrawRequest: (lang: Lang, token: string) =>
     request<RequestView>(`/requests/track/${token}/withdraw`, { lang, method: "POST" }),
