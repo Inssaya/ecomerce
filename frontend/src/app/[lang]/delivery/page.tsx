@@ -120,7 +120,7 @@ export default async function DeliveryAndReturns({
         ],
         [
           "كم يستغرق؟",
-          "يوم أو يومان في المدن الكبرى، وحتى سبعة في أقصى الجنوب. المدة الحقيقية لكل مدينة في صفحتها.",
+          "نوصّل إلى كل مدينة في المغرب، ابتداءً من 48 ساعة. نتصل بك قبل الإرسال، ونخبرك حين ينطلق الطرد.",
         ],
       ]
     : [
@@ -151,12 +151,12 @@ export default async function DeliveryAndReturns({
         ],
         [
           "How long does it take?",
-          "A day or two in the big cities, up to seven in the far south. The real window for each city is on its own page.",
+          "We deliver to every city in Morocco, from 48 hours. We call before we send, and we tell you when the parcel is on its way.",
         ],
       ];
 
   return (
-    <div className="page pt-8 pb-10">
+    <div className="page-wide pt-8 pb-10 lg:max-w-[1000px]">
       {/*
         The same answers for a machine. FAQ data is one of the few kinds Google
         still shows under a result, and "do you deliver to X, and can I refuse
@@ -192,7 +192,7 @@ export default async function DeliveryAndReturns({
           : "For anything already on the shelf, you owe nothing until the piece is in your hand."}
       </p>
 
-      <section className="mt-7 grid grid-cols-2 gap-2.5">
+      <section className="mt-7 grid grid-cols-2 gap-2.5 md:max-w-[520px]">
         <div className="card p-4 shadow-soft">
           <p className="text-[13px] text-ink-soft">{ar ? "التوصيل" : "Delivery"}</p>
           <p className="stamp mt-1 text-[22px] font-semibold tabular-nums">
@@ -217,7 +217,7 @@ export default async function DeliveryAndReturns({
         </div>
       </section>
 
-      <section className="mt-9 flex flex-col gap-6">
+      <section className="mt-9 grid gap-6 md:grid-cols-2 md:gap-x-10 lg:gap-x-14">
         {questions.map(([question, answer]) => (
           <div key={question}>
             <h2 className="text-[17px] font-semibold">{question}</h2>
@@ -229,9 +229,9 @@ export default async function DeliveryAndReturns({
       {places.length > 0 ? (
         <section className="mt-10">
           <h2 className="text-[17px] font-semibold">
-            {ar ? "المدة حسب المدينة" : "How long, by city"}
+            {ar ? "المدن التي نوصّل إليها" : "Where we deliver"}
           </h2>
-          <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[14px]">
+          <ul className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[14px] sm:grid-cols-3 lg:grid-cols-4">
             {places.slice(0, 12).map((place) => (
               <li key={place.slug} className="flex items-baseline justify-between gap-2">
                 <Link
@@ -240,10 +240,6 @@ export default async function DeliveryAndReturns({
                 >
                   {place.name}
                 </Link>
-                <span className="stamp text-[12.5px] tabular-nums text-ink-soft shrink-0">
-                  {place.delivery_days[0]}–{place.delivery_days[1]}
-                  {ar ? " ي" : "d"}
-                </span>
               </li>
             ))}
           </ul>

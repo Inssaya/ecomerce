@@ -161,10 +161,6 @@ export function CityAutocomplete({
                             }`}
               >
                 <span>{highlight(place.name, query)}</span>
-                <span className="stamp shrink-0 text-[12.5px] text-ink-soft">
-                  {place.delivery_days[0]}–{place.delivery_days[1]}
-                  {lang === "ar" ? "ي" : "d"}
-                </span>
               </button>
             </li>
           ))}

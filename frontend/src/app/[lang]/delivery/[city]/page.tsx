@@ -54,15 +54,14 @@ export async function generateMetadata({
   const place = await load(lang, city);
   if (!place) return { title: translator(lang)("notFound") };
 
-  const [low, high] = place.delivery_days;
   const title =
     lang === "ar"
       ? `التوصيل إلى ${place.name} — MoStyle`
       : `Delivery to ${place.name} — MoStyle`;
   const description =
     lang === "ar"
-      ? `نصنع ونوصّل إلى ${place.name} خلال ${low}–${high} أيام. تخلّص نقداً عند الباب، بلا دفع مسبق.`
-      : `We make and deliver to ${place.name} in ${low}–${high} days. Pay cash at the door — nothing before.`;
+      ? `نصنع ونوصّل إلى ${place.name}. تخلّص نقداً عند الباب، بلا دفع مسبق.`
+      : `We make and deliver to ${place.name}. Pay cash at the door — nothing before.`;
 
   return {
     title,
@@ -91,11 +90,10 @@ export default async function CityLanding({
   if (!place) notFound();
 
   const ar = lang === "ar";
-  const [low, high] = place.delivery_days;
   const history = place.history;
 
   return (
-    <div className="page pt-8 pb-10">
+    <div className="page-wide pt-8 pb-10 lg:max-w-[1000px]">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(citySchema(place, lang)) }}
@@ -118,13 +116,13 @@ export default async function CityLanding({
           : `We make in our own workshop and deliver to ${place.name}, ${place.region}. You pay in cash when the piece reaches you — not before.`}
       </p>
 
-      <section className="mt-7 grid grid-cols-2 gap-2.5">
+      <section className="mt-7 grid grid-cols-2 gap-2.5 md:max-w-[520px]">
         <div className="card p-4 shadow-soft">
-          <p className="text-[13px] text-ink-soft">{ar ? "المدة" : "How long"}</p>
-          <p className="stamp mt-1 text-[22px] font-semibold tabular-nums">
-            {low}–{high}
+          <p className="text-[13px] text-ink-soft">{ar ? "الدفع" : "Payment"}</p>
+          <p className="mt-1 text-[18px] font-semibold">{ar ? "نقداً" : "Cash"}</p>
+          <p className="mt-0.5 text-[12px] text-ink-soft">
+            {ar ? "عند الباب فقط" : "at the door only"}
           </p>
-          <p className="mt-0.5 text-[12px] text-ink-soft">{ar ? "أيام" : "days"}</p>
         </div>
         <div className="card p-4 shadow-soft">
           <p className="text-[13px] text-ink-soft">{ar ? "التوصيل" : "Delivery"}</p>
@@ -175,13 +173,13 @@ export default async function CityLanding({
             ? [
                 "تختار قطعة من الرف، أو تصف لنا ما تريد صنعه.",
                 "نتصل بك على رقمك لنؤكد العنوان قبل أن نرسل شيئاً.",
-                `يصل الطرد إلى ${place.name} خلال ${low}–${high} أيام.`,
+                `يصل الطرد إلى ${place.name}، ونخبرك حين ينطلق.`,
                 "تفتحه، ثم تخلّص للموصّل نقداً. إن لم يعجبك، لا تأخذه.",
               ]
             : [
                 "Pick a piece from the shelf, or describe what you want made.",
                 "We call your number to confirm the address before anything is sent.",
-                `It reaches ${place.name} in ${low}–${high} days.`,
+                `It travels to ${place.name}, and we tell you when it is on its way.`,
                 "You open it, then pay the courier in cash. If it is wrong, do not take it.",
               ]
           ).map((step, index) => (
@@ -228,7 +226,6 @@ export default async function CityLanding({
 }
 
 function citySchema(place: Place, lang: Lang) {
-  const [low, high] = place.delivery_days;
   return {
     "@context": "https://schema.org",
     "@type": "LocalBusiness",
@@ -247,17 +244,9 @@ function citySchema(place: Place, lang: Lang) {
     // The same number as the Organization on the landing page. Local search
     // rewards one business saying one number everywhere and punishes drift.
     ...(workshopPhone ? { telephone: workshopPhone } : {}),
-    // The delivery promise, in the vocabulary that can be shown under a
-    // result rather than only read by a person.
-    makesOffer: {
-      "@type": "Offer",
-      priceCurrency: "MAD",
-      deliveryLeadTime: {
-        "@type": "QuantitativeValue",
-        minValue: low,
-        maxValue: high,
-        unitCode: "DAY",
-      },
-    },
+    // No `deliveryLeadTime`. A day count here is the same promise as one in
+    // the copy, except Google may still be showing it under a result weeks
+    // after the courier stopped meeting it.
+    makesOffer: { "@type": "Offer", priceCurrency: "MAD" },
   };
 }

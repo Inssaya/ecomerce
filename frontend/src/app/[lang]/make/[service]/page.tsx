@@ -94,12 +94,13 @@ export default async function ServiceLanding({
   if (!found) notFound();
 
   const ar = lang === "ar";
-  const fastest = [...found.places].sort(
-    (a, b) => a.delivery_days[1] - b.delivery_days[1],
-  );
+  // Sorted by name, not by speed: ranking cities by a day count is the same
+  // promise as printing one, and it quietly tells a customer in the south
+  // that they are at the back of a queue.
+  const cities = [...found.places].sort((a, b) => a.name.localeCompare(b.name));
 
   return (
-    <div className="page pt-8 pb-10">
+    <div className="page-wide pt-8 pb-10 lg:max-w-[1000px]">
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: jsonLd(serviceSchema(found, lang)) }}
@@ -159,8 +160,8 @@ export default async function ServiceLanding({
             : "From the workshop to your door, anywhere in Morocco. The real window for each city:"}
         </p>
 
-        <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 text-[14px]">
-          {fastest.map((place) => (
+        <ul className="mt-4 grid grid-cols-2 gap-x-4 gap-y-2.5 text-[14px] sm:grid-cols-3 lg:grid-cols-4">
+          {cities.map((place) => (
             <li key={place.slug} className="flex items-baseline justify-between gap-2">
               <Link
                 href={`/${lang}/delivery/${place.slug}`}
@@ -168,10 +169,6 @@ export default async function ServiceLanding({
               >
                 {place.name}
               </Link>
-              <span className="stamp text-[12.5px] tabular-nums text-ink-soft shrink-0">
-                {place.delivery_days[0]}–{place.delivery_days[1]}
-                {ar ? " ي" : "d"}
-              </span>
             </li>
           ))}
         </ul>

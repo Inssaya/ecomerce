@@ -8,7 +8,7 @@ import { use, useEffect, useState } from "react";
 import { CityAutocomplete } from "@/components/CityAutocomplete";
 import { useCart } from "@/components/CartProvider";
 import { api, ApiError } from "@/lib/api";
-import { feeFor, matchCity, useDelivery } from "@/lib/delivery";
+import { feeFor, useDelivery } from "@/lib/delivery";
 import { saveProfile, useSession } from "@/lib/session";
 import { type Lang, isLang, money, pieceCount, translator } from "@/lib/i18n";
 import { track } from "@/lib/signals";
@@ -72,11 +72,6 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
   const known = Boolean(session && name.trim() && phone.trim() && city.trim() && address.trim());
   const showForm = !known || editing;
 
-  // The city decides the delivery window, so it is recomputed as it is typed.
-  // `place` is null until what they have written matches somewhere we have
-  // actually made a promise about — everywhere else is told no date, because we
-  // have not earned the right to name one.
-  const place = terms ? matchCity(terms.cities, city) : null;
   const fee = feeFor(total, terms, city);
 
   // The cart is read from storage on mount, so before that there is nothing to
@@ -330,13 +325,6 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
                     onChange={setCity}
                     required
                   />
-                  {place ? (
-                    <p className="mt-1.5 text-[13px] text-ink-soft">
-                      {ar
-                        ? `${place.name}: التوصيل خلال ${place.delivery_days[0]}–${place.delivery_days[1]} أيام.`
-                        : `${place.name}: delivered in ${place.delivery_days[0]}–${place.delivery_days[1]} days.`}
-                    </p>
-                  ) : null}
                 </div>
 
                 <div>
@@ -401,13 +389,6 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
                 <br />
                 <span className="stamp">{phone}</span>
               </p>
-              {place ? (
-                <p className="mt-2 text-[13px] text-ink-soft">
-                  {ar
-                    ? `التوصيل خلال ${place.delivery_days[0]}–${place.delivery_days[1]} أيام.`
-                    : `Delivered in ${place.delivery_days[0]}–${place.delivery_days[1]} days.`}
-                </p>
-              ) : null}
 
               {/* Still offered, because "leave it with the neighbour" is a real
                   instruction and it is per-order, not per-account. */}
