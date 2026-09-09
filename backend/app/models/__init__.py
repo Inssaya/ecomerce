@@ -43,7 +43,7 @@ from app.models.signals import (
     Signal,
     SignalType,
 )
-from app.models.user import RefreshToken, User, UserRole
+from app.models.user import User, UserRole
 
 __all__ = [
     "City",
@@ -80,7 +80,6 @@ __all__ = [
     "ProductMedia",
     "ProductStatus",
     "ProductVariant",
-    "RefreshToken",
     "SecurityEvent",
     "SecurityLevel",
     "SETTINGS_ID",

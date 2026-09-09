@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from tests.conftest import fake_token
+
 from tests.test_shop_flow import CASABLANCA, shelf_piece
 
 VISITOR = {"X-Visitor-Id": "visitor-alice"}
@@ -223,17 +225,19 @@ async def test_the_panel_survives_an_empty_shop(
 
 async def register_and_buy(client: AsyncClient, piece: dict, *, email: str) -> tuple[str, str]:
     """A customer who has an account, buying while signed in. Returns
-    (order reference, user id)."""
-    registered = await client.post(
-        "/api/auth/register",
-        json={"email": email, "password": "a-long-enough-password", "full_name": "Salma B."},
-    )
-    assert registered.status_code == 201, registered.text
-    user_id = registered.json()["user"]["id"]
-    login = await client.post(
-        "/api/auth/login", json={"email": email, "password": "a-long-enough-password"}
-    )
-    headers = {"Authorization": f"Bearer {login.json()['access_token']}"}
+    (order reference, user id).
+
+    There is no registration endpoint to call any more — Supabase creates the
+    account, and the shop's own row appears on that account's first
+    authenticated request. So the account is brought into being the same way
+    it is in production: by making that first request with a valid token.
+    """
+    user_id = f"00000000-0000-4000-8000-{abs(hash(email)) % 10**12:012d}"
+    headers = {"Authorization": f"Bearer {fake_token(user_id, email)}"}
+
+    created = await client.get("/api/auth/me", headers=headers)
+    assert created.status_code == 200, created.text
+    assert created.json()["id"] == user_id
 
     order = await client.post(
         "/api/orders",
@@ -322,8 +326,14 @@ async def test_owner_can_deactivate_a_customer_account(
     assert toggled.status_code == 200, toggled.text
     assert toggled.json()["is_active"] is False
 
-    blocked = await client.post(
-        "/api/auth/login", json={"email": "ban-me@example.com", "password": "a-long-enough-password"}
+    # Deactivating is the shop's own switch, not Supabase's: the account still
+    # exists there and can still sign in, and that is fine — what it can no
+    # longer do is anything *here*. `deps.py` refuses a row that is not active,
+    # so a perfectly valid token stops being a session.
+    user_id_for_email = f"00000000-0000-4000-8000-{abs(hash('ban-me@example.com')) % 10**12:012d}"
+    blocked = await client.get(
+        "/api/auth/me",
+        headers={"Authorization": f"Bearer {fake_token(user_id_for_email, 'ban-me@example.com')}"},
     )
     assert blocked.status_code in (401, 403)
 

@@ -7,9 +7,9 @@ pgvector==0.3.6
 pydantic==2.10.4
 pydantic-settings==2.7.0
 email-validator==2.2.0
+# Verifies the ES256 tokens Supabase issues. No signing happens here —
+# the shop holds no key that could mint a session.
 python-jose[cryptography]==3.5.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.2.1
 python-multipart==0.0.20
 aiosmtplib==3.0.2
 minio==7.2.12

@@ -98,6 +98,14 @@ async def clean_db() -> AsyncGenerator[None, None]:
     the end of every test rather than handing the next one a connection whose
     loop has closed.
     """
+    # Start from a pool this loop owns. Teardown disposes too, but a dispose
+    # that raced with asyncpg's cancellation can leave a connection bound to a
+    # loop that is now closed — and the failure then lands on *this* test's
+    # setup rather than on the one that caused it. Disposing at both ends
+    # makes each test independent of how the last one ended.
+    with suppress(Exception):
+        await engine.dispose()
+
     async with engine.begin() as connection:
         await connection.run_sync(Base.metadata.create_all)
 
@@ -132,7 +140,14 @@ async def clean_db() -> AsyncGenerator[None, None]:
         await get_redis().flushdb()
     yield
     await close_redis()
-    await engine.dispose()
+    # Disposing can race with asyncpg cancelling an in-flight command: it
+    # schedules the cancel on the loop pytest-asyncio is closing, and raises
+    # "Event loop is closed". That is a teardown problem and nothing to do
+    # with the test that just ran — but unsuppressed it surfaces as an ERROR
+    # at the *setup* of whichever test happens to come next, which sends you
+    # looking at innocent code. The pool is going away either way.
+    with suppress(Exception):
+        await engine.dispose()
 
 
 @pytest.fixture
@@ -142,22 +157,67 @@ async def client(clean_db: None) -> AsyncGenerator[AsyncClient, None]:
         yield http_client
 
 
+#: A token the tests can mint without a network call.
+#:
+#: Supabase signs real tokens with a key only Supabase holds, so a test cannot
+#: produce one — and should not try: reaching out to a hosted service to check
+#: that `/admin/orders` refuses a customer would make the suite slow, flaky and
+#: dependent on somebody else's uptime.
+#:
+#: So the *verification* is stubbed and everything downstream of it is real.
+#: `deps.py` still upserts the local row, still reads `role` from the database,
+#: and every authorization check under test is the one that runs in production.
+#: What is faked is only the signature check, which is Supabase's job to get
+#: right and not this suite's to re-prove.
+TEST_TOKEN_PREFIX = "test-token:"
+
+
+def fake_token(user_id: str, email: str) -> str:
+    return f"{TEST_TOKEN_PREFIX}{user_id}:{email}"
+
+
+@pytest.fixture(autouse=True)
+def stub_supabase(monkeypatch: pytest.MonkeyPatch) -> None:
+    from app.core.supabase_auth import AuthError
+
+    async def _verify(token: str) -> dict:
+        if not token.startswith(TEST_TOKEN_PREFIX):
+            raise AuthError("Not a test token")
+        user_id, email = token[len(TEST_TOKEN_PREFIX) :].split(":", 1)
+        return {"sub": user_id, "email": email, "user_metadata": {}}
+
+    # `deps.py` imports the name directly, so patching the module alone would
+    # leave the already-bound reference pointing at the real one.
+    monkeypatch.setattr("app.core.supabase_auth.verify", _verify)
+    monkeypatch.setattr("app.deps.verify", _verify)
+
+
+OWNER_ID = "00000000-0000-4000-8000-000000000001"
+OWNER_EMAIL = "workshop@mostyle.ma"
+
+
 @pytest.fixture
 async def owner_token(client: AsyncClient) -> str:
-    from app.cli import seed_owner
+    """The workshop's own account, promoted the way the CLI promotes it."""
+    from app.cli import make_owner
 
-    await seed_owner("workshop@mostyle.ma", "a-long-enough-password", "The Workshop")
-    response = await client.post(
-        "/api/auth/login",
-        json={"email": "workshop@mostyle.ma", "password": "a-long-enough-password"},
-    )
-    assert response.status_code == 200, response.text
-    return response.json()["access_token"]
+    assert await make_owner(OWNER_EMAIL, OWNER_ID) == 0
+    return fake_token(OWNER_ID, OWNER_EMAIL)
 
 
 @pytest.fixture
 def owner_headers(owner_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {owner_token}"}
+
+
+CUSTOMER_ID = "00000000-0000-4000-8000-000000000002"
+CUSTOMER_EMAIL = "shopper@example.com"
+
+
+@pytest.fixture
+def customer_headers() -> dict[str, str]:
+    """A signed-in shopper. The row is created on first use, as in production."""
+    return {"Authorization": f"Bearer {fake_token(CUSTOMER_ID, CUSTOMER_EMAIL)}"}
 
 
 @pytest.fixture

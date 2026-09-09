@@ -151,6 +151,7 @@ export interface RequestView {
  *  `/auth/register` and `/auth/me` all return about the user, in the shape
  *  `lib/session.ts` turns into a stored session. */
 export interface AuthProfile {
+  id?: string;
   full_name?: string | null;
   /** "owner" or "customer". The server has always sent it; nothing read it,
    *  which is why the console needed a sign-in page of its own. */
@@ -160,12 +161,6 @@ export interface AuthProfile {
   address_line1?: string | null;
   city?: string | null;
   avatar_url?: string | null;
-}
-
-export interface AuthReply {
-  access_token: string;
-  refresh_token?: string;
-  user?: AuthProfile;
 }
 
 /** One row of `GET /orders/mine` — enough to list an order on the profile
@@ -361,22 +356,6 @@ export const api = {
   withdrawRequest: (lang: Lang, token: string) =>
     request<RequestView>(`/requests/track/${token}/withdraw`, { lang, method: "POST" }),
 
-  /** Ask for a reset link. Always succeeds, even for an unknown address —
-   *  the server refuses to reveal which addresses exist. */
-  forgotPassword: (lang: Lang, email: string) =>
-    request<void>("/auth/forgot-password", {
-      lang,
-      method: "POST",
-      body: JSON.stringify({ email }),
-    }),
-
-  resetPassword: (lang: Lang, token: string, newPassword: string) =>
-    request<void>("/auth/reset-password", {
-      lang,
-      method: "POST",
-      body: JSON.stringify({ token, new_password: newPassword }),
-    }),
-
   signals: (lang: Lang, signals: readonly object[]) =>
     request<{ recorded: number }>("/signals", {
       lang,
@@ -385,28 +364,19 @@ export const api = {
       keepalive: true,
     }),
 
-  /** Create the session. No token exists yet to send — this is the one call
-   *  in this object that is unauthenticated by construction, not by accident. */
-  login: (lang: Lang, email: string, password: string) =>
-    request<AuthReply>("/auth/login", {
-      lang,
-      method: "POST",
-      body: JSON.stringify({ email, password }),
-    }),
-
-  /** Registration alone — `lib/session.ts` signs in right after, so the new
-   *  account never sits half-authenticated. */
-  register: (
-    lang: Lang,
-    body: {
-      full_name: string;
-      email: string;
-      password: string;
-      phone: string | null;
-      address_line1: string | null;
-      city: string | null;
-    },
-  ) => request<void>("/auth/register", { lang, method: "POST", body: JSON.stringify(body) }),
+  /**
+   * Who this token is, in the shop's terms.
+   *
+   * `login` and `register` used to sit here. Supabase does both now, straight
+   * from the browser, so the shop no longer has an endpoint that mints a
+   * session. What it still owns is everything Supabase has no opinion about —
+   * the role that decides whether sign-in lands on a profile or the console,
+   * the delivery address, the language to write in.
+   *
+   * This is also the call that creates the shop's row for a brand-new
+   * account: it is the first authenticated request such an account makes.
+   */
+  me: (lang: Lang) => request<AuthProfile>("/auth/me", { lang }),
 
   /** A correction made on the profile, or filled in at checkout. Authenticated
    *  the same way every other call here is — `request()` attaches the bearer

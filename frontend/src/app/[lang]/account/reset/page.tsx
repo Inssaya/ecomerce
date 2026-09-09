@@ -3,26 +3,24 @@
 import Link from "next/link";
 import { use, useEffect, useState } from "react";
 
-import { api, ApiError } from "@/lib/api";
 import { type Lang, isLang, translator } from "@/lib/i18n";
+import { supabase } from "@/lib/supabase";
 
 /**
  * Setting a new password.
  *
- * This page existed as a URL before it existed as a page: the API has been
- * sending `/{lang}/account/reset?token=…` in its reset email since the auth
- * module was ported, and clicking it returned a 404. For a shop with exactly
- * one account that matters more than it looks — the owner's password is the
- * only way into the panel, and this was the only way back if they lost it.
+ * Supabase sends the email and owns the credential, so what arrives here is a
+ * recovery *session* in the URL fragment rather than a token in the query
+ * string — the client picks it up on load, and the new password is set on the
+ * account that session belongs to.
  *
  * Two behaviours worth keeping:
  *
- * * **Without a token it is the request form instead.** Someone who lands here
- *   from a bookmark, or whose token has expired, should be able to ask for a
- *   new link rather than meeting a dead end.
- * * **Asking never says whether the address exists.** The server always
- *   answers the same way, and so does this page. Anything else turns the form
- *   into a way to test which addresses are registered.
+ * * **Without a recovery session it is the request form instead.** Someone who
+ *   lands here from a bookmark, or whose link has expired, should be able to
+ *   ask for a new one rather than meeting a dead end.
+ * * **Asking never says whether the address exists.** Anything else turns the
+ *   form into a way to test which addresses are registered.
  */
 export default function ResetPassword({
   params,
@@ -34,14 +32,35 @@ export default function ResetPassword({
   const t = translator(lang);
   const ar = lang === "ar";
 
-  const [token, setToken] = useState<string | null>(null);
+  const [recovering, setRecovering] = useState(false);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
-    // Read directly rather than through `useSearchParams`, which would force
-    // this route out of static rendering for one optional parameter.
-    setToken(new URLSearchParams(window.location.search).get("token"));
-    setReady(true);
+    // The link lands with the recovery session in the fragment. The client is
+    // configured to consume it, so the question here is only whether one
+    // turned up — asked after a tick, because that consumption is async.
+    let cancelled = false;
+
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (!cancelled && event === "PASSWORD_RECOVERY") {
+        setRecovering(true);
+        setReady(true);
+      }
+    });
+
+    void supabase.auth.getSession().then(({ data: session }) => {
+      if (cancelled) return;
+      // A fragment means the link was just followed; a bare visit to this page
+      // while merely signed in should still show the request form.
+      const fromLink = window.location.hash.includes("type=recovery");
+      if (fromLink && session.session) setRecovering(true);
+      setReady(true);
+    });
+
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
   }, []);
 
   if (!ready) return <div className="page pt-10" aria-hidden />;
@@ -49,9 +68,9 @@ export default function ResetPassword({
   return (
     <div className="page pt-10 pb-10">
       <h1 className="text-[26px] font-semibold tracking-tight">
-        {token ? t("setNewPassword") : t("forgotPassword")}
+        {recovering ? t("setNewPassword") : t("forgotPassword")}
       </h1>
-      {token ? <ChooseNew lang={lang} token={token} /> : <AskForLink lang={lang} />}
+      {recovering ? <ChooseNew lang={lang} /> : <AskForLink lang={lang} />}
 
       <p className="mt-8 text-[13px] text-ink-soft">
         <Link href={`/${lang}`} className="underline underline-offset-4">
@@ -71,10 +90,12 @@ function AskForLink({ lang }: { lang: Lang }) {
     if (state === "sending") return;
     const email = String(new FormData(event.currentTarget).get("email") ?? "");
     setState("sending");
-    // Deliberately not branching on the result. The endpoint answers the same
-    // way for a known and an unknown address, and so must this.
+    // Deliberately not branching on the result. Supabase answers the same way
+    // for a known and an unknown address, and so must this.
     try {
-      await api.forgotPassword(lang, email);
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/${lang}/account/reset`,
+      });
     } catch {
       /* rate limited or offline — the message below is still the honest one */
     }
@@ -110,7 +131,7 @@ function AskForLink({ lang }: { lang: Lang }) {
   );
 }
 
-function ChooseNew({ lang, token }: { lang: Lang; token: string }) {
+function ChooseNew({ lang }: { lang: Lang }) {
   const t = translator(lang);
   const ar = lang === "ar";
   const [state, setState] = useState<"idle" | "saving" | "done">("idle");
@@ -131,12 +152,14 @@ function ChooseNew({ lang, token }: { lang: Lang; token: string }) {
     setState("saving");
     setProblem(null);
     try {
-      await api.resetPassword(lang, token, password);
+      // The recovery link signed this browser in, so the account to change is
+      // simply the one holding the session.
+      const { error } = await supabase.auth.updateUser({ password });
+      if (error) throw new Error(error.message);
+      await supabase.auth.signOut();
       setState("done");
     } catch (error) {
-      setProblem(
-        error instanceof ApiError ? error.message : t("somethingWentWrong"),
-      );
+      setProblem(error instanceof Error ? error.message : t("somethingWentWrong"));
       setState("idle");
     }
   }

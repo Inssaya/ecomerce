@@ -24,7 +24,8 @@ fi
 set -a; . ./.env; set +a
 
 : "${APP_URL:?APP_URL must be set — every tracking link and reset link in every email is built from it}"
-: "${JWT_SECRET:?JWT_SECRET must be set — generate with: openssl rand -hex 64}"
+: "${SUPABASE_URL:?SUPABASE_URL must be set — it is the issuer whose tokens this shop trusts}"
+: "${SUPABASE_ANON_KEY:?SUPABASE_ANON_KEY must be set — the browser signs in against it}"
 : "${MEDIA_HOSTNAMES:?MEDIA_HOSTNAMES must be set — without it every product photo fails to load}"
 
 echo "── 1/5  Database, cache and storage"

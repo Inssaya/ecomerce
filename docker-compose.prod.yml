@@ -65,6 +65,10 @@ services:
         MEDIA_HOSTNAMES: ${MEDIA_HOSTNAMES}
         NEXT_PUBLIC_APP_NAME: ${APP_NAME:-MoStyle}
         NEXT_PUBLIC_WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+        # Inlined at build time — a production image built without these has a
+        # sign-in page that cannot reach Supabase at all.
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
     ports: !override []
 
   nginx:

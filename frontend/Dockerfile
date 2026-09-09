@@ -29,12 +29,21 @@ ARG NEXT_PUBLIC_SITE_URL
 ARG MEDIA_HOSTNAMES
 ARG NEXT_PUBLIC_APP_NAME=MoStyle
 ARG NEXT_PUBLIC_WHATSAPP_NUMBER
+# Sign-in happens in the browser, straight against Supabase, so these have to
+# be inlined at build time like every other NEXT_PUBLIC_*. Passing them only as
+# runtime environment does nothing — Next substitutes them into the bundle
+# during `next build`, and without the ARG the client falls back to a
+# placeholder URL and every sign-in fails with a refused connection.
+ARG NEXT_PUBLIC_SUPABASE_URL
+ARG NEXT_PUBLIC_SUPABASE_ANON_KEY
 
 ENV INTERNAL_API_URL=$INTERNAL_API_URL \
     NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
     MEDIA_HOSTNAMES=$MEDIA_HOSTNAMES \
     NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME \
     NEXT_PUBLIC_WHATSAPP_NUMBER=$NEXT_PUBLIC_WHATSAPP_NUMBER \
+    NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL \
+    NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY \
     NEXT_TELEMETRY_DISABLED=1 \
     NODE_ENV=production
 

@@ -9,18 +9,23 @@ below has only `owner` and `customer`; `models/orders.py`'s own docstring and
 An account is never required to buy. In a cash-on-delivery market the phone
 number is the identity that matters; an account only exists for the owner, and
 for a customer who wants their order history in one place.
+
+Identity itself lives in Supabase now — it holds the password, sends the
+confirmation and reset mail, and signs the tokens. This row is the shop's own
+half of the same person: `id` is the Supabase user id, and the row exists
+because six tables point at it, so an order can keep pointing at whoever
+placed it. `role` stays here rather than in Supabase metadata, because who may
+open the console is the shop's decision and not a dashboard setting.
 """
 from __future__ import annotations
 
-from datetime import datetime
 from enum import Enum as PyEnum
 
-from sqlalchemy import Boolean, DateTime, Enum, String
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy.sql import func
+from sqlalchemy import Boolean, Enum, String
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
-from app.models.base import TimestampMixin, uuid_fk, uuid_pk
+from app.models.base import TimestampMixin, uuid_pk
 
 
 class UserRole(str, PyEnum):
@@ -35,7 +40,6 @@ class User(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     phone: Mapped[str | None] = mapped_column(String(30), nullable=True, index=True)
     full_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role"), default=UserRole.customer, nullable=False
     )
@@ -57,25 +61,6 @@ class User(Base, TimestampMixin):
     address_line1: Mapped[str | None] = mapped_column(String(255), nullable=True)
     city: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
-    refresh_tokens: Mapped[list[RefreshToken]] = relationship(
-        back_populates="user", cascade="all, delete-orphan"
-    )
-
     @property
     def is_owner(self) -> bool:
         return self.role is UserRole.owner
-
-
-class RefreshToken(Base):
-    __tablename__ = "refresh_tokens"
-
-    id: Mapped[str] = uuid_pk()
-    user_id: Mapped[str] = uuid_fk("users.id")
-    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    revoked: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-
-    user: Mapped[User] = relationship(back_populates="refresh_tokens")

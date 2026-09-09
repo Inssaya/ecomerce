@@ -1,51 +1,31 @@
-"""Accounts and sessions.
+"""The shop's half of an account.
 
-Ported from auth-user-service. Removed in the move: role selection at
-registration (there is one owner, provisioned by `seed_owner`, and everyone
-else is a customer) and the whole KYC submission/review flow.
+Identity moved to Supabase. It holds the password, sends the confirmation and
+reset mail, signs the tokens and rotates the sessions — so `register`,
+`login`, `refresh`, `logout`, `change-password`, `forgot-password` and
+`reset-password` are all gone from here. They were not deleted so much as
+handed over: the working versions are kept in `archive/own-auth/` for reuse
+elsewhere.
+
+What is left is what Supabase has no opinion about, because it is not identity
+at all. Where a customer lives, which language to write to them in, what their
+face looks like, and whether they may open the console — those are the shop's
+own facts about a person, kept on the shop's own row.
+
+`role` in particular stays here deliberately. Supabase can say who somebody
+is; whether they are the workshop is a question about this business, and
+answering it from a dashboard setting would mean whoever can edit that
+dashboard can grant themselves the console.
 """
 from __future__ import annotations
 
-import secrets
-from datetime import UTC, datetime
+from fastapi import APIRouter, HTTPException, UploadFile
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
-from sqlalchemy import select
-
-from app.config import settings
-from app.core.cache import get_redis
 from app.core.errors import bad_request
 from app.core.storage import sniff_image, upload_image
-from app.core.limits import (
-    RegisterLimit,
-    ResetLimit,
-    ResetPerAccount,
-    SignInLimit,
-    SignInPerAccount,
-    clear,
-)
-from app.core.security import (
-    TokenError,
-    decode_token,
-    hash_password,
-    hash_token,
-    verify_password,
-)
 from app.deps import CurrentUser, DbSession
-from app.models import RefreshToken, User, UserRole
-from app.modules.auth.schemas import (
-    ChangePasswordRequest,
-    ForgotPasswordRequest,
-    LoginRequest,
-    RefreshRequest,
-    RegisterRequest,
-    ResetPasswordRequest,
-    TokenResponse,
-    UserResponse,
-    UserUpdate,
-)
-from app.modules.auth.service import issue_session, revoke_all_sessions
-from app.modules.notify.email import send_password_reset
+from app.models import User
+from app.modules.auth.schemas import UserResponse, UserUpdate
 
 #: A face, not a photograph of a wall. Smaller than the 12 MB product limit
 #: because nothing here is ever displayed larger than 96px.
@@ -53,84 +33,15 @@ MAX_AVATAR_BYTES = 4 * 1024 * 1024
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-RESET_TOKEN_TTL_SECONDS = 3600
-
-
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(body: RegisterRequest, db: DbSession, _: RegisterLimit) -> TokenResponse:
-    exists = await db.scalar(select(User.id).where(User.email == body.email))
-    if exists:
-        raise bad_request("That email is already registered")
-
-    user = User(
-        email=body.email,
-        password_hash=hash_password(body.password),
-        full_name=body.full_name,
-        phone=body.phone,
-        address_line1=body.address_line1,
-        city=body.city,
-        lang=body.lang if body.lang in ("en", "ar") else "en",
-        role=UserRole.customer,
-    )
-    db.add(user)
-    await db.flush()
-    return await issue_session(db, user)
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(
-    body: LoginRequest, db: DbSession, _ip: SignInLimit, _account: SignInPerAccount
-) -> TokenResponse:
-    user = await db.scalar(select(User).where(User.email == body.email))
-    # Same message and roughly the same work either way, so the response does
-    # not reveal which addresses have accounts.
-    if user is None or not verify_password(body.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Email or password is incorrect")
-    if not user.is_active:
-        raise HTTPException(status_code=403, detail="This account is disabled")
-    # Signed in successfully: forget the failed attempts, so someone who
-    # mistyped twice this morning is not still being counted this afternoon.
-    await clear("signin-acct", "body:email", body.email)
-    return await issue_session(db, user)
-
-
-@router.post("/refresh", response_model=TokenResponse)
-async def refresh(body: RefreshRequest, db: DbSession) -> TokenResponse:
-    try:
-        decode_token(body.refresh_token, expected_type="refresh")
-    except TokenError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-
-    stored = await db.scalar(
-        select(RefreshToken).where(
-            RefreshToken.token_hash == hash_token(body.refresh_token),
-            RefreshToken.revoked.is_(False),
-        )
-    )
-    if stored is None or stored.expires_at < datetime.now(UTC):
-        raise HTTPException(status_code=401, detail="Session expired — sign in again")
-
-    user = await db.scalar(select(User).where(User.id == stored.user_id))
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="Session expired — sign in again")
-
-    # Rotate: the presented token is spent whether or not the client keeps it.
-    stored.revoked = True
-    return await issue_session(db, user)
-
-
-@router.post("/logout", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def logout(body: RefreshRequest, db: DbSession) -> None:
-    stored = await db.scalar(
-        select(RefreshToken).where(RefreshToken.token_hash == hash_token(body.refresh_token))
-    )
-    if stored is not None:
-        stored.revoked = True
-        await db.commit()
-
 
 @router.get("/me", response_model=UserResponse)
 async def me(user: CurrentUser) -> User:
+    """Who this token belongs to, in the shop's terms.
+
+    The storefront calls this to learn the `role` the Supabase token does not
+    carry, which is what decides whether sign-in lands on a profile or on the
+    console.
+    """
     return user
 
 
@@ -166,49 +77,3 @@ async def upload_avatar(file: UploadFile, user: CurrentUser, db: DbSession) -> U
     await db.commit()
     await db.refresh(user)
     return user
-
-
-@router.post("/change-password", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def change_password(body: ChangePasswordRequest, user: CurrentUser, db: DbSession) -> None:
-    if not verify_password(body.current_password, user.password_hash):
-        raise bad_request("Current password is incorrect")
-    user.password_hash = hash_password(body.new_password)
-    # Every other session is invalidated: a password change is how someone
-    # takes their account back.
-    await revoke_all_sessions(db, user.id)
-    await db.commit()
-
-
-@router.post("/forgot-password", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def forgot_password(
-    body: ForgotPasswordRequest, db: DbSession, _ip: ResetLimit, _account: ResetPerAccount
-) -> None:
-    user = await db.scalar(select(User).where(User.email == body.email))
-    # Always 204 — the response must not reveal whether the address is known.
-    if user is None:
-        return
-
-    token = secrets.token_urlsafe(32)
-    await get_redis().setex(f"reset:{token}", RESET_TOKEN_TTL_SECONDS, user.id)
-    await send_password_reset(
-        to=user.email,
-        lang=user.lang,
-        reset_url=f"{settings.app_url}/{user.lang}/account/reset?token={token}",
-    )
-
-
-@router.post("/reset-password", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
-async def reset_password(body: ResetPasswordRequest, db: DbSession, _: ResetLimit) -> None:
-    redis = get_redis()
-    user_id = await redis.get(f"reset:{body.token}")
-    if not user_id:
-        raise bad_request("This reset link has expired — request a new one")
-
-    user = await db.scalar(select(User).where(User.id == user_id))
-    if user is None:
-        raise bad_request("This reset link has expired — request a new one")
-
-    user.password_hash = hash_password(body.new_password)
-    await revoke_all_sessions(db, user.id)
-    await db.commit()
-    await redis.delete(f"reset:{body.token}")

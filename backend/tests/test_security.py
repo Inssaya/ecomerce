@@ -19,18 +19,23 @@ VISITOR = {"X-Visitor-Id": "visitor-alice"}
 # ── Configuration that only looks like security ───────────────────────────────
 
 
-def test_production_refuses_to_start_without_a_real_secret() -> None:
-    """An empty JWT_SECRET signs every token with the empty string, which lets
-    anyone mint an owner token in one line."""
-    with pytest.raises(RuntimeError, match="JWT_SECRET"):
-        Settings(jwt_secret="", environment="production").check()
-    with pytest.raises(RuntimeError, match="JWT_SECRET"):
-        Settings(jwt_secret="short", environment="production").check()
+def test_production_refuses_to_start_without_an_issuer() -> None:
+    """There is no signing secret to protect any more, and that is the point.
 
-    # A real one is fine, and outside production a weak one only warns, so
+    This used to guard `JWT_SECRET`, because an empty one signed every token
+    with the empty string and anybody could mint an owner session in one line.
+    Supabase signs the tokens now and this application holds no key at all —
+    so the thing that must not be empty is *which project to trust*. With no
+    issuer there is no signature to check against and every request would
+    arrive unauthenticated.
+    """
+    with pytest.raises(RuntimeError, match="SUPABASE_URL"):
+        Settings(supabase_url="", environment="production").check()
+
+    # A real one is fine, and outside production an empty one only warns, so
     # tests and local runs are not blocked.
-    Settings(jwt_secret="x" * 64, environment="production").check()
-    Settings(jwt_secret="", environment="development").check()
+    Settings(supabase_url="https://project.supabase.co", environment="production").check()
+    Settings(supabase_url="", environment="development").check()
 
 
 # ── Headers the browser enforces for us ───────────────────────────────────────
@@ -84,41 +89,19 @@ async def test_a_script_dressed_as_a_photo_is_refused(
 # ── Rate limits ───────────────────────────────────────────────────────────────
 
 
-async def test_passwords_cannot_be_guessed_forever(client: AsyncClient) -> None:
-    """The owner's password is the whole shop."""
-    attempts = [
-        await client.post(
-            "/api/auth/login",
-            json={"email": "workshop@mostyle.ma", "password": f"guess-{index}"},
-        )
-        for index in range(12)
-    ]
-    codes = [attempt.status_code for attempt in attempts]
-    assert 429 in codes, "unlimited password guesses"
-    assert codes.index(429) >= 5, "a real person mistyping twice must not be locked out"
-    assert attempts[codes.index(429)].headers.get("Retry-After")
-
-
-async def test_a_correct_sign_in_forgives_the_earlier_mistakes(
-    client: AsyncClient, owner_headers: dict[str, str]
-) -> None:
-    """Someone who mistyped this morning must not still be counted now."""
-    for _ in range(3):
-        await client.post(
-            "/api/auth/login",
-            json={"email": "workshop@mostyle.ma", "password": "wrong"},
-        )
-    good = await client.post(
-        "/api/auth/login",
-        json={"email": "workshop@mostyle.ma", "password": "a-long-enough-password"},
-    )
-    assert good.status_code == 200
-
-    # The counter was cleared, so there is room to be human again.
-    again = await client.post(
-        "/api/auth/login", json={"email": "workshop@mostyle.ma", "password": "wrong"}
-    )
-    assert again.status_code == 401
+# Password guessing and reset-email flooding were rate limited here, and both
+# tests are gone with the endpoints they aimed at. There is no `/auth/login`
+# and no `/auth/forgot-password` on this application any more: Supabase holds
+# the credential, sends the mail, and throttles both on its own side.
+#
+# That is a real transfer of responsibility rather than a gap, and it is worth
+# naming as one — the shop can no longer prove these limits in its own test
+# suite, so the setting to check is Supabase's own rate limiting, in the
+# project dashboard, not a number in this repository.
+#
+# What this suite still proves is the half that stayed: that a token from
+# somewhere else is refused, and that holding a valid token is not the same as
+# being allowed in. Both are in `test_access_control.py`.
 
 
 # The rate limit protecting `/api/assistant` from draining the AI budget was
@@ -141,19 +124,6 @@ async def test_orders_cannot_be_flooded(
         "items": [{"product_id": piece["id"], "quantity": 1}],
     }
     codes = [(await client.post("/api/orders", json=body)).status_code for _ in range(14)]
-    assert 429 in codes
-
-
-async def test_the_reset_email_is_not_a_cannon(client: AsyncClient) -> None:
-    """Otherwise it is free mail aimed at anyone whose address you know."""
-    codes = [
-        (
-            await client.post(
-                "/api/auth/forgot-password", json={"email": "workshop@mostyle.ma"}
-            )
-        ).status_code
-        for _ in range(8)
-    ]
     assert 429 in codes
 
 

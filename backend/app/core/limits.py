@@ -142,11 +142,11 @@ async def clear(bucket: str, by: str, identity: str) -> None:
 
 # Named limits, so the numbers live in one place and can be argued about.
 # Generous enough that a real person on a phone never meets them.
-SignInLimit = Annotated[None, Depends(RateLimit(8, 300, name="signin"))]
-SignInPerAccount = Annotated[None, Depends(RateLimit(6, 900, by="body:email", name="signin-acct"))]
-RegisterLimit = Annotated[None, Depends(RateLimit(5, 3600, name="register"))]
-ResetLimit = Annotated[None, Depends(RateLimit(4, 3600, name="reset"))]
-ResetPerAccount = Annotated[None, Depends(RateLimit(3, 3600, by="body:email", name="reset-acct"))]
+#
+# The sign-in, registration and password-reset limits are gone with the
+# endpoints they guarded: Supabase throttles those now, on its own side, which
+# is the whole point of it owning them. Everything below is a shop endpoint
+# and stays this application's problem.
 CheckoutLimit = Annotated[None, Depends(RateLimit(10, 600, name="checkout"))]
 RequestLimit = Annotated[None, Depends(RateLimit(6, 600, name="custom-request"))]
 #: Reference photos on a custom request. Six per request, and a person who

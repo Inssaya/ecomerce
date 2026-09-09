@@ -13,6 +13,7 @@ import { SearchBox } from "./SearchBox";
 import { BLOCKED_EVENT } from "@/lib/api";
 import { loadDelivery } from "@/lib/delivery";
 import { ensureVisitorCookie } from "@/lib/fingerprint";
+import { watchAuth } from "@/lib/session";
 import { setSignalLanguage } from "@/lib/signals";
 import { useSession } from "@/lib/session";
 import { type Lang, translator } from "@/lib/i18n";
@@ -55,6 +56,12 @@ export function Chrome({
     // anybody reaches them.
     void loadDelivery(lang).catch(() => undefined);
   }, [lang]);
+
+  // Supabase renews the access token in the background, and the renewed one is
+  // what every later request has to carry. Mounted once, at the top, because
+  // `lib/api.ts` reads the mirrored copy synchronously on every call — if this
+  // is not listening, the shop keeps sending a token that has already expired.
+  useEffect(() => watchAuth(), []);
 
   useEffect(() => {
     const onBlocked = () => setBlocked(true);

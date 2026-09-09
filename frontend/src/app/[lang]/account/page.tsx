@@ -6,7 +6,7 @@ import { use, useEffect, useState } from "react";
 
 import { CityAutocomplete } from "@/components/CityAutocomplete";
 import { useDelivery } from "@/lib/delivery";
-import { ApiError, signIn, signUp, useSession } from "@/lib/session";
+import { ApiError, NeedsEmailConfirmation, signIn, signUp, useSession } from "@/lib/session";
 import { type Lang, isLang, translator } from "@/lib/i18n";
 
 /**
@@ -49,6 +49,10 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
   const [again, setAgain] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
+  //: Signed up, but Supabase is holding the account until the emailed link is
+  //: clicked. Not an error, and showing it as one would tell somebody their
+  //: account failed when it was in fact created.
+  const [confirmSent, setConfirmSent] = useState(false);
 
   // Somebody who is already signed in has no business on a sign-in form —
   // and an owner already signed in belongs in the console, not on a profile.
@@ -92,6 +96,11 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
       else if (session.role === "owner") router.replace("/admin");
       else router.replace(`/${lang}/account/profile`);
     } catch (error) {
+      if (error instanceof NeedsEmailConfirmation) {
+        setConfirmSent(true);
+        setBusy(false);
+        return;
+      }
       // The server already says what went wrong — wrong password, an email
       // already registered, a password too short — so show that instead of
       // one generic line that means something different every time.
@@ -111,6 +120,26 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
   // rendering the sign-in form first and redirecting a frame later is a flash
   // of the wrong page on every visit by somebody already signed in.
   if (!ready || session) return <div className="page pt-16" aria-hidden />;
+
+  if (confirmSent) {
+    return (
+      <div className="page pt-14 pb-16">
+        <h1 className="text-[26px] font-semibold tracking-tight">
+          {ar ? "تحقّق من بريدك" : "Check your email"}
+        </h1>
+        <p className="mt-3 max-w-[52ch] text-[15px] leading-relaxed text-ink-soft">
+          {ar
+            ? `أرسلنا رابطاً إلى ${email.trim()}. افتحه لتأكيد حسابك، ثم عد لتسجيل الدخول.`
+            : `We sent a link to ${email.trim()}. Open it to confirm the account, then come back and sign in.`}
+        </p>
+        <p className="mt-4 text-[14px] leading-relaxed text-ink-mute">
+          {ar
+            ? "لا تحتاج إلى حساب للشراء — الدفع نقداً عند التسليم."
+            : "You do not need an account to buy — payment is cash on delivery."}
+        </p>
+      </div>
+    );
+  }
 
   const creating = mode === "up";
 

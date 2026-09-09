@@ -133,7 +133,7 @@ export default function ProfilePage({ params }: { params: Promise<{ lang: string
 
         <button
           type="button"
-          onClick={signOut}
+          onClick={() => void signOut()}
           className="ms-auto shrink-0 tap px-3 text-[14px] font-medium text-ink-soft hover:text-ink"
         >
           {t("signOut")}

@@ -13,6 +13,7 @@
  * holding one of its own.
  */
 import { readSession, writeSession } from "@/lib/session-store";
+import { supabase } from "@/lib/supabase";
 
 export function ownerToken(): string | null {
   return readSession()?.token ?? null;
@@ -23,36 +24,35 @@ export function isOwner(): boolean {
   return readSession()?.role === "owner";
 }
 
-function keepSession(body: { access_token: string; refresh_token?: string }): void {
+function keepSession(accessToken: string): void {
   const current = readSession();
   if (!current) return;
-  writeSession({
-    ...current,
-    token: body.access_token,
-    refresh: body.refresh_token ?? current.refresh ?? null,
-  });
+  writeSession({ ...current, token: accessToken });
 }
 
 function forgetSession(): void {
   writeSession(null);
 }
 
-/** One renewal at a time. Several requests can fire on mount, and the server
- *  rotates refresh tokens — without this, all but one would spend a dead one. */
+/**
+ * One renewal at a time.
+ *
+ * Several console requests fire on mount, and each would otherwise ask
+ * Supabase for a new token independently. Supabase does its own refreshing in
+ * the background; this is the path for the case that beat it — a request that
+ * came back 401 because the token expired between being read and being sent.
+ *
+ * The refresh token is no longer this app's to hold: it lives inside the
+ * Supabase client, which rotates it. Asking for the current session is enough.
+ */
 let renewing: Promise<boolean> | null = null;
 
 function renew(): Promise<boolean> {
   renewing ??= (async () => {
-    const token = readSession()?.refresh ?? null;
-    if (!token) return false;
     try {
-      const response = await fetch("/api/auth/refresh", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ refresh_token: token }),
-      });
-      if (!response.ok) return false;
-      keepSession(await response.json());
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error || !data.session) return false;
+      keepSession(data.session.access_token);
       return true;
     } catch {
       return false;
@@ -134,25 +134,27 @@ export async function callUpload<T>(path: string, body: FormData): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-/** Clearing the stored session only signs this browser out; the refresh token
- *  stays valid on the server for thirty days, so `/auth/logout` revokes it.
- *  The local clear happens first and unconditionally regardless of the network. */
+/** The local clear happens first and unconditionally, so this browser is
+ *  signed out even with no network; Supabase then revokes the session on its
+ *  side so the other devices go too. */
 export async function signOut(): Promise<void> {
-  const token = readSession()?.refresh ?? null;
   forgetSession();
-  if (!token) return;
-  await fetch("/api/auth/logout?lang=en", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ refresh_token: token }),
-    keepalive: true,
-  }).catch(() => undefined);
+  try {
+    await supabase.auth.signOut();
+  } catch {
+    /* already signed out here, which is what the owner asked for */
+  }
 }
 
-export async function changePassword(current: string, next: string): Promise<void> {
-  await call<void>("/auth/change-password", {
-    method: "POST",
-    body: JSON.stringify({ current_password: current, new_password: next }),
-  });
-  forgetSession();
+/**
+ * Change the owner's password.
+ *
+ * Supabase owns the credential, so this no longer verifies the current one —
+ * it does not have it to compare against. The account is proved by holding a
+ * live session instead, which is the same guarantee the old
+ * `current_password` check was standing in for.
+ */
+export async function changePassword(next: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({ password: next });
+  if (error) throw new Error(error.message);
 }

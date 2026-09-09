@@ -26,7 +26,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security import TokenError, decode_token
+from app.core.supabase_auth import AuthError, verify
 from app.db import get_db
 from app.models import User, UserRole
 
@@ -41,14 +41,56 @@ async def _user_from_credentials(
     credentials: HTTPAuthorizationCredentials | None,
     db: AsyncSession,
 ) -> User | None:
+    """Who is calling, according to Supabase — and who that is in this shop.
+
+    Supabase owns identity: it holds the password, sends the confirmation and
+    reset mail, and signs the token. It does not own the shop's data, and the
+    local `users` row still exists because six tables point at it — orders,
+    custom requests, signals, interactions and the security log all carry a
+    `user_id`, and an order must keep pointing at the person who placed it.
+
+    So the row is mirrored, keyed by the Supabase user id, and created on the
+    first authenticated request rather than by a webhook. A webhook is a second
+    thing that can be down at the moment somebody signs up, and it would leave
+    an account that exists in Supabase and nowhere here; doing it on first use
+    cannot drift, because the only way to reach this code is with a token that
+    has already been verified.
+
+    The `role` column is written **once, at creation**, and never refreshed
+    from the token. Authorization is the shop's own question: if it were read
+    from Supabase metadata on every request, whoever could edit that dashboard
+    could grant themselves the console.
+    """
     if credentials is None:
         return None
     try:
-        payload = decode_token(credentials.credentials, expected_type="access")
-    except TokenError:
+        claims = await verify(credentials.credentials)
+    except AuthError:
         return None
-    user = await db.scalar(select(User).where(User.id == payload.get("sub", "")))
-    if user is None or not user.is_active:
+
+    user_id = claims.get("sub")
+    if not user_id:
+        return None
+
+    user = await db.scalar(select(User).where(User.id == user_id))
+    if user is None:
+        email = (claims.get("email") or "").strip().lower()
+        if not email:
+            return None
+        metadata = claims.get("user_metadata") or {}
+        user = User(
+            id=user_id,
+            email=email,
+            full_name=(metadata.get("full_name") or "").strip() or None,
+            phone=(metadata.get("phone") or "").strip() or None,
+            role=UserRole.customer,
+            lang=(metadata.get("lang") or "en")[:2],
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+
+    if not user.is_active:
         return None
     return user
 

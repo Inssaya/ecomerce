@@ -1,11 +1,17 @@
 """Operational commands.
 
-    python -m app.cli seed-owner  owner@example.ma  'a real password'  'Full Name'
+    python -m app.cli make-owner  owner@example.ma  [supabase-user-id]
     python -m app.cli test-email  you@example.ma
 
-The owner account cannot be created through the API — `/auth/register` always
-produces a customer. There is one workshop, and its account is provisioned
-deliberately, from the machine that runs the deployment.
+`make-owner` grants the console. It does not create an account and cannot:
+accounts live in Supabase now, and the password is set there. What this does
+is mark the shop's own row for that person as the workshop's — which is
+deliberately not something the API can do, because an endpoint that grants
+the console is an endpoint somebody can find.
+
+Normally the row already exists, because it is created on that account's
+first authenticated request. Pass the Supabase user id as well to grant the
+role *before* the first sign-in.
 """
 from __future__ import annotations
 
@@ -15,18 +21,12 @@ import sys
 from sqlalchemy import select
 
 from app.config import settings
-from app.core.security import hash_password
 from app.db import SessionLocal
 from app.models import User, UserRole
 
-MIN_PASSWORD_LENGTH = 12
 
-
-async def seed_owner(email: str, password: str, full_name: str) -> int:
-    if len(password) < MIN_PASSWORD_LENGTH:
-        print(f"The owner password must be at least {MIN_PASSWORD_LENGTH} characters.")
-        return 2
-
+async def make_owner(email: str, supabase_user_id: str | None = None) -> int:
+    email = email.strip().lower()
     async with SessionLocal() as db:
         existing_owner = await db.scalar(select(User).where(User.role == UserRole.owner))
         if existing_owner is not None and existing_owner.email != email:
@@ -35,16 +35,23 @@ async def seed_owner(email: str, password: str, full_name: str) -> int:
 
         user = await db.scalar(select(User).where(User.email == email))
         if user is None:
-            user = User(email=email, password_hash=hash_password(password), full_name=full_name)
+            if not supabase_user_id:
+                print(
+                    f"No account here for {email} yet. "
+                    "Either sign in once at the shop with that address — the row "
+                    "is created on the first authenticated request — or pass the "
+                    "Supabase user id to grant the role up front: "
+                    "python -m app.cli make-owner <email> <supabase-user-id>"
+                )
+                return 1
+            user = User(id=supabase_user_id, email=email)
             db.add(user)
-        else:
-            user.password_hash = hash_password(password)
-            user.full_name = full_name
+
         user.role = UserRole.owner
         user.is_active = True
         await db.commit()
 
-    print(f"Owner account ready: {email}")
+    print(f"{email} is the workshop. Sign in at the shop and you will land on the console.")
     return 0
 
 
@@ -95,11 +102,11 @@ def main() -> int:
         print(__doc__)
         return 2
     command, *args = sys.argv[1:]
-    if command == "seed-owner":
-        if len(args) != 3:
-            print("Usage: python -m app.cli seed-owner <email> <password> <full name>")
+    if command == "make-owner":
+        if len(args) not in (1, 2):
+            print("Usage: python -m app.cli make-owner <email> [supabase-user-id]")
             return 2
-        return asyncio.run(seed_owner(*args))
+        return asyncio.run(make_owner(*args))
     if command == "test-email":
         if len(args) != 1:
             print("Usage: python -m app.cli test-email <address>")

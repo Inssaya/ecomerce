@@ -26,10 +26,25 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://mostyle:mostyle@postgres:5432/mostyle"
     redis_url: str = "redis://redis:6379/0"
 
-    jwt_secret: str = ""
-    jwt_algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
-    refresh_token_expire_days: int = 30
+    # ── Identity ──────────────────────────────────────────────────────────────
+    #
+    # Supabase issues the tokens; this application only verifies them. There is
+    # no signing secret here on purpose: the project signs with ES256, so what
+    # is needed to check a token is the *public* half, fetched from the JWKS
+    # endpoint below. Nothing this app holds could mint a session.
+    supabase_url: str = ""
+    #: The publishable ("anon") key. Safe in a browser and safe here — it
+    #: identifies the project on unauthenticated endpoints and grants nothing
+    #: on its own.
+    supabase_anon_key: str = ""
+
+    @property
+    def supabase_jwks_url(self) -> str:
+        return f"{self.supabase_url.rstrip('/')}/auth/v1/.well-known/jwks.json"
+
+    @property
+    def supabase_issuer(self) -> str:
+        return f"{self.supabase_url.rstrip('/')}/auth/v1"
 
     # Object storage — product and piece photography.
     minio_endpoint: str = "minio:9000"
@@ -87,16 +102,17 @@ class Settings(BaseSettings):
     def check(self) -> None:
         """Refuse to start with a configuration that only looks like security.
 
-        An empty `JWT_SECRET` signs every token with the empty string, which
-        means anyone can mint an owner token in one line. It defaults to empty
-        so tests and local runs work; production must not inherit that.
+        This used to guard `JWT_SECRET`, because an empty one signed every
+        token with the empty string and anybody could mint an owner session in
+        one line. There is no signing secret any more — Supabase issues tokens
+        and this application only ever verifies them against a public key — so
+        what has to be true instead is that we know *which* project to trust.
+        An empty `SUPABASE_URL` means no issuer to check against and no JWKS to
+        fetch, so every request would arrive unauthenticated.
         """
-        if self.jwt_secret and len(self.jwt_secret) >= MIN_SECRET_LENGTH:
+        if self.supabase_url:
             return
-        message = (
-            f"JWT_SECRET must be set and at least {MIN_SECRET_LENGTH} characters "
-            "(openssl rand -hex 64)"
-        )
+        message = "SUPABASE_URL must be set — it is the issuer whose tokens this app trusts"
         if self.is_production:
             raise RuntimeError(message)
         logging.getLogger(__name__).warning("%s — running anyway outside production", message)
