@@ -159,6 +159,23 @@ const copy = {
   placing: ["Placing…", "جارٍ التأكيد…"],
 
   // Orders and requests.
+  //
+  // The moment after somebody commits to paying cash at their door. The
+  // checkout used to replace itself with the tracking page and say nothing
+  // at all — no acknowledgement, no "we will call", no "keep this link" —
+  // so the most anxious moment in the whole purchase was met with silence.
+  orderPlaced: ["That's your order in.", "تم تسجيل طلبك."],
+  orderPlacedBody: [
+    "We call you on {phone} to confirm it before anything is sent. Nothing is paid until it reaches your door.",
+    "سنتصل بك على {phone} لتأكيد الطلب قبل إرساله. لا تدفع شيئاً حتى يصل إلى بابك.",
+  ],
+  keepThisLink: [
+    "Keep this link — it is how you check on your order. If you lose it, your reference and phone number will find it again.",
+    "احتفظ بهذا الرابط — به تتابع طلبك. وإن ضاع، يكفي رقم الطلب ورقم هاتفك لإيجاده.",
+  ],
+  deliveringTo: ["Delivering to", "التوصيل إلى"],
+  keepShopping: ["Keep looking", "تابع التصفح"],
+
   yourReference: ["Your reference", "رقمك"],
   findYourOrder: ["Find your order", "ابحث عن طلبك"],
   findYourOrderLead: [

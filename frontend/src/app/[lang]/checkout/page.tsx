@@ -138,7 +138,10 @@ export default function Checkout({ params }: { params: Promise<{ lang: string }>
 
       lines.forEach((line) => track({ type: "purchase", product_id: line.productId }));
       clear();
-      router.replace(`/${lang}/track/${order.tracking_token}`);
+      // `?placed` is what turns the tracking page into a confirmation the
+      // first time it is seen. `replace`, not `push`: going Back from here
+      // must not return to a checkout form for a cart that no longer exists.
+      router.replace(`/${lang}/track/${order.tracking_token}?placed=1`);
     } catch (error) {
       setProblem(error instanceof ApiError ? error.message : t("somethingWentWrong"));
       setSending(false);

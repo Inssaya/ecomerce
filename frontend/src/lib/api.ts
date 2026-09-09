@@ -110,6 +110,11 @@ export interface OrderView {
   reference: string;
   tracking_token: string;
   customer_name: string;
+  customer_phone: string;
+  /** Where it is going. The API has always returned this; the type simply
+   *  never declared it, so the tracking page could not show the buyer the
+   *  address their cash-on-delivery parcel was being sent to. */
+  address: { line1?: string; city?: string; notes?: string | null };
   city: string;
   items: {
     title: string;
