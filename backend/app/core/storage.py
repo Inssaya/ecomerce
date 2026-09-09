@@ -41,6 +41,21 @@ def sniff_image(data: bytes) -> str | None:
         return "image/webp"
     return None
 
+#: The public path every stored file is served under.
+#:
+#: Deliberately **not** the bucket name. The URL used to be built as
+#: `/{bucket}/{object}`, which quietly made the bucket's name part of the
+#: shop's public contract: every row in the database begins `/media/`, and the
+#: web server rewrites `/media/*` to storage. Moving from a MinIO bucket
+#: called "media" to an R2 bucket called "ecomerce" would have started writing
+#: `/ecomerce/...` — URLs that match no rewrite and no existing row, for no
+#: reason other than what somebody typed in a storage dashboard.
+#:
+#: So the bucket is an implementation detail and this is the contract. The
+#: object key is identical on both sides of the prefix, so the rewrite target
+#: needs no path rewriting either.
+MEDIA_URL_PREFIX = "media"
+
 _client: Minio | None = None
 
 
@@ -88,18 +103,50 @@ def _read_only_policy(bucket: str) -> str:
 
 
 async def ensure_bucket() -> None:
+    """Make sure the bucket exists and serves reads.
+
+    Both halves are best-effort against a managed provider, and deliberately
+    so. On MinIO — one container we own — creating the bucket and stamping the
+    read-only policy is the whole setup, and failing loudly is right.
+
+    Cloudflare R2 is S3-compatible for objects but not for administration: it
+    answers `PutBucketPolicy` with `NotImplemented`, because public read is a
+    property of the bucket's *domain* there, switched on in the dashboard as a
+    public r2.dev URL or a custom domain. Treating that refusal as fatal would
+    mean the shop refuses to start against the storage it is actually
+    deployed on, over a call that was never going to do anything.
+
+    So an unimplemented admin call is logged and stepped over. A genuine
+    failure to reach storage still surfaces on the first upload, which is the
+    honest place for it — that is a real request failing, not a guess made at
+    boot.
+    """
+
     def _ensure() -> None:
         client = _get_client()
         try:
             if not client.bucket_exists(settings.media_bucket):
                 client.make_bucket(settings.media_bucket)
         except S3Error as exc:
-            if exc.code != "BucketAlreadyOwnedByYou":
+            # `NotImplemented` / `MethodNotAllowed`: a managed bucket that
+            # already exists and is not ours to create.
+            if exc.code not in ("BucketAlreadyOwnedByYou", "NotImplemented", "MethodNotAllowed"):
                 raise
-        # Set every start, not only on creation: it is idempotent, and a bucket
-        # restored from a backup or made by hand would otherwise be silently
-        # unreadable.
-        client.set_bucket_policy(settings.media_bucket, _read_only_policy(settings.media_bucket))
+
+        try:
+            client.set_bucket_policy(
+                settings.media_bucket, _read_only_policy(settings.media_bucket)
+            )
+        except S3Error as exc:
+            if exc.code not in ("NotImplemented", "MethodNotAllowed", "AccessDenied"):
+                raise
+            logger.info(
+                "Storage does not support bucket policies (%s). Public read must be "
+                "configured on the provider — for R2 that is a public r2.dev URL or a "
+                "custom domain on the '%s' bucket.",
+                exc.code,
+                settings.media_bucket,
+            )
 
     await asyncio.to_thread(_ensure)
 
@@ -134,15 +181,19 @@ async def upload_image(data: bytes, content_type: str, *, prefix: str) -> str:
         )
 
     await asyncio.to_thread(_put)
-    return f"/{settings.media_bucket}/{object_name}"
+    return f"/{MEDIA_URL_PREFIX}/{object_name}"
 
 
 async def delete_object(url: str) -> None:
     """Best effort: a stale file costs storage, a failed request costs a sale."""
-    marker = f"/{settings.media_bucket}/"
-    if marker not in url:
+    # Accepts both shapes: the current `/media/<key>` and anything still
+    # stored as `/<bucket>/<key>` from before the two were separated.
+    for marker in (f"/{MEDIA_URL_PREFIX}/", f"/{settings.media_bucket}/"):
+        if marker in url:
+            object_name = url.split(marker, 1)[1]
+            break
+    else:
         return
-    object_name = url.split(marker, 1)[1]
 
     def _remove() -> None:
         _get_client().remove_object(settings.media_bucket, object_name)

@@ -26,7 +26,7 @@ USER workshop
 EXPOSE 8000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-    CMD curl -fsS http://localhost:8000/health || exit 1
+    CMD curl -fsS "http://localhost:${PORT:-8000}/health" || exit 1
 
 # Migrations run first, in the entrypoint, and a failed migration stops the
 # container rather than serving a schema the code does not match.
@@ -38,5 +38,12 @@ ENTRYPOINT ["/srv/entrypoint.sh"]
 # `--forwarded-allow-ips` is required behind nginx: without it uvicorn ignores
 # X-Forwarded-For, and the rate limiter would see every request as coming from
 # the proxy and limit the whole shop as one visitor.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", \
-     "--proxy-headers", "--forwarded-allow-ips", "*"]
+# `$PORT` because a managed host assigns the port rather than accepting one:
+# Render, Railway and Fly all inject it, and a container that listens on 8000
+# regardless simply never receives traffic and fails its health check with no
+# error in the log. Defaults to 8000, which is what compose maps locally.
+#
+# `sh -c` so the variable expands, and `exec` inside it so uvicorn still ends
+# up as PID 1 and receives SIGTERM — without that, a deploy would wait out the
+# full kill timeout on every restart.
+CMD ["sh", "-c", "exec uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips '*'"]

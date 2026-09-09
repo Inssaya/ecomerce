@@ -38,16 +38,26 @@ const nextConfig: NextConfig = {
       process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000";
     // Photographs, proxied on this origin.
     //
-    // The shop hands out an absolute MinIO URL built from MINIO_PUBLIC_ENDPOINT.
-    // A browser can fetch `localhost:9000`; the *server* cannot — inside the
-    // container `localhost` is the container, so next/image's own fetch was
-    // refused and every photograph on the site rendered as a broken icon.
-    // Serving them from this origin fixes both readers at once, and is what
-    // nginx already does in production.
-    const media = process.env.INTERNAL_MEDIA_URL ?? "http://minio:9000";
+    // Every stored file is `/media/<key>` in the database, and this is what
+    // turns that into wherever the bytes actually live. Keeping it on this
+    // origin serves both readers at once: the browser, and `next/image`'s own
+    // server-side fetch, which cannot resolve a hostname that only means
+    // something inside the storage network.
+    //
+    // `MEDIA_ORIGIN` is the base the object key hangs off, *including* any
+    // bucket segment, because different providers put it in different places:
+    //
+    //   MinIO   http://minio:9000/media        (bucket in the path)
+    //   R2      https://pub-<id>.r2.dev        (bucket is the hostname)
+    //
+    // Folding that difference into one variable is what lets the same build
+    // run against either without the database knowing which.
+    const media =
+      process.env.MEDIA_ORIGIN ??
+      `${process.env.INTERNAL_MEDIA_URL ?? "http://minio:9000"}/media`;
     return [
       { source: "/api/:path*", destination: `${api}/api/:path*` },
-      { source: "/media/:path*", destination: `${media}/media/:path*` },
+      { source: "/media/:path*", destination: `${media}/:path*` },
     ];
   },
   async redirects() {

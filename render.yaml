@@ -1,0 +1,104 @@
+# The API and its cache, as one blueprint.
+#
+# Vercel hosts the storefront; it does not host this. FastAPI here is a
+# long-lived process with a Postgres connection pool, a Redis client and
+# Alembic migrations that run before it serves — none of which survive being
+# chopped into serverless invocations. See docs/DEPLOY.md for the reasoning.
+#
+# Everything secret is marked `sync: false`, which means Render prompts for it
+# once and never puts it in this file. Nothing here should ever hold a key.
+
+services:
+  - type: web
+    name: mostyle-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter
+    region: frankfurt # closest of Render's regions to Morocco
+    healthCheckPath: /health
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+
+      # ── Database ──────────────────────────────────────────────────────────
+      # Supabase, via its **pooled** connection string (port 6543). The direct
+      # 5432 endpoint gives every instance its own real Postgres connection and
+      # runs the project out of them; the pooler is what makes a small plan
+      # survive more than one deploy at a time.
+      #
+      # Must begin `postgresql+asyncpg://` — SQLAlchemy picks the driver from
+      # that prefix, and the string Supabase shows you starts `postgresql://`.
+      - key: DATABASE_URL
+        sync: false
+
+      # ── Cache, rate limits, alert debounce ───────────────────────────────
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: mostyle-cache
+          property: connectionString
+
+      # ── Identity ─────────────────────────────────────────────────────────
+      # No signing secret: Supabase signs, this only verifies against the
+      # project's public JWKS.
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+
+      # ── Photographs: Cloudflare R2, over the S3 API ──────────────────────
+      # R2 is S3-compatible for objects, so the same client talks to it.
+      # `MINIO_PUBLIC_ENDPOINT` is unused now that stored URLs are relative,
+      # and is left unset on purpose.
+      - key: MINIO_ENDPOINT
+        sync: false # <account-id>.r2.cloudflarestorage.com
+      - key: MINIO_ACCESS_KEY
+        sync: false
+      - key: MINIO_SECRET_KEY
+        sync: false
+      - key: MINIO_USE_SSL
+        value: "true"
+      - key: MEDIA_BUCKET
+        sync: false
+
+      # ── Links inside emails ──────────────────────────────────────────────
+      # The public storefront address. Every tracking link is built from it, so
+      # getting it wrong sends customers to a page that does not exist.
+      - key: APP_URL
+        sync: false
+      - key: APP_NAME
+        value: MoStyle
+
+      # ── Outgoing mail ────────────────────────────────────────────────────
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_TLS
+        value: "true"
+
+      - key: WHATSAPP_NUMBER
+        sync: false
+
+      # Owner-only copilot. Leave unset and that one screen is simply off —
+      # nothing customer-facing depends on it.
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+
+  - type: redis
+    name: mostyle-cache
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: allkeys-lru # it is a cache; evict rather than refuse writes
+    ipAllowList: [] # reachable only from inside Render
