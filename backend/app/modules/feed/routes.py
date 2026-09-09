@@ -15,7 +15,7 @@ from app.deps import DbSession, Lang, OptionalUser, Owner, Paging, Visitor
 from app.models import FEED_WEIGHT_COPY, FeedWeight, Product, SignalType
 from app.modules.catalog.schemas import ProductCard
 from app.modules.catalog.service import to_card
-from app.modules.feed import embeddings, engine, service
+from app.modules.feed import engine, service
 
 router = APIRouter(tags=["feed"])
 
@@ -197,7 +197,7 @@ async def preview_feed(
     return {"visitor": "neutral", "weights": coefficients, "items": [item.model_dump() for item in items]}
 
 
-@router.post("/admin/feed/embeddings")
+
 async def refresh_embeddings(db: DbSession, owner: Owner, force: bool = False) -> dict:
     """Re-embed whatever has changed. Safe to run as often as you like — the
     pieces whose words have not changed are skipped."""

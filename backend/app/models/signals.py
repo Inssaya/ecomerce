@@ -143,7 +143,6 @@ class FeedWeight(Base):
 #: `FEED_WEIGHT_COPY` below rather than by these names.
 DEFAULT_FEED_WEIGHTS: dict[str, float] = {
     "affinity": 1.0,
-    "semantic": 0.8,
     "popular": 0.4,
     "fresh": 0.3,
     "business": 0.5,
@@ -156,10 +155,6 @@ FEED_WEIGHT_COPY: dict[str, tuple[str, str]] = {
     "affinity": (
         "How much someone's own browsing decides what they see next.",
         "إلى أي حد يقرّر تصفّح الزائر ما سيراه بعد ذلك.",
-    ),
-    "semantic": (
-        "How much we show things that feel like what they liked, even from another category.",
-        "إلى أي حد نعرض ما يشبه ما أعجبه، ولو من فئة أخرى.",
     ),
     "popular": (
         "How much what everyone else is looking at this week counts.",

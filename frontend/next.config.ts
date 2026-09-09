@@ -33,6 +33,51 @@ const nextConfig: NextConfig = {
       })),
     ],
   },
+  /**
+   * The headers nginx used to add.
+   *
+   * They lived in `infra/nginx/conf.d/mostyle.conf`, which is only in the
+   * request path on a self-hosted deployment. Move the storefront to Vercel
+   * and nginx is gone — along with every one of these, silently, because
+   * nothing fails when a security header simply stops being sent.
+   *
+   * So they belong to the application rather than to one deployment of it.
+   * Declared here they hold on Vercel, on a VPS behind nginx, and anywhere
+   * else this app is ever run.
+   *
+   * Deliberately no Content-Security-Policy: a real one for this app has to
+   * allow Supabase, R2 and Next's own inline bootstrap, and a CSP written
+   * without testing each of those is a policy that either blocks sign-in or
+   * is so loose it protects nothing. It is worth doing properly, separately.
+   */
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          // A browser that has seen this refuses plain HTTP for a year, so it
+          // is only safe once the domain is confirmed working on HTTPS.
+          // Vercel serves HTTPS on every domain it hosts, custom ones
+          // included, so that condition is already met here.
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=31536000; includeSubDomains",
+          },
+          // The shop is never framed by anyone, including itself. This is what
+          // stops a copy being wrapped in someone else's page and the buyer
+          // typing their address into it.
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // A tracking token lives in the URL of the tracking page. Without
+          // this it travels in the Referer header to every off-site link the
+          // page carries — which is the whole credential for that order.
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          // An uploaded photograph must never be executed as script because a
+          // browser guessed at its type.
+          { key: "X-Content-Type-Options", value: "nosniff" },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     const api =
       process.env.INTERNAL_API_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://api:8000";

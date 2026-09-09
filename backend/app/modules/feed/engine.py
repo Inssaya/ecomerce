@@ -6,7 +6,6 @@ visitor's signals into the process and joining them by hand, which is both
 slower and the sort of thing that quietly becomes N+1.
 
     score = w_affinity · affinity(visitor, category)
-          + w_semantic · cosine(visitor_vector, product_embedding)
           + w_popular  · popularity_7d
           + w_fresh    · recency
           + w_business · business_boost
@@ -93,13 +92,6 @@ affinity_scaled AS (
     SELECT category_id, raw / NULLIF((SELECT MAX(raw) FROM affinity), 0) AS score
     FROM affinity
 ),
-visitor_vector AS (
-    SELECT AVG(e.embedding) AS centre
-    FROM signals s
-    JOIN product_embeddings e ON e.product_id = s.product_id
-    WHERE s.visitor_id = :visitor
-      AND s.created_at > now() - make_interval(days => :window_days)
-),
 popularity AS (
     SELECT product_id, SUM(weight) AS raw
     FROM signals
@@ -119,10 +111,6 @@ SELECT
     p.id AS product_id,
     p.category_id,
     COALESCE(a.score, 0)                                        AS affinity,
-    CASE
-        WHEN v.centre IS NULL OR e.embedding IS NULL THEN 0
-        ELSE GREATEST(0, 1 - (e.embedding <=> v.centre))
-    END                                                          AS semantic,
     COALESCE(pop.raw, 0) / NULLIF((SELECT MAX(raw) FROM popularity), 0) AS popular,
     -- Freshness halves every 30 days, so "new" fades instead of cliff-edging.
     POWER(0.5, EXTRACT(EPOCH FROM (now() - p.created_at)) / 86400.0 / 30.0) AS fresh,
@@ -131,9 +119,7 @@ SELECT
     -- then the visitor has already decided.
     LN(1 + COALESCE(f.shown, 0))                                 AS fatigue
 FROM products p
-CROSS JOIN visitor_vector v
 LEFT JOIN affinity_scaled a ON a.category_id = p.category_id
-LEFT JOIN product_embeddings e ON e.product_id = p.id
 LEFT JOIN popularity pop ON pop.product_id = p.id
 LEFT JOIN fatigue f ON f.product_id = p.id
 -- Published is the whole condition. This used to also demand either
@@ -183,7 +169,6 @@ async def score_all(db: AsyncSession, visitor_id: str) -> list[Scored]:
     for row in rows:
         score = (
             coefficients["affinity"] * float(row["affinity"] or 0)
-            + coefficients["semantic"] * float(row["semantic"] or 0)
             + coefficients["popular"] * float(row["popular"] or 0)
             + coefficients["fresh"] * float(row["fresh"] or 0)
             + coefficients["business"] * float(row["business"] or 1)

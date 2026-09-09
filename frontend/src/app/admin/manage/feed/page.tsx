@@ -200,26 +200,6 @@ export default function Feed() {
               {dirty ? <p className="console-note">Save the levers to see this reorder.</p> : null}
             </Card>
           </div>
-
-          <Card>
-            <CardHead
-              title="Semantic search"
-              sub="Similar-feeling pieces are the second-heaviest term in the ranking — but only for pieces that have been read."
-              actions={
-                <Button
-                  size="sm"
-                  icon="refresh"
-                  disabled={busy}
-                  onClick={() => void mutate(() => api.refreshEmbeddings(false), { invalidates: ["feedChanged"] })}
-                >
-                  Read what changed
-                </Button>
-              }
-            />
-            <p className="console-muted">
-              Run this after adding or rewording pieces. Anything whose words have not changed is skipped.
-            </p>
-          </Card>
         </Stale>
       ) : null}
     </>

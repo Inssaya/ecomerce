@@ -5,14 +5,14 @@
  *
  * Aptiv's whole admin is four dock items covering eight areas, and it stays
  * simple because a door can carry two faces and one door holds everything
- * administrative. This is the same shape, one door wider: Board · Orders ·
- * Assistant · Manage · Logs. Sections inside them are real routes —
- * deep-linkable — they just are not doors.
+ * administrative. This is the same shape: Board · Orders · Manage · Logs.
+ * Sections inside them are real routes — deep-linkable — they just are not
+ * doors.
  *
  * Nav adapts rather than picking a side: a labelled rail on a laptop, an
- * icon rail on a tablet, a bottom bar on a phone. On a phone the row is now
- * five doors plus "More" — the row still flexes to fit, same as it did at
- * four; see the `.console-nav-item { flex: 1 }` rule in console.css.
+ * icon rail on a tablet, a bottom bar on a phone. The row flexes to fit
+ * however many doors there are; see `.console-nav-item { flex: 1 }` in
+ * console.css.
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -29,7 +29,6 @@ import { ConsoleThemeProvider, useConsoleTheme } from "./ui/theme";
 const DOORS: { href: string; label: string; icon: IconName; owns: string[] }[] = [
   { href: "/admin", label: "Board", icon: "board", owns: ["/admin", "/admin/make"] },
   { href: "/admin/orders", label: "Orders", icon: "orders", owns: ["/admin/orders"] },
-  { href: "/admin/assistant", label: "Assistant", icon: "assistant", owns: ["/admin/assistant"] },
   { href: "/admin/manage", label: "Manage", icon: "manage", owns: ["/admin/manage"] },
   { href: "/admin/logs", label: "Logs", icon: "shield", owns: ["/admin/logs"] },
 ];

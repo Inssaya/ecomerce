@@ -204,10 +204,15 @@ async def test_the_weights_are_readable_and_explained(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
     """The panel should make the owner better at running the shop, not just
-    show six sliders with cryptic names."""
+    show sliders with cryptic names.
+
+    `semantic` is deliberately not in this set any more. It scored how close a
+    piece sat to what a visitor had liked, in meaning-space, and it needed an
+    embedding API the shop no longer has — so the lever went with the AI.
+    """
     english = (await client.get("/api/admin/feed/weights", headers=owner_headers)).json()
     assert {item["key"] for item in english} == {
-        "affinity", "semantic", "popular", "fresh", "business", "fatigue"
+        "affinity", "popular", "fresh", "business", "fatigue"
     }
     assert all(item["explains"] for item in english)
 
@@ -287,62 +292,11 @@ async def test_the_levers_are_the_owners_alone(client: AsyncClient) -> None:
         await client.put("/api/admin/feed/weights", json=[{"key": "fresh", "value": 5}])
     ).status_code == 401
 
-
-async def test_embedding_refresh_reports_itself_unavailable_without_a_key(
-    client: AsyncClient, owner_headers: dict[str, str], monkeypatch
-) -> None:
-    """No API key means every AI feature says so, rather than degrading to a
-    guess.
-
-    The absence of a key is forced rather than assumed. This test used to
-    depend on the ambient environment having none, so it passed on a laptop
-    and failed the moment it ran anywhere a real `LLM_API_KEY` was set —
-    including the shop's own dev stack, where it reported 0 and looked like a
-    regression in the embedding code rather than a test reading its own
-    surroundings.
-    """
-    monkeypatch.setattr("app.core.llm.is_configured", lambda: False)
-    await publish(client, owner_headers, title="Something")
-    response = await client.post("/api/admin/feed/embeddings", headers=owner_headers)
-    assert response.status_code == 200
-    assert response.json()["unavailable"] == 1
-
-
-# ── The half of the ranking that was switched off ─────────────────────────────
-
-
-async def test_publishing_a_piece_puts_it_into_meaning_space(
-    client: AsyncClient, owner_headers: dict[str, str], monkeypatch
-) -> None:
-    """The feed weights `cosine(visitor_vector, product_embedding)` at 0.8 —
-    second only to a visitor's own affinity — and for a long time nothing in
-    the application ever wrote a product embedding. The column, the index and
-    the SQL term all existed and the term was multiplied by zero for every
-    piece in the shop.
-
-    This asserts the caller exists. It does not assert the vector is any good;
-    that is the model's job.
-    """
-    called: list[bool] = []
-
-    async def spy(db, *, force: bool = False) -> dict[str, int]:
-        called.append(True)
-        return {"embedded": 0, "skipped": 0}
-
-    monkeypatch.setattr("app.modules.catalog.routes.embeddings.refresh", spy)
-
-    created = await client.post(
-        "/api/admin/products",
-        headers=owner_headers,
-        json={"title_en": "A new hook", "title_ar": "خطاف", "price": 90},
-    )
-    assert created.status_code == 201
-    assert called, "creating a piece must schedule an embedding"
-
-    called.clear()
-    await client.patch(
-        f"/api/admin/products/{created.json()['id']}",
-        headers=owner_headers,
-        json={"description_en": "Rewritten, which changes what it means."},
-    )
-    assert called, "rewriting a piece must re-embed it"
+# The two tests that lived here covered the embedding refresh endpoint and the
+# semantic ranking term. Both are gone with the AI: `product_embeddings` never
+# held a row in its life — no embedding key was ever configured — so the term
+# was multiplied by zero for every piece in the shop, and removing it changed
+# no ranking that has ever actually run.
+#
+# What the feed is scored on now is affinity, popularity, freshness, the
+# owner's own boost and fatigue, and every one of those is covered above.

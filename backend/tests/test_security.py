@@ -104,11 +104,10 @@ async def test_a_script_dressed_as_a_photo_is_refused(
 # being allowed in. Both are in `test_access_control.py`.
 
 
-# The rate limit protecting `/api/assistant` from draining the AI budget was
-# tested here. That endpoint was the buyer-facing concierge, which is gone —
-# and with it the only unauthenticated route that spent money at a provider.
-# The owner's copilot is behind `require_owner`, so a stranger cannot reach
-# it to run up a bill in the first place.
+# Two rate limits were tested here, both protecting an AI budget: one on the
+# buyer-facing concierge and one on the owner's copilot. Neither endpoint
+# exists any more — the shop has no AI at all — so there is no provider left
+# to run up a bill at, and nothing to limit.
 
 
 async def test_orders_cannot_be_flooded(

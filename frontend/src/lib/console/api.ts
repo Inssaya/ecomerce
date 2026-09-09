@@ -10,7 +10,6 @@ import type {
   AttributeSuggestions,
   BlockEntry,
   ContactMessage,
-  CopilotAnswer,
   Customer,
   CustomerAnalytics,
   Decide,
@@ -256,19 +255,10 @@ export const api = {
 
   // ── Feed ───────────────────────────────────────────────────────────────────
   feedWeights: () => call<FeedWeight[]>("/admin/feed/weights"),
-  /** Always the full set of six — the server writes them in one transaction. */
+  /** Always the full set the server knows about, written in one transaction. */
   setFeedWeights: (weights: { key: string; value: number }[]) =>
     call<FeedWeight[]>("/admin/feed/weights", { method: "PUT", body: JSON.stringify(weights) }),
   feedPreview: (limit = 20) => call<FeedPreview>(`/admin/feed/preview?limit=${limit}`),
-  refreshEmbeddings: (force = false) =>
-    call<{ embedded: number; skipped: number; unavailable: number }>(
-      `/admin/feed/embeddings?force=${force}`,
-      { method: "POST" },
-    ),
-
-  // ── Assistant ──────────────────────────────────────────────────────────────
-  copilot: (messages: { role: string; content: string }[]) =>
-    call<CopilotAnswer>("/admin/copilot", { method: "POST", body: JSON.stringify({ messages }) }),
 };
 
 export * from "./types";

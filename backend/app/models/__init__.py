@@ -1,7 +1,6 @@
 """Every model in one package, so Alembic sees the whole schema at once."""
 from app.models.base import BilingualMixin, TimestampMixin, new_id, uuid_fk, uuid_pk
 from app.models.catalog import (
-    EMBEDDING_DIMENSIONS,
     AttributeGroup,
     Category,
     DiscountKind,
@@ -9,7 +8,6 @@ from app.models.catalog import (
     Piece,
     Product,
     ProductAttribute,
-    ProductEmbedding,
     ProductInteraction,
     ProductMedia,
     ProductStatus,
@@ -57,7 +55,6 @@ __all__ = [
     "DEFAULT_FEED_WEIGHTS",
     "FEED_WEIGHT_COPY",
     "ALLOWED_TRANSITIONS",
-    "EMBEDDING_DIMENSIONS",
     "FeedWeight",
     "MAX_DWELL_WEIGHT",
     "SIGNAL_WEIGHTS",
@@ -75,7 +72,6 @@ __all__ = [
     "Piece",
     "Product",
     "ProductAttribute",
-    "ProductEmbedding",
     "ProductInteraction",
     "ProductMedia",
     "ProductStatus",

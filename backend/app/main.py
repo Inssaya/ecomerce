@@ -19,12 +19,10 @@ from sqlalchemy import text
 from app.config import settings
 from app.core.cache import close_redis, get_redis
 from app.core.limits import client_ip
-from app.core.llm import close_client
 from app.core.storage import ensure_bucket
 from app.db import SessionLocal, engine
 from app.deps import visitor_id as read_visitor_id
 from app.modules.admin.routes import router as admin_router
-from app.modules.ai.routes import router as ai_router
 from app.modules.auth.routes import router as auth_router
 from app.modules.catalog.routes import router as catalog_router
 from app.modules.contact.routes import router as contact_router
@@ -79,7 +77,6 @@ async def lifespan(app: FastAPI):
     logger.info("%s API ready", settings.app_name)
     yield
     await close_redis()
-    await close_client()
     await engine.dispose()
 
 
@@ -166,7 +163,6 @@ api.include_router(requests_router)
 api.include_router(feed_router)
 api.include_router(local_router)
 api.include_router(admin_router)
-api.include_router(ai_router)
 api.include_router(security_router)
 api.include_router(settings_router)
 app.include_router(api)

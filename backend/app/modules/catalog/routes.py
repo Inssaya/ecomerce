@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
@@ -45,7 +45,6 @@ from app.modules.catalog.schemas import (
     VariantWrite,
     check_discount,
 )
-from app.modules.feed import embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -220,34 +219,6 @@ async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
 # ── Products, owner ───────────────────────────────────────────────────────────
 
 
-async def _reembed() -> None:
-    """Put the piece into meaning-space, after the response has gone.
-
-    This was the missing caller. The feed's ranking function weights
-    `cosine(visitor_vector, product_embedding)` at 0.8 — second only to a
-    visitor's own affinity — but nothing in the application had ever written a
-    product embedding. The column existed, the index existed, the term was in
-    the SQL, and it was multiplied by zero for every piece in the shop. Half of
-    what makes the store narrow around a visitor was switched off.
-
-    It runs in the background because embedding calls an external model, and
-    the owner pressing "publish" should not wait on it. It is idempotent and
-    skips anything whose words have not changed, so calling it on every save
-    costs one query and no money. It uses its own session — the request's is
-    closed by the time this runs.
-    """
-    from app.db import SessionLocal
-
-    try:
-        async with SessionLocal() as db:
-            result = await embeddings.refresh(db)
-        if result.get("embedded"):
-            logger.info("Embedded %s pieces", result["embedded"])
-    except Exception as exc:
-        # A piece that is not embedded is still for sale; it just ranks on
-        # everything except meaning until the next save or backfill.
-        logger.warning("Could not refresh embeddings: %s", exc)
-
 
 async def _admin_view(db: DbSession, product_id: str) -> ProductAdmin:
     """Read the piece back with everything the console shows.
@@ -320,7 +291,7 @@ async def list_products_admin(
 
 @router.post("/admin/products", response_model=ProductAdmin, status_code=status.HTTP_201_CREATED)
 async def create_product(
-    body: ProductWrite, db: DbSession, owner: Owner, background: BackgroundTasks
+    body: ProductWrite, db: DbSession, owner: Owner
 ) -> ProductAdmin:
     if body.category_id:
         await get_or_404(db, Category, body.category_id, detail="Category not found")
@@ -333,13 +304,12 @@ async def create_product(
     )
     db.add(product)
     await db.commit()
-    background.add_task(_reembed)
     return await _admin_view(db, product.id)
 
 
 @router.patch("/admin/products/{product_id}", response_model=ProductAdmin)
 async def update_product(
-    product_id: str, body: ProductPatch, db: DbSession, owner: Owner, background: BackgroundTasks
+    product_id: str, body: ProductPatch, db: DbSession, owner: Owner
 ) -> ProductAdmin:
     product = await get_or_404(
         db, Product, product_id, detail="Product not found", options=service.LOADED
@@ -373,8 +343,6 @@ async def update_product(
     for field, value in changes.items():
         setattr(product, field, value)
     await db.commit()
-    # Publishing, renaming or rewriting a piece all change what it means.
-    background.add_task(_reembed)
     return await _admin_view(db, product.id)
 
 

@@ -41,7 +41,6 @@ from __future__ import annotations
 from datetime import date, datetime
 from enum import Enum as PyEnum
 
-from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
     Boolean,
     Date,
@@ -61,11 +60,6 @@ from sqlalchemy.sql import func
 
 from app.db import Base
 from app.models.base import BilingualMixin, TimestampMixin, uuid_fk, uuid_pk
-
-#: Dimension of the product embeddings — text-embedding-3-small, the model the
-#: AI phases use. Changing it needs a migration and a re-embed.
-EMBEDDING_DIMENSIONS = 1536
-
 
 class ProductStatus(str, PyEnum):
     draft = "draft"
@@ -230,9 +224,6 @@ class Product(Base, TimestampMixin, BilingualMixin):
     )
     pieces: Mapped[list[Piece]] = relationship(
         back_populates="product", cascade="all, delete-orphan", order_by="Piece.number"
-    )
-    embedding: Mapped[ProductEmbedding | None] = relationship(
-        back_populates="product", cascade="all, delete-orphan", uselist=False
     )
 
     def description(self, lang: str) -> str:
@@ -463,42 +454,3 @@ class ProductMedia(Base):
 
     product: Mapped[Product] = relationship(back_populates="media")
 
-
-class ProductEmbedding(Base):
-    """Where a piece sits in meaning-space.
-
-    Kept out of `products` on purpose: the vector is 6 KB, it is rewritten on a
-    different schedule from the row, and a listing query would otherwise drag
-    it across the wire once per card for nothing.
-
-    It buys reach the category tree cannot express. "Minimal", "vintage",
-    "matte black" are not branches — they are directions.
-    """
-
-    __tablename__ = "product_embeddings"
-    __table_args__ = (
-        # Declared here rather than only in the migration, so the models stay
-        # the single description of the schema and autogenerate does not keep
-        # proposing to drop an index it cannot see.
-        Index(
-            "ix_product_embeddings_cosine",
-            "embedding",
-            postgresql_using="ivfflat",
-            postgresql_ops={"embedding": "vector_cosine_ops"},
-            postgresql_with={"lists": "10"},
-        ),
-    )
-
-    product_id: Mapped[str] = mapped_column(
-        UUID(as_uuid=False), ForeignKey("products.id", ondelete="CASCADE"), primary_key=True
-    )
-    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS), nullable=False)
-    model: Mapped[str] = mapped_column(String(80), nullable=False)
-    # Hash of the text that was embedded, so a re-embed is skipped when the
-    # copy has not changed. Embedding calls cost money and rate-limit.
-    source_hash: Mapped[str] = mapped_column(String(64), nullable=False)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
-    )
-
-    product: Mapped[Product] = relationship(back_populates="embedding")

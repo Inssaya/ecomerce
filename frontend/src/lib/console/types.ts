@@ -476,10 +476,3 @@ export interface FeedPreview {
   items: { product_id: string; title: string; slug: string; score: number; terms: Record<string, number> }[];
 }
 
-export interface CopilotAnswer {
-  reply: string;
-  actions: unknown[];
-  /** Which tools ran. The copilot's credibility rests on every number
-   *  coming from a tool result, so it is shown, not hidden. */
-  trace: { tool: string; ok: boolean; duration_ms: number }[];
-}
