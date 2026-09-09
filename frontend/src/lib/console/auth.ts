@@ -19,11 +19,6 @@ export function ownerToken(): string | null {
   return readSession()?.token ?? null;
 }
 
-/** True only for the account that may open the console. */
-export function isOwner(): boolean {
-  return readSession()?.role === "owner";
-}
-
 function keepSession(accessToken: string): void {
   const current = readSession();
   if (!current) return;

@@ -18,7 +18,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 
-import { isOwner, ownerToken, signOut, SIGNED_OUT_EVENT } from "@/lib/console/auth";
+import { call, ownerToken, signOut, SIGNED_OUT_EVENT } from "@/lib/console/auth";
+import { patchSession, watchAuth } from "@/lib/session";
 import { clearAllDrafts } from "@/lib/console/draft";
 
 import { ConfirmProvider } from "./ui/primitives";
@@ -53,12 +54,52 @@ export function AdminShell({ children }: { children: ReactNode }) {
    * where they were headed rather than on the shop wall.
    */
   useEffect(() => {
-    if (ownerToken() && isOwner()) {
-      setSignedIn(true);
-      return;
-    }
-    const here = window.location.pathname + window.location.search;
-    window.location.replace(`/en/account?next=${encodeURIComponent(here)}`);
+    let cancelled = false;
+
+    // Supabase renews the access token in the background and the renewed one
+    // is what every later request must carry. The storefront mounts this in
+    // `Chrome`, which the console deliberately does not render — so without
+    // it here the console held the original token until it expired and only
+    // recovered on the round trip after a request had already failed.
+    const stopWatching = watchAuth();
+
+    const bounce = () => {
+      const here = window.location.pathname + window.location.search;
+      window.location.replace(`/en/account?next=${encodeURIComponent(here)}`);
+    };
+
+    void (async () => {
+      if (!ownerToken()) {
+        bounce();
+        return;
+      }
+      try {
+        // Asked of the server rather than read from the stored copy.
+        //
+        // The stored `role` is a cache, and it is filled in by one call at
+        // sign-in that can fail: if it did, the owner was left with a session
+        // saying "not the owner", bounced here to the sign-in page, which saw
+        // a live session and sent them to their profile — a loop with no way
+        // out but signing out and in again. Asking here heals that, and it
+        // also means an owner whose role is taken away loses the console on
+        // their next visit rather than keeping a stale yes in local storage.
+        const me = await call<{ role?: string | null }>("/auth/me");
+        if (cancelled) return;
+        if (me.role === "owner") {
+          patchSession({ role: me.role });
+          setSignedIn(true);
+        } else {
+          bounce();
+        }
+      } catch {
+        if (!cancelled) bounce();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      stopWatching();
+    };
   }, []);
 
   // The session died mid-task. The owner is sent back to the one sign-in
