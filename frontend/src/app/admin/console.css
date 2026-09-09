@@ -205,6 +205,14 @@
   /* Proportional figures on purpose: tabular makes a display number loose. */
   font-variant-numeric: proportional-nums;
 }
+/* The Board's lead runs "3 people are waiting on a price." as one sentence:
+   the figure at display size, the words that complete it at reading size and
+   weight, on the same line. */
+.console-lead-tail {
+  font: var(--w-regular) var(--t-lg) / var(--t-lg-lh) var(--font-body);
+  color: var(--ink2);
+  letter-spacing: 0;
+}
 .console-metric {
   font: var(--w-semi) var(--t-metric) / var(--t-metric-lh) var(--font-body);
   letter-spacing: -0.015em;
