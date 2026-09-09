@@ -63,6 +63,13 @@ const copy = {
   haveAccount: ["Already have an account?", "لديك حساب بالفعل؟"],
   needAccount: ["Need an account?", "تحتاج حساباً؟"],
   signInFailed: ["That email and password do not match.", "البريد وكلمة السر غير متطابقين."],
+  // Shown when the failure never reached the server at all. Saying "that
+  // email and password do not match" here sends somebody off to check a
+  // password that was never the problem — the shop was simply unreachable.
+  couldNotReach: [
+    "We couldn't reach the shop. Check your connection and try again.",
+    "تعذّر الوصول إلى المتجر. تحقّق من اتصالك وحاول مرّة أخرى.",
+  ],
 
   // An account is a delivery address you only type once.
   signUpLead: [

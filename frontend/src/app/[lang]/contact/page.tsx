@@ -1,17 +1,23 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { ContactComposer } from "@/components/ContactComposer";
 import { FALLBACK_CONTACT } from "@/lib/contact";
 import { type Lang, isLang, translator } from "@/lib/i18n";
-import { alternates, contact, siteUrl, workshopPhone } from "@/lib/server";
+import { alternates, contact, siteUrl } from "@/lib/server";
 
 /**
  * Where the workshop can be reached.
  *
- * Three ways in: the form, WhatsApp, email. The buyer-facing AI concierge
- * that used to sit in a card on this page has been removed — it was a
- * customer-facing chat feature the shop no longer offers.
+ * One way in: the form. There used to be two cards beside it — "Open
+ * WhatsApp" and "Send email" — which were the same message asked for twice.
+ * A visitor who has already written what they want does not want to be
+ * handed a choice of apps to retype it into, and anything sent that way
+ * arrives outside the shop entirely, so nothing in the console knows it
+ * happened. The form sends, the workshop is emailed, and the sender gets a
+ * receipt.
+ *
+ * The phone number and address still appear, in the footer, as text somebody
+ * can read and dial — which is what a "contact us" card was pretending to be.
  */
 export const revalidate = 3600;
 
@@ -47,8 +53,6 @@ export default async function ContactPage({
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
   const ar = lang === "ar";
-  const digits = workshopPhone?.replace(/\D/g, "") ?? null;
-  const whatsappHref = digits ? `https://wa.me/${digits}` : null;
   const shopContact = (await contact(lang)) ?? FALLBACK_CONTACT;
   const emailHref = `mailto:${shopContact.email}`;
 
@@ -61,48 +65,24 @@ export default async function ContactPage({
           and for the page outline, and nowhere else. */}
       <h1 className="sr-only">{t("navContact")}</h1>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
-        <ContactComposer lang={lang} whatsappNumber={digits} contactEmail={shopContact.email} />
+      <div className="mx-auto max-w-[720px]">
+        <ContactComposer lang={lang} />
 
-        <aside className="space-y-4">
-          <Panel
-            title="WhatsApp"
-            body={ar ? "أسرع طريقة، ومناسبة للصور السريعة والملاحظات القصيرة." : "Fastest for photos and quick notes."}
-            action={ar ? "افتح WhatsApp" : "Open WhatsApp"}
-            href={whatsappHref ?? `/${lang}/ask`}
-          />
-          <Panel
-            title="Email"
-            body={ar ? "أفضل للرسائل الطويلة أو الملفات والشرح الهادئ." : "Best for longer notes, files and a calmer brief."}
-            action={ar ? "أرسل بريدًا" : "Send email"}
-            href={emailHref}
-          />
-        </aside>
+        {/* The details as text, for somebody who would rather just dial. Not a
+            card pretending to be an action — a phone number you can read. */}
+        <p className="mt-5 text-center text-[14px] leading-relaxed text-ink-soft">
+          {ar ? "أو اتصل بنا مباشرة: " : "Or reach us directly: "}
+          {shopContact.phone ? (
+            <a href={`tel:${shopContact.phone}`} className="underline underline-offset-4">
+              {shopContact.phone}
+            </a>
+          ) : null}
+          {shopContact.phone ? " · " : null}
+          <a href={emailHref} className="underline underline-offset-4">
+            {shopContact.email}
+          </a>
+        </p>
       </div>
     </div>
-  );
-}
-
-function Panel({
-  title,
-  body,
-  action,
-  href,
-}: {
-  title: string;
-  body: string;
-  action: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="block rounded-2xl border border-sand bg-surface p-5
-                 transition-all duration-300 hover:-translate-y-0.5 hover:border-ink"
-    >
-      <h2 className="text-[16px] font-semibold">{title}</h2>
-      <p className="mt-1.5 text-[14px] leading-relaxed text-ink-soft">{body}</p>
-      <p className="mt-3 text-[14px] font-medium text-clay">{action} →</p>
-    </Link>
   );
 }

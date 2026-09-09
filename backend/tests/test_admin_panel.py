@@ -353,18 +353,35 @@ async def test_contact_message_lands_in_the_admin_inbox(
     assert inbox[0]["read_at"] is None
 
 
-async def test_contact_message_needs_a_way_back(client: AsyncClient) -> None:
-    """Email and phone are each optional, but a message with neither is a
-    message the workshop cannot reply to."""
-    sent = await client.post("/api/contact", json={"name": "Youssef", "message": "Hello"})
-    assert sent.status_code == 422
+async def test_contact_message_needs_an_email(client: AsyncClient) -> None:
+    """The address is required, not "email or phone, whichever you have".
+
+    It is where the acknowledgement goes and where the reply comes from, so a
+    message without one is a message the sender cannot be told arrived.
+    """
+    no_address = await client.post(
+        "/api/contact", json={"name": "Youssef", "message": "Hello there"}
+    )
+    assert no_address.status_code == 422
+
+    phone_only = await client.post(
+        "/api/contact",
+        json={"name": "Youssef", "phone": "0611111111", "message": "Hello there"},
+    )
+    assert phone_only.status_code == 422
 
 
 async def test_owner_can_mark_a_message_read(
     client: AsyncClient, owner_headers: dict[str, str]
 ) -> None:
     await client.post(
-        "/api/contact", json={"name": "Youssef", "phone": "0611111111", "message": "Hello"}
+        "/api/contact",
+        json={
+            "name": "Youssef",
+            "email": "youssef@example.com",
+            "phone": "0611111111",
+            "message": "Hello there",
+        },
     )
     inbox = (await client.get("/api/admin/contact-messages", headers=owner_headers)).json()
     message_id = inbox[0]["id"]

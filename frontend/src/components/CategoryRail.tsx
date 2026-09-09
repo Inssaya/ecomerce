@@ -90,8 +90,12 @@ function RailIcon({
         onClick={onClick}
         aria-pressed={on}
         aria-label={root.name}
-        className={`flex h-11 w-11 items-center justify-center rounded-full transition-colors duration-200 ${
-          on ? "bg-ink text-white" : "text-ink-soft hover:bg-clay-soft hover:text-ink"
+        className={`flex h-11 items-center justify-center rounded-full border transition-colors duration-200 ${
+          root.icon_url ? "w-11" : "min-w-11 px-2.5"
+        } ${
+          on
+            ? "border-ink bg-ink text-white"
+            : "border-sand bg-surface/80 text-ink-soft hover:border-ink hover:bg-clay-soft hover:text-ink"
         }`}
       >
         {root.icon_url ? (
@@ -108,8 +112,18 @@ function RailIcon({
             />
           </span>
         ) : (
-          // No icon set yet: the initial, so the mark is never a blank circle.
-          <span className="text-[13px] font-semibold">{root.name.charAt(0)}</span>
+          // No icon set. This used to fall back to the first letter, which is
+          // how the whole rail rendered — a column of orphan letters,
+          // "3 L M T G", floating at the edge of the page with no border, no
+          // label and nothing to say they were a control at all. It read as a
+          // rendering fault, and it meant the shop had no usable filter on a
+          // desktop: the filter button hides itself at this width precisely
+          // because the rail is supposed to be doing this job.
+          //
+          // So when there is no mark to draw, the name is the mark.
+          <span className="px-1 text-[11px] font-semibold leading-tight text-center">
+            {root.name.split(" ")[0]}
+          </span>
         )}
       </button>
 

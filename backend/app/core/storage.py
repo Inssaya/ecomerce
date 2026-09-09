@@ -105,7 +105,22 @@ async def ensure_bucket() -> None:
 
 
 async def upload_image(data: bytes, content_type: str, *, prefix: str) -> str:
-    """Store an image and return the URL the browser will load it from."""
+    """Store an image and return the path the browser will load it from.
+
+    The returned URL is deliberately **relative** — `/media/…` — because the
+    web server proxies `/media/*` to MinIO on whatever host the visitor is
+    actually using. An absolute one is wrong the moment the host is not the
+    one that happened to be configured when the row was written: every image
+    stored here used to begin `http://localhost:3000`, so opening the shop
+    from a phone on the same network, or from the real domain, loaded nothing
+    at all — the browser looked for `localhost` on the visitor's own machine.
+    A relative path is correct on every host at once, and it means the
+    database survives a domain change without a rewrite.
+
+    Where an absolute URL is genuinely needed — OpenGraph and JSON-LD — Next
+    resolves it against `metadataBase`, and email links are built from
+    `settings.app_url` rather than from here.
+    """
     extension = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}[content_type]
     object_name = f"{prefix}/{uuid.uuid4()}.{extension}"
 
@@ -119,8 +134,7 @@ async def upload_image(data: bytes, content_type: str, *, prefix: str) -> str:
         )
 
     await asyncio.to_thread(_put)
-    scheme = "https" if settings.minio_use_ssl else "http"
-    return f"{scheme}://{settings.minio_public_endpoint}/{settings.media_bucket}/{object_name}"
+    return f"/{settings.media_bucket}/{object_name}"
 
 
 async def delete_object(url: str) -> None:

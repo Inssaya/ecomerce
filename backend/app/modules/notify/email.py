@@ -157,6 +157,67 @@ async def send_password_reset(*, to: str, lang: str, reset_url: str) -> bool:
     return await send_email(to, subject, html)
 
 
+async def send_contact_ack(*, to: str, name: str, lang: str, message: str) -> bool:
+    """Tell somebody their message actually arrived.
+
+    A contact form that saves silently and shows a line of green text asks the
+    sender to trust that a stranger's server did something. An email is the
+    receipt — it is also the thing they can reply to, and it proves the address
+    they typed was right, which is the address we are about to answer on.
+    """
+    quoted = message.strip()
+    if len(quoted) > 600:
+        quoted = quoted[:600].rstrip() + "…"
+
+    if lang == "ar":
+        return await send_email(
+            to,
+            f"وصلتنا رسالتك — {settings.app_name}",
+            _layout(
+                lang="ar",
+                heading="وصلتنا رسالتك",
+                blocks=[
+                    f"شكراً {name}. وصلتنا رسالتك وسنرد عليك في أقرب وقت ممكن.",
+                    "هذا ما أرسلته:",
+                    f'<span style="color:#6b7280;">{quoted}</span>',
+                ],
+            ),
+        )
+    return await send_email(
+        to,
+        f"We got your message — {settings.app_name}",
+        _layout(
+            lang="en",
+            heading="We got your message",
+            blocks=[
+                f"Thanks {name}. Your message reached the workshop, and we will reply as soon as we can.",
+                "This is what you sent:",
+                f'<span style="color:#6b7280;">{quoted}</span>',
+            ],
+        ),
+    )
+
+
+async def send_contact_alert(
+    *, to: list[str], name: str, email: str, phone: str, message: str
+) -> bool:
+    """And tell the workshop, so a message is not only found by logging in."""
+    if not to:
+        return False
+    return await send_email(
+        ", ".join(to),
+        f"Message from {name} — {settings.app_name}",
+        _layout(
+            lang="en",
+            heading=f"{name} sent a message",
+            blocks=[
+                f"Reply to: {email}" + (f" · {phone}" if phone else ""),
+                message.strip(),
+            ],
+        ),
+    )
+
+
 async def send_order_update(
     *,
     to: str,

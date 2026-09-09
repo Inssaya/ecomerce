@@ -7,6 +7,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useCart, type CartSelection } from "@/components/CartProvider";
 import {
   api,
+  ApiError,
   type InteractionState,
   type PieceAttribute,
   type PieceDetail,
@@ -60,6 +61,7 @@ export function PieceView({
   const [personalization, setPersonalization] = useState<string>("");
   const [interactions, setInteractions] = useState<InteractionState | null>(null);
   const [reacting, setReacting] = useState(false);
+  const [reactProblem, setReactProblem] = useState<string | null>(null);
 
   // Refresh in the browser so a cached page shows the current price and
   // whether this visitor already hearted or saved the piece.
@@ -98,6 +100,7 @@ export function PieceView({
     async (kind: "like" | "save") => {
       if (!piece || reacting) return;
       setReacting(true);
+      setReactProblem(null);
       // Optimistic: flip the visible state right away so the button feels
       // responsive on a Moroccan phone connection, and reconcile against the
       // server's response — which carries the true counts.
@@ -115,8 +118,18 @@ export function PieceView({
           ? await api.likePiece(lang, piece.slug)
           : await api.savePiece(lang, piece.slug);
         setInteractions(next);
-      } catch {
-        // Roll the optimistic flip back on failure.
+      } catch (error) {
+        // Roll the optimistic flip back on failure — and say so. This used to
+        // roll back in complete silence, so a like that did not take just
+        // un-filled itself half a second later with no explanation, which
+        // reads exactly like a button that does nothing.
+        setReactProblem(
+          error instanceof ApiError
+            ? error.message
+            : ar
+              ? "تعذّر الحفظ. تحقّق من اتصالك."
+              : "That didn't save. Check your connection.",
+        );
         try {
           const truth = await api.interactions(lang, piece.slug);
           setInteractions(truth);
@@ -127,7 +140,7 @@ export function PieceView({
         setReacting(false);
       }
     },
-    [lang, piece, reacting],
+    [ar, lang, piece, reacting],
   );
 
   if (!piece) {
@@ -419,6 +432,12 @@ export function PieceView({
               onClick={() => void toggle("save")}
             />
           </div>
+
+          {reactProblem ? (
+            <p role="alert" className="mt-2 text-[13.5px] text-warn">
+              {reactProblem}
+            </p>
+          ) : null}
 
           <p className="mt-3 text-[13.5px] text-ink-mute">
             {ar ? "الدفع نقداً عند التسليم" : "Cash on delivery"}

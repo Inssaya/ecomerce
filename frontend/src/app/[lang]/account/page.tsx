@@ -79,7 +79,13 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
       // The server already says what went wrong — wrong password, an email
       // already registered, a password too short — so show that instead of
       // one generic line that means something different every time.
-      setProblem(error instanceof ApiError ? error.message : t("signInFailed"));
+      //
+      // And when there is no server answer at all, say *that*. This used to
+      // fall back to "that email and password do not match", which on the
+      // create-an-account form is simply untrue: nothing was compared to
+      // anything. It sends somebody to re-check a password while the real
+      // problem is that the shop could not be reached.
+      setProblem(error instanceof ApiError ? error.message : t("couldNotReach"));
     } finally {
       setBusy(false);
     }
