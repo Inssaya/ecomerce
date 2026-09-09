@@ -16,12 +16,12 @@
  */
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 
-import { ownerToken, signIn, signOut, SIGNED_OUT_EVENT } from "@/lib/console/auth";
+import { isOwner, ownerToken, signOut, SIGNED_OUT_EVENT } from "@/lib/console/auth";
 import { clearAllDrafts } from "@/lib/console/draft";
 
-import { Button, ConfirmProvider, Field } from "./ui/primitives";
+import { ConfirmProvider } from "./ui/primitives";
 import { Icon, type IconName } from "./ui/icons";
 import { ConsoleThemeProvider, useConsoleTheme } from "./ui/theme";
 
@@ -37,14 +37,43 @@ export function AdminShell({ children }: { children: ReactNode }) {
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [expired, setExpired] = useState(false);
 
-  useEffect(() => setSignedIn(Boolean(ownerToken())), []);
+  /**
+   * There is no sign-in form here any more.
+   *
+   * The console used to carry its own — a second email-and-password page,
+   * under its own branding, writing its own token. One shop with two sign-ins
+   * is a thing the owner has to remember rather than a thing that helps them:
+   * signing in on the storefront did not sign you into the console, and the
+   * console could not tell it was already looking at an authenticated owner.
+   *
+   * Now the storefront's sign-in is the only one, and it sends an owner here
+   * on the strength of the role the server returns. Arriving without that
+   * role — signed out, or signed in as a shopper — bounces to the same
+   * sign-in page every other visitor uses, with `next` so the owner lands
+   * where they were headed rather than on the shop wall.
+   */
+  useEffect(() => {
+    if (ownerToken() && isOwner()) {
+      setSignedIn(true);
+      return;
+    }
+    const here = window.location.pathname + window.location.search;
+    window.location.replace(`/en/account?next=${encodeURIComponent(here)}`);
+  }, []);
 
-  // The session died mid-task. Overlay sign-in; do not unmount the page.
+  // The session died mid-task. The owner is sent back to the one sign-in
+  // page; `next` brings them straight back to the screen they were on.
   useEffect(() => {
     const onSignedOut = () => setExpired(true);
     window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
     return () => window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
   }, []);
+
+  useEffect(() => {
+    if (!expired) return;
+    const here = window.location.pathname + window.location.search;
+    window.location.replace(`/en/account?next=${encodeURIComponent(here)}`);
+  }, [expired]);
 
   return (
     <ConsoleThemeProvider>
@@ -57,18 +86,15 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   onSignOut={() => {
                     clearAllDrafts();
                     setSignedIn(false);
-                    void signOut();
+                    void signOut().finally(() => window.location.replace("/en"));
                   }}
                 />
                 <main className="console-main">
                   <div className="console-page">{children}</div>
                 </main>
               </div>
-              {expired ? <SignIn resuming onDone={() => setExpired(false)} /> : null}
             </>
-          ) : (
-            <SignIn onDone={() => setSignedIn(true)} />
-          )}
+          ) : null}
         </ConfirmProvider>
       </ConsoleRoot>
     </ConsoleThemeProvider>
@@ -155,102 +181,3 @@ function Rail({ onSignOut }: { onSignOut: () => void }) {
  * underneath, so this says so and hands the owner back exactly where they
  * were rather than pretending they just arrived.
  */
-function SignIn({ onDone, resuming }: { onDone: () => void; resuming?: boolean }) {
-  const [problem, setProblem] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-  const emailRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    emailRef.current?.focus();
-  }, []);
-
-  const submit = useCallback(
-    async (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      if (busy) return;
-      setBusy(true);
-      setProblem(null);
-      const form = new FormData(event.currentTarget);
-      try {
-        await signIn(String(form.get("email")), String(form.get("password")));
-        onDone();
-      } catch (failure) {
-        // A wrong password and an unreachable server are different problems
-        // and deserve different sentences.
-        const message = failure instanceof Error ? failure.message : "";
-        setProblem(message.includes("fetch") || message.includes("network") ? "Can't reach the shop. Check the connection and try again." : message || "Sign in failed");
-        setBusy(false);
-      }
-    },
-    [busy, onDone],
-  );
-
-  const form = (
-    <form onSubmit={submit} className="console-signin-box">
-      {resuming ? (
-        <p className="console-note brand">
-          Your session expired. Sign in and you&apos;ll land back exactly where you were — nothing you typed has been lost.
-        </p>
-      ) : null}
-
-      <Field label="Email" htmlFor="console-email">
-        <input ref={emailRef} id="console-email" name="email" type="email" required autoComplete="email" placeholder="you@mostyle.ma" />
-      </Field>
-
-      <Field label="Password" htmlFor="console-password">
-        <div className="console-row" style={{ gap: 8, flexWrap: "nowrap" }}>
-          <input id="console-password" name="password" type={showPassword ? "text" : "password"} required autoComplete="current-password" />
-          <Button
-            iconOnly
-            icon={showPassword ? "eye-off" : "eye"}
-            onClick={() => setShowPassword((was) => !was)}
-            aria-label={showPassword ? "Hide password" : "Show password"}
-          />
-        </div>
-      </Field>
-
-      {problem ? (
-        <p className="console-error" role="alert">
-          {problem}
-        </p>
-      ) : null}
-
-      <Button type="submit" variant="primary" block disabled={busy}>
-        {busy ? "Signing in…" : "Sign in"}
-      </Button>
-
-      <p className="console-muted" style={{ textAlign: "center" }}>
-        <Link href="/en/account/reset" style={{ textDecoration: "underline", textUnderlineOffset: 4 }}>
-          Forgotten your password?
-        </Link>
-      </p>
-    </form>
-  );
-
-  // Expired mid-task: a modal over the live page, so nothing unmounts.
-  if (resuming) {
-    return (
-      <div className="console-modal-wrap">
-        <div className="console-modal" role="dialog" aria-modal="true" aria-label="Session expired">
-          {form}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="console-signin">
-      <div className="console-signin-hero">
-        <Wordmark />
-        <h1 className="console-signin-headline">
-          The workshop, <em>read at a glance.</em>
-        </h1>
-        <p className="console-muted" style={{ maxWidth: "38ch" }}>
-          Orders, what to make next, the catalogue and the shop&apos;s own numbers — one console.
-        </p>
-      </div>
-      <div className="console-signin-panel">{form}</div>
-    </div>
-  );
-}

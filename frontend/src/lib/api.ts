@@ -152,6 +152,9 @@ export interface RequestView {
  *  `lib/session.ts` turns into a stored session. */
 export interface AuthProfile {
   full_name?: string | null;
+  /** "owner" or "customer". The server has always sent it; nothing read it,
+   *  which is why the console needed a sign-in page of its own. */
+  role?: string | null;
   email?: string | null;
   phone?: string | null;
   address_line1?: string | null;
@@ -161,6 +164,7 @@ export interface AuthProfile {
 
 export interface AuthReply {
   access_token: string;
+  refresh_token?: string;
   user?: AuthProfile;
 }
 

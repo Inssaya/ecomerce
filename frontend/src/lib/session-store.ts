@@ -11,8 +11,20 @@ export const SESSION_KEY = "mostyle.session";
 
 export interface Session {
   token: string;
+  /** Spent to renew `token` when it expires, so a long session never throws
+   *  somebody back to sign-in mid-task. */
+  refresh?: string | null;
   name: string;
   email: string;
+  /**
+   * Which door this account opens.
+   *
+   * The server has always returned it and the storefront never stored it, so
+   * there was no way to tell an owner from a shopper after sign-in — which is
+   * why the console needed a second, separate sign-in page of its own. One
+   * sign-in decides where you land, and this is the field it reads.
+   */
+  role?: string | null;
   avatar?: string | null;
   /**
    * What checkout would otherwise ask for a second time.

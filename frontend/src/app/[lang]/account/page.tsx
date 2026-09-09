@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { use, useEffect, useState } from "react";
 
 import { CityAutocomplete } from "@/components/CityAutocomplete";
@@ -35,6 +35,7 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
   const t = translator(lang);
   const ar = lang === "ar";
   const router = useRouter();
+  const search = useSearchParams();
   const { session, ready } = useSession();
   const terms = useDelivery(lang);
 
@@ -49,10 +50,15 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
 
-  // Somebody who is already signed in has no business on a sign-in form.
+  // Somebody who is already signed in has no business on a sign-in form —
+  // and an owner already signed in belongs in the console, not on a profile.
   useEffect(() => {
-    if (ready && session) router.replace(`/${lang}/account/profile`);
-  }, [ready, session, router, lang]);
+    if (!ready || !session) return;
+    const next = search.get("next");
+    if (next && next.startsWith("/") && !next.startsWith("//")) router.replace(next);
+    else if (session.role === "owner") router.replace("/admin");
+    else router.replace(`/${lang}/account/profile`);
+  }, [ready, session, router, lang, search]);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -64,17 +70,27 @@ export default function AccountPage({ params }: { params: Promise<{ lang: string
     setBusy(true);
     setProblem(null);
     try {
-      if (mode === "in") await signIn(email.trim(), password);
-      else
-        await signUp({
-          fullName: name.trim(),
-          email: email.trim(),
-          password,
-          phone: phone.trim(),
-          city: city.trim(),
-          address: address.trim(),
-        });
-      router.replace(`/${lang}/account/profile`);
+      const session =
+        mode === "in"
+          ? await signIn(email.trim(), password)
+          : await signUp({
+              fullName: name.trim(),
+              email: email.trim(),
+              password,
+              phone: phone.trim(),
+              city: city.trim(),
+              address: address.trim(),
+            });
+
+      // One sign-in, two destinations. The console used to have a sign-in
+      // page of its own, so the shop had two doors and the owner had to know
+      // which one they were standing at. The role decides instead — and a
+      // `next` (set when the console bounced somebody here) wins over both,
+      // so an owner lands on the screen they were actually going to.
+      const next = search.get("next");
+      if (next && next.startsWith("/") && !next.startsWith("//")) router.replace(next);
+      else if (session.role === "owner") router.replace("/admin");
+      else router.replace(`/${lang}/account/profile`);
     } catch (error) {
       // The server already says what went wrong — wrong password, an email
       // already registered, a password too short — so show that instead of

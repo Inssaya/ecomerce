@@ -1,32 +1,40 @@
 /**
- * The owner's session.
+ * The owner's session — which is now simply *the* session.
  *
- * One person, one device at a time — the access token lives in
- * sessionStorage, not a cookie, so it dies with the tab. It expires after an
- * hour; the refresh token sits beside it and is spent automatically so the
- * console never throws the owner back to sign-in mid-task.
+ * This used to be a second, separate token in `sessionStorage`, written by a
+ * sign-in page of its own at `/admin`. Two sign-ins for one shop is a thing
+ * to explain rather than a thing to use: the owner had to know that signing
+ * in on the storefront did not sign them into the console, and the console
+ * could not tell it was already looking at an authenticated owner.
+ *
+ * There is one sign-in now, on the storefront, and it decides where you land
+ * from the role the server returns. This module keeps its name and its job —
+ * transport, renewal, sign-out — and reads the shared session instead of
+ * holding one of its own.
  */
-const TOKEN_KEY = "mostyle_owner_token";
-const REFRESH_KEY = "mostyle_owner_refresh";
+import { readSession, writeSession } from "@/lib/session-store";
 
 export function ownerToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return sessionStorage.getItem(TOKEN_KEY);
+  return readSession()?.token ?? null;
 }
 
-function setOwnerToken(token: string | null): void {
-  if (token) sessionStorage.setItem(TOKEN_KEY, token);
-  else sessionStorage.removeItem(TOKEN_KEY);
+/** True only for the account that may open the console. */
+export function isOwner(): boolean {
+  return readSession()?.role === "owner";
 }
 
 function keepSession(body: { access_token: string; refresh_token?: string }): void {
-  setOwnerToken(body.access_token);
-  if (body.refresh_token) sessionStorage.setItem(REFRESH_KEY, body.refresh_token);
+  const current = readSession();
+  if (!current) return;
+  writeSession({
+    ...current,
+    token: body.access_token,
+    refresh: body.refresh_token ?? current.refresh ?? null,
+  });
 }
 
 function forgetSession(): void {
-  setOwnerToken(null);
-  if (typeof window !== "undefined") sessionStorage.removeItem(REFRESH_KEY);
+  writeSession(null);
 }
 
 /** One renewal at a time. Several requests can fire on mount, and the server
@@ -35,7 +43,7 @@ let renewing: Promise<boolean> | null = null;
 
 function renew(): Promise<boolean> {
   renewing ??= (async () => {
-    const token = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
+    const token = readSession()?.refresh ?? null;
     if (!token) return false;
     try {
       const response = await fetch("/api/auth/refresh", {
@@ -126,23 +134,11 @@ export async function callUpload<T>(path: string, body: FormData): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function signIn(email: string, password: string): Promise<void> {
-  const response = await fetch("/api/auth/login?lang=en", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email, password }),
-  });
-  if (!response.ok) throw new Error("Email or password is incorrect");
-  const body = await response.json();
-  if (body.user?.role !== "owner") throw new Error("That account is not the workshop's");
-  keepSession(body);
-}
-
-/** Clearing sessionStorage only signs this browser out; the refresh token
+/** Clearing the stored session only signs this browser out; the refresh token
  *  stays valid on the server for thirty days, so `/auth/logout` revokes it.
  *  The local clear happens first and unconditionally regardless of the network. */
 export async function signOut(): Promise<void> {
-  const token = typeof window === "undefined" ? null : sessionStorage.getItem(REFRESH_KEY);
+  const token = readSession()?.refresh ?? null;
   forgetSession();
   if (!token) return;
   await fetch("/api/auth/logout?lang=en", {

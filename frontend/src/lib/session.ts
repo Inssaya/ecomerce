@@ -38,9 +38,16 @@ function currentLang(): Lang {
 }
 
 /** The server's own view of the account, in the shape this app stores. */
-function sessionFrom(token: string, user: Profile | undefined, email: string): Session {
+function sessionFrom(
+  token: string,
+  user: Profile | undefined,
+  email: string,
+  refresh?: string | null,
+): Session {
   return {
     token,
+    refresh: refresh ?? null,
+    role: user?.role ?? null,
     name: user?.full_name || email.split("@")[0],
     email: user?.email || email,
     avatar: user?.avatar_url ?? null,
@@ -52,7 +59,7 @@ function sessionFrom(token: string, user: Profile | undefined, email: string): S
 
 export async function signIn(email: string, password: string): Promise<Session> {
   const reply = await api.login(currentLang(), email, password);
-  const session = sessionFrom(reply.access_token, reply.user, email);
+  const session = sessionFrom(reply.access_token, reply.user, email, reply.refresh_token);
   writeSession(session);
   return session;
 }
