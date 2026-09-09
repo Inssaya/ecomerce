@@ -38,7 +38,7 @@ export default function Track({ params }: { params: Promise<{ lang: string; toke
 
 function TrackBody({ lang, token }: { lang: Lang; token: string }) {
   const t = translator(lang);
-  const justPlaced = useSearchParams().get("placed") !== null;
+  const cameFromCheckout = useSearchParams().get("placed") !== null;
 
   const [order, setOrder] = useState<OrderView | null>(null);
   const [missing, setMissing] = useState(false);
@@ -51,6 +51,12 @@ function TrackBody({ lang, token }: { lang: Lang; token: string }) {
   if (!order) return <div className="page pt-10" aria-hidden />;
 
   const reached = STEPS.indexOf(order.status);
+  // `?placed` says where the visitor came from, not what state the order is
+  // in — and anyone can keep or share a URL. Greeting somebody with "that's
+  // your order in" over an order that was delivered last week reads as a
+  // shop that has lost track of its own parcels, so the status has to agree
+  // before the confirmation is shown.
+  const justPlaced = cameFromCheckout && order.status === "placed";
   const wentWrong = ["cancelled", "failed", "returned"].includes(order.status);
   const line1 = order.address?.line1?.trim();
   const city = order.address?.city?.trim() || order.city;
