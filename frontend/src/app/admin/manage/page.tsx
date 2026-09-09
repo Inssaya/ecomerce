@@ -16,6 +16,7 @@
  */
 import { useCallback, useMemo, useState } from "react";
 import Image from "next/image";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import { api, type AdminProduct } from "@/lib/console/api";
 import { useConsoleQuery, useMutation } from "@/lib/console/query";
@@ -82,7 +83,27 @@ export default function ManageProducts() {
 
   // Which popup is up. One at a time — three booleans would eventually be two
   // popups at once and nobody would know which one Escape closes.
-  const [open, setOpen] = useState<string | null>(null);
+  //
+  // Seeded from `?open=`, because three places link straight to a piece:
+  // "inspect" on the Make page, and the pieces a customer bought on their
+  // card. This state was local-only and nothing ever read the query string,
+  // so every one of those links landed on the catalogue with no popup and no
+  // sign anything had been asked for — the deep link looked like a dead
+  // button. Closing strips the parameter again, so a refresh does not reopen
+  // what was just dismissed.
+  const router = useRouter();
+  const params = useSearchParams();
+  const [open, setOpen] = useState<string | null>(() => params.get("open"));
+
+  const closePopup = useCallback(() => {
+    setOpen(null);
+    if (params.get("open")) {
+      const next = new URLSearchParams(params.toString());
+      next.delete("open");
+      const query = next.toString();
+      router.replace(query ? `/admin/manage?${query}` : "/admin/manage", { scroll: false });
+    }
+  }, [params, router]);
   const [analytics, setAnalytics] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [makingIn, setMakingIn] = useState<string | null | false>(false);
@@ -335,7 +356,7 @@ export default function ManageProducts() {
         <ProductPopup
           product={selected}
           categories={categories.data ?? []}
-          onClose={() => setOpen(null)}
+          onClose={closePopup}
           onChanged={products.reload}
         />
       ) : null}
