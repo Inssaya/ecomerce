@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import "@/app/globals.css";
 import { Chrome } from "@/components/Chrome";
 import { CartProvider } from "@/components/CartProvider";
+import { SlowConnection } from "@/components/SlowConnection";
 import { FALLBACK_CONTACT } from "@/lib/contact";
 import { type Lang, dir, isLang, translator } from "@/lib/i18n";
 import { alternates, contact, siteUrl } from "@/lib/server";
@@ -135,6 +136,7 @@ export default async function LangLayout({
           <Chrome lang={language} contact={shopContact}>
             {children}
           </Chrome>
+          <SlowConnection lang={language} />
         </CartProvider>
       </body>
     </html>

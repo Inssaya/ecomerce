@@ -9,6 +9,7 @@ import { problemFrom } from "./detail";
 import { visitorId } from "./fingerprint";
 import type { Lang } from "./i18n";
 import { sessionToken } from "./session-store";
+import { watchSlow } from "./slow";
 import { uploadToStorage } from "./upload";
 
 export interface Piece {
@@ -228,7 +229,11 @@ async function request<T>(
     }
   }
 
-  const response = await fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers });
+  // `watchSlow` raises the "waiting for connection" notice if this takes
+  // longer than usual — most often an API that was idle and is waking up.
+  const response = await watchSlow(() =>
+    fetch(`/api${path}${separator}lang=${lang}`, { ...init, headers }),
+  );
   if (!response.ok) {
     // Read the body once, as a clone, so both the human message and the
     // machine code can come out of it — `Response.json()` only works once.

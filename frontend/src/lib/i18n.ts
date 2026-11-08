@@ -122,6 +122,13 @@ const copy = {
   addToCart: ["Add to cart", "أضف إلى السلة"],
   added: ["In your cart", "في سلتك"],
 
+  // Shown when something is slow. Never says why — see `SlowConnection`.
+  slowTitle: ["Waiting for connection…", "في انتظار الاتصال…"],
+  slowBody: [
+    "Your connection looks slow, or a lot of people are shopping right now. One moment, please.",
+    "يبدو أن اتصالك بطيء، أو أن هناك الكثير من الزبناء الآن. المرجو الانتظار قليلاً.",
+  ],
+
   // Looking for something.
   search: ["Search", "بحث"],
   searchPlaceholder: ["Search for a piece", "ابحث عن قطعة"],
