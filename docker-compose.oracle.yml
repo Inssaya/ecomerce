@@ -1,0 +1,77 @@
+# The API, alone, for a free Oracle Cloud VM.
+#
+#     docker compose -f docker-compose.oracle.yml up -d --build
+#
+# This box is not the database and not the photo bucket — those are Supabase
+# and Cloudflare R2 (see docs/DEPLOY-FREE.md). It only runs the long-lived
+# things a serverless host can't: the API's connection pool, its migrations,
+# and Redis for rate limiting.
+#
+# The API is published on every interface because Vercel's server-side
+# rewrites have to reach it from the outside, over plain HTTP — the browser
+# never calls this host directly (Next proxies /api/* same-origin), so there
+# is nothing here for a browser to show a "not secure" warning about. Lock
+# the port down to Vercel's ranges with the VM's firewall if that ever
+# matters more than it does for a shop this size.
+
+name: mostyle
+
+networks:
+  mostyle:
+    driver: bridge
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    networks: [mostyle]
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    networks: [mostyle]
+    environment:
+      APP_NAME: ${APP_NAME:-MoStyle}
+      APP_URL: ${APP_URL}
+      ENVIRONMENT: production
+      # Supabase's pooled connection string (port 6543), prefixed
+      # postgresql+asyncpg://. See docs/DEPLOY-FREE.md step 1.
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      SUPABASE_URL: ${SUPABASE_URL}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
+      # Cloudflare R2, over the S3 API.
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      MINIO_USE_SSL: "true"
+      MEDIA_BUCKET: ${MEDIA_BUCKET}
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_FROM: ${SMTP_FROM}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_TLS: ${SMTP_TLS:-true}
+      WHATSAPP_NUMBER: ${WHATSAPP_NUMBER:-}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
+      LLM_MODEL: ${LLM_MODEL:-}
+      DELIVERY_FEE: ${DELIVERY_FEE:-0}
+      FREE_DELIVERY_OVER: ${FREE_DELIVERY_OVER:-0}
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "0.0.0.0:8000:8000"
+
+volumes:
+  redis_data:

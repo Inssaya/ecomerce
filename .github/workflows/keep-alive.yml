@@ -1,0 +1,21 @@
+name: keep-alive
+
+# Supabase pauses a free project after 7 days with no API traffic — database
+# and auth both stop answering until someone un-pauses it from the dashboard.
+# Hitting /ready weekly is a real request against a project you're actually
+# using, not traffic faked to game a host's free tier, so it's a legitimate
+# way to keep it warm. It also happens to check that the Oracle VM and its
+# Redis are still up, since /ready is degraded if either is down.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # every Monday, 06:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit /ready
+        run: |
+          curl -fsS "${{ secrets.API_READY_URL }}" | tee /dev/stderr | grep -q '"status":"ready"'
