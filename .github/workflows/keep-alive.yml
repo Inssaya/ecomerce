@@ -1,20 +1,21 @@
 name: keep-alive
 
-# Render's free tier puts a web service to sleep after ~15 minutes without a
-# request, and the first visitor afterwards waits 30-60 seconds for it to wake.
-# /ready is a real request that also touches Supabase and Redis, so one ping
-# every 10 minutes keeps the API awake and stops the free Supabase project
-# from pausing after 7 idle days.
+# Supabase pauses a free project after 7 days with no API traffic. /ready is
+# a real request that touches Supabase and Redis, so a daily hit keeps the
+# project awake and doubles as a check that the API is still up.
 #
-# GitHub's scheduler is best-effort: runs can arrive a few minutes late, so
-# the interval leaves some margin under Render's 15.
+# This is NOT what keeps Render's free tier from sleeping. That needs a ping
+# every few minutes, and the repository is private: every run is billed as at
+# least one minute against 2,000 free minutes a month, so a 10-minute schedule
+# (~4,300 runs) would exhaust them in about two weeks. An external pinger
+# (cron-job.org, free) does that job instead.
 #
 # The default is the public Render address (it is not a secret). Set the
 # repository secret API_READY_URL to override it, e.g. for a VM.
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "0 6 * * *" # every day, 06:00 UTC
   workflow_dispatch: {}
 
 jobs:

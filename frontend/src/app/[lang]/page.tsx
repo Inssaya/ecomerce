@@ -18,10 +18,20 @@ import { alternates, fromApi, jsonLd, siteUrl, workshopPhone } from "@/lib/serve
  * without repeating itself. Verified: the fetch on line ~55 and the
  * `<ProductFeed seed={seed}>` prop both carry the same value minted here.
  */
-export const dynamic = "force-dynamic";
-
 /** What the first screen needs; the feed asks for the next thirty itself. */
 const FIRST_PAGE = 30;
+
+/**
+ * How many arrangements of the shelf exist.
+ *
+ * A fresh random seed per visit made every products request unique, so the
+ * data cache could never answer one: each visitor waited on the API, and on a
+ * host that sleeps when idle that wait is a cold start of up to a minute.
+ * A small fixed set still opens the shelf on different pieces from visit to
+ * visit, and each one is cached and revalidated in the background — a
+ * visitor gets the last good answer at once while the API wakes up.
+ */
+const ARRANGEMENTS = 8;
 
 export async function generateMetadata({ params }: { params: Promise<{ lang: string }> }) {
   const { lang: raw } = await params;
@@ -46,9 +56,9 @@ export default async function Shop({
   const lang = (isLang(raw) ? raw : "en") as Lang;
   const t = translator(lang);
 
-  // A new arrangement per visit. Postgres' `md5(id || seed)` turns it into a
-  // fixed order, so paging stays consistent from here on.
-  const seed = Math.floor(Math.random() * 2_147_483_647);
+  // One of a few arrangements per visit. Postgres' `md5(id || seed)` turns it
+  // into a fixed order, so paging stays consistent from here on.
+  const seed = 1 + Math.floor(Math.random() * ARRANGEMENTS);
 
   const [first, categoryList] = await Promise.all([
     fromApi<{ items: Piece[]; total: number; has_more: boolean }>(
