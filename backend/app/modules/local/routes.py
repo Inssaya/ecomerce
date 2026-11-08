@@ -1,9 +1,10 @@
 """Public reads for the pages that bring people in."""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from app.config import settings
+from app.core.http_cache import public_cache
 from app.deps import DbSession, Lang
 from app.models.local import City, Service
 from app.modules.local import service as local
@@ -39,7 +40,7 @@ def _service(item: Service, lang: str, *, full: bool = False) -> dict:
 
 
 @router.get("/places")
-async def list_places(db: DbSession, lang: Lang) -> dict:
+async def list_places(db: DbSession, lang: Lang, response: Response) -> dict:
     """Every city we will make a promise about, and the promise for anywhere else.
 
     `default` is here so the cart and the checkout can state the delivery cost
@@ -47,6 +48,7 @@ async def list_places(db: DbSession, lang: Lang) -> dict:
     which meant the shop could charge one fee and print another the moment
     anybody changed a setting.
     """
+    public_cache(response, 300)
     return {
         "items": [_city(place, lang) for place in await local.cities(db)],
         "default": {
@@ -57,10 +59,11 @@ async def list_places(db: DbSession, lang: Lang) -> dict:
 
 
 @router.get("/places/{slug}")
-async def get_place(slug: str, db: DbSession, lang: Lang) -> dict:
+async def get_place(slug: str, db: DbSession, lang: Lang, response: Response) -> dict:
     place = await local.city(db, slug)
     if place is None:
         raise HTTPException(status_code=404, detail="We don't deliver there yet")
+    public_cache(response)
     return {
         **_city(place, lang, await local.delivered_to(db, place.name_en)),
         # Every city page lists what can be made, because someone who searched
@@ -72,15 +75,17 @@ async def get_place(slug: str, db: DbSession, lang: Lang) -> dict:
 
 
 @router.get("/services")
-async def list_services(db: DbSession, lang: Lang) -> dict:
+async def list_services(db: DbSession, lang: Lang, response: Response) -> dict:
+    public_cache(response, 300)
     return {"items": [_service(item, lang) for item in await local.services(db)]}
 
 
 @router.get("/services/{slug}")
-async def get_service(slug: str, db: DbSession, lang: Lang) -> dict:
+async def get_service(slug: str, db: DbSession, lang: Lang, response: Response) -> dict:
     item = await local.service(db, slug)
     if item is None:
         raise HTTPException(status_code=404, detail="We don't do that one")
+    public_cache(response, 300)
     return {
         **_service(item, lang, full=True),
         "places": [_city(place, lang) for place in await local.cities(db)],

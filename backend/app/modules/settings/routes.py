@@ -9,8 +9,9 @@ to `ContactOut`.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 
+from app.core.http_cache import public_cache
 from app.deps import DbSession, Owner
 from app.modules.settings import service
 from app.modules.settings.schemas import AdminSettingsOut, AlertEmailsWrite, ContactOut, ContactWrite
@@ -19,7 +20,8 @@ router = APIRouter(tags=["settings"])
 
 
 @router.get("/settings/contact")
-async def get_contact(db: DbSession) -> ContactOut:
+async def get_contact(db: DbSession, response: Response) -> ContactOut:
+    public_cache(response, 300)
     row = await service.get(db)
     return ContactOut(email=row.contact_email, phone=row.contact_phone)
 

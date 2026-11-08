@@ -26,6 +26,25 @@ import { PieceView } from "./PieceView";
  * The interactive half stays in `PieceView`. This file only fetches once,
  * hands it down as the first paint, and describes it.
  */
+/**
+ * Cached by the CDN, rebuilt in the background once a minute.
+ *
+ * A dynamic segment with no `generateStaticParams` is rendered from scratch on
+ * every single request, so each click on a tile waited for a server render
+ * and, behind it, the API. Exporting one — even an empty one, because the
+ * build cannot reach the API and nobody wants to wait for a hundred pages
+ * there — switches the route to render-on-first-visit and then serve the
+ * stored copy. `dynamicParams` stays true so a piece added tomorrow works
+ * without a redeploy, and a slug that is not a piece still ends in the 404
+ * body `resource` produces.
+ */
+export const revalidate = 60;
+export const dynamicParams = true;
+
+export function generateStaticParams() {
+  return [];
+}
+
 async function piece(lang: Lang, slug: string): Promise<PieceDetail | null> {
   // `resource`, not `fromApi`: a slug with nothing behind it has to be a real
   // 404, and an API we merely could not reach must not be mistaken for one.

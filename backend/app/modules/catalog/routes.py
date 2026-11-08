@@ -4,12 +4,13 @@ from __future__ import annotations
 import logging
 from datetime import date, timedelta
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import String, cast, func, select
 from sqlalchemy.orm import selectinload
 
 from app.core.errors import bad_request, conflict, get_or_404
+from app.core.http_cache import public_cache
 from app.core.limits import SignalLimit
 from app.core.slug import unique_slug
 from app.core.storage import (
@@ -82,7 +83,8 @@ router = APIRouter(tags=["catalog"])
 
 
 @router.get("/categories", response_model=list[CategoryNode])
-async def category_tree(db: DbSession, lang: Lang) -> list[CategoryNode]:
+async def category_tree(db: DbSession, lang: Lang, response: Response) -> list[CategoryNode]:
+    public_cache(response, 300)
     rows = await db.scalars(
         select(Category).where(Category.is_active.is_(True)).order_by(Category.display_order)
     )
@@ -185,6 +187,7 @@ async def list_products(
     db: DbSession,
     lang: Lang,
     paging: Paging,
+    response: Response,
     category: str | None = Query(default=None, description="Category slug"),
     q: str | None = Query(default=None, min_length=1, max_length=120),
     seed: int | None = Query(
@@ -221,6 +224,7 @@ async def list_products(
     rows = await db.scalars(query.order_by(ordering).offset(paging.offset).limit(paging.size))
     products = list(rows.unique())
     items = [service.to_card(product, lang) for product in products]
+    public_cache(response)
     return ProductPage(
         items=items,
         total=total,
@@ -231,13 +235,14 @@ async def list_products(
 
 
 @router.get("/products/{slug}", response_model=ProductDetail)
-async def get_product(slug: str, db: DbSession, lang: Lang) -> ProductDetail:
+async def get_product(slug: str, db: DbSession, lang: Lang, response: Response) -> ProductDetail:
     product = await get_or_404(
         db, Product, slug, field="slug", detail="Product not found", options=service.LOADED
     )
     if product.status is not ProductStatus.active:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    public_cache(response)
     return service.to_detail(product, lang)
 
 
