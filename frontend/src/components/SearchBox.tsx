@@ -52,7 +52,7 @@ export function SearchBox({ lang }: { lang: Lang }) {
 
   return (
     <>
-      <form onSubmit={submit} className="relative min-w-0 w-[130px] sm:w-[210px]">
+      <form onSubmit={submit} className="relative min-w-0 w-[150px] sm:w-[240px]">
         <SearchIcon className="pointer-events-none absolute start-3.5 top-1/2 -translate-y-1/2 text-ink-mute" />
         <input
           value={query}
@@ -61,36 +61,36 @@ export function SearchBox({ lang }: { lang: Lang }) {
           inputMode="search"
           placeholder={t("searchPlaceholder")}
           aria-label={t("searchPlaceholder")}
-          className="w-full h-10 rounded-full bg-surface border border-sand ps-9 pe-3.5
+          className={`w-full h-10 rounded-full bg-surface border border-sand ps-9
                      text-[14.5px] text-ink placeholder:text-ink-mute
-                     focus:border-clay focus:outline-none transition-colors duration-200"
+                     focus:border-clay focus:outline-none transition-colors duration-200
+                     ${shopping ? "pe-11" : "pe-3.5"}`}
         />
+
+        {/*
+          The categories, as a button inside the field itself: you name what
+          you want and narrow it down in the same place. Only on the shelf,
+          because that is the only page listening for the event this fires —
+          elsewhere it would be a control that does nothing.
+        */}
+        {shopping ? (
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("mostyle:filter"))}
+            aria-label={t("filter")}
+            title={t("filter")}
+            className={`absolute end-1 top-1/2 -translate-y-1/2 h-8 w-8 inline-flex
+                        items-center justify-center rounded-full transition-colors duration-200
+                        ${
+                          category
+                            ? "bg-ink text-white"
+                            : "text-ink-soft hover:bg-clay-soft hover:text-ink"
+                        }`}
+          >
+            <FilterIcon />
+          </button>
+        ) : null}
       </form>
-
-      {/*
-        After the search box, not before it: you name what you want first, then
-        narrow it down.
-
-        On a wide screen this only appears once a line is open, because there it
-        offers that line's subcategories and nothing else — the lines themselves
-        are already the rail down the side, and repeating them here would just
-        be the same four marks twice. A phone has no rail, so there the button
-        is always available and the popover carries the lines too.
-      */}
-      {shopping ? (
-        <button
-          type="button"
-          onClick={() => window.dispatchEvent(new Event("mostyle:filter"))}
-          aria-label={t("filter")}
-          title={t("filter")}
-          className={`h-10 w-10 shrink-0 items-center justify-center rounded-full
-                      border border-sand bg-surface text-ink-soft
-                      transition-colors duration-200 hover:text-ink hover:border-ink
-                      ${category ? "inline-flex" : "inline-flex lg:hidden"}`}
-        >
-          <FilterIcon />
-        </button>
-      ) : null}
     </>
   );
 }

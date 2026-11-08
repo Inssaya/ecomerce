@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Suspense, useEffect, useState, type ReactNode } from "react";
 
 import { BlockedScreen } from "./BlockedScreen";
-import { CategoryRail } from "./CategoryRail";
 import { Footer } from "./Footer";
 import { useCart } from "./CartProvider";
 import { Logo } from "./Logo";
@@ -86,11 +85,6 @@ export function Chrome({
   ];
   const on = (href: string, exact: boolean) =>
     exact ? path === href : path === href || path.startsWith(`${href}/`);
-
-  // Exactly the shelf, because that is the only page listening for the event
-  // this button fires. Elsewhere it would be a control that does nothing,
-  // which is worse than no control at all.
-  const shopping = path === `/${lang}`;
 
   return (
     <div className="min-h-dvh flex flex-col">
@@ -229,18 +223,7 @@ export function Chrome({
         </div>
       </header>
 
-      {/* Desktop only, and only on the shop itself — see the component for
-          why this is a floating column of marks rather than a sidebar. */}
-      {shopping ? (
-        <Suspense fallback={null}>
-          <CategoryRail lang={lang} />
-        </Suspense>
-      ) : null}
-
-      {/* Padded both sides, not just the rail's: clearing only the side the
-          marks sit on would shove the whole wall off-centre by exactly the
-          width of the rail, which reads as a mistake rather than as a margin. */}
-      <main className={`flex-1 pb-16 animate-fade ${shopping ? "lg:px-16" : ""}`}>
+      <main className="flex-1 pb-16 animate-fade">
         {blocked ? <BlockedScreen lang={lang} contact={contact} /> : children}
       </main>
 

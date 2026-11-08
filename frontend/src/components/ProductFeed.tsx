@@ -177,13 +177,8 @@ export function ProductFeed({
       */}
       {picking && categories.length > 0 ? (
         <div className="mb-4 animate-fade rounded-2xl border border-sand bg-surface p-3">
-          {/*
-            The lines themselves, phone only. On a wide screen they are the
-            rail down the side of the page, so listing them again here would
-            be the same four marks twice; `lg:hidden` is the whole difference
-            between the two layouts.
-          */}
-          <div className="flex flex-wrap gap-2 lg:hidden">
+          {/* The lines themselves, at every width. */}
+          <div className="flex flex-wrap gap-2">
             <FilterChip on={!active} onClick={() => narrow("")}>
               {t("allPieces")}
             </FilterChip>
@@ -202,8 +197,7 @@ export function ProductFeed({
               line. Never another line's subcategories — only the ones that
               belong to whatever is selected right now. */}
           {activeRoot && activeRoot.children.length > 0 ? (
-            <div className="flex flex-wrap gap-2 lg:mt-0 lg:border-0 lg:pt-0
-                            mt-2.5 border-t border-sand pt-2.5">
+            <div className="flex flex-wrap gap-2 mt-2.5 border-t border-sand pt-2.5">
               <FilterChip
                 small
                 on={active === activeRoot.slug}
